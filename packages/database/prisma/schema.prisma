@@ -1,0 +1,433 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================================================
+// ENUMS GLOBALES
+// ==================================================
+
+enum EstadoRegistro {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum TipoPlan {
+  TIEMPO
+  SESIONES
+}
+
+enum EstadoReserva {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  ASISTIDA
+}
+
+enum TipoTransaccion {
+  INGRESO
+  EGRESO
+}
+
+enum TipoCuenta {
+  BANCARIA
+  EFECTIVO
+  PASARELA
+}
+
+// ==================================================
+// 1. CORE INSTITUCIONAL
+// ==================================================
+
+model Organizacion {
+  id             String         @id @default(uuid())
+  nombre         String
+  fecha_registro DateTime       @default(now())
+  estado         EstadoRegistro @default(ACTIVO)
+
+  // Relaciones Multi-Tenant
+  sucursales            Sucursal[]
+  roles                 Rol[]
+  asignaciones_acceso   Asignacion_Acceso[]
+  perfiles_staff        Perfil_Staff[]
+  clases_programadas    Clase_Programada[]
+  clientes              Cliente[]
+  planes                Plan[]
+  registros_asistencia  Registro_Asistencia[]
+  cuentas_bancarias     Cuenta_Bancaria[]
+  productos             Producto[]
+  auditorias            Auditoria[]
+  notificaciones        Notificacion[]
+  api_keys              API_Key[]
+
+  @@map("organizaciones")
+}
+
+model Sucursal {
+  id              String         @id @default(uuid())
+  organizacion_id String
+  nombre          String
+  direccion       String?
+  telefono        String?
+  estado          EstadoRegistro @default(ACTIVO)
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  
+  cajas_registradoras  Caja_Registradora[]
+  asignaciones_acceso  Asignacion_Acceso[]
+  turnos_trabajo       Turno_Trabajo[]
+  clases_programadas   Clase_Programada[]
+  clientes_base        Cliente[]             // Sucursal a la que pertenece el cliente
+  registros_asistencia Registro_Asistencia[]
+  inventarios          Inventario[]
+
+  @@map("sucursales")
+}
+
+model Caja_Registradora {
+  id           String @id @default(uuid())
+  sucursal_id  String
+  nombre       String
+  saldo_actual Float  @default(0.0)
+
+  sucursal       Sucursal        @relation(fields: [sucursal_id], references: [id])
+  aperturas_caja Apertura_Caja[]
+
+  @@map("cajas_registradoras")
+}
+
+// ==================================================
+// 2. SEGURIDAD Y RBAC
+// ==================================================
+
+model Usuario {
+  id              String         @id @default(uuid())
+  nombre_completo String
+  correo          String         @unique
+  contrasena_hash String
+  estado          EstadoRegistro @default(ACTIVO)
+
+  asignaciones_acceso Asignacion_Acceso[]
+  perfiles_staff      Perfil_Staff[]
+  aperturas_caja      Apertura_Caja[]
+  auditorias          Auditoria[]
+  notificaciones      Notificacion[]
+
+  @@map("usuarios")
+}
+
+model Permiso {
+  id     String @id @default(uuid())
+  modulo String
+  accion String
+
+  roles_permiso Rol_Permiso[]
+
+  @@map("permisos")
+}
+
+model Rol {
+  id              String  @id @default(uuid())
+  organizacion_id String? // Nulo si es global, con UUID si es personalizado
+  nombre          String
+
+  organizacion Organizacion? @relation(fields: [organizacion_id], references: [id])
+  
+  roles_permiso       Rol_Permiso[]
+  asignaciones_acceso Asignacion_Acceso[]
+
+  @@map("roles")
+}
+
+model Rol_Permiso {
+  rol_id     String
+  permiso_id String
+
+  rol     Rol     @relation(fields: [rol_id], references: [id], onDelete: Cascade)
+  permiso Permiso @relation(fields: [permiso_id], references: [id], onDelete: Cascade)
+
+  @@id([rol_id, permiso_id])
+  @@map("roles_permisos")
+}
+
+model Asignacion_Acceso {
+  id              String  @id @default(uuid())
+  usuario_id      String
+  organizacion_id String
+  sucursal_id     String? // Opcional, si el rol es a nivel organización entera
+  rol_id          String
+
+  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  sucursal     Sucursal?    @relation(fields: [sucursal_id], references: [id])
+  rol          Rol          @relation(fields: [rol_id], references: [id])
+
+  @@map("asignaciones_acceso")
+}
+
+// ==================================================
+// 3. GESTIÓN DE PERSONAL, ENTRENADORES Y HORARIOS
+// ==================================================
+
+model Perfil_Staff {
+  id              String @id @default(uuid())
+  usuario_id      String @unique
+  organizacion_id String
+  especialidad    String?
+  costo_por_hora  Float  @default(0.0)
+
+  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  
+  turnos_trabajo     Turno_Trabajo[]
+  clases_programadas Clase_Programada[]
+
+  @@map("perfiles_staff")
+}
+
+model Turno_Trabajo {
+  id           String   @id @default(uuid())
+  staff_id     String
+  sucursal_id  String
+  hora_entrada DateTime
+  hora_salida  DateTime?
+
+  staff    Perfil_Staff @relation(fields: [staff_id], references: [id])
+  sucursal Sucursal     @relation(fields: [sucursal_id], references: [id])
+
+  @@map("turnos_trabajo")
+}
+
+model Clase_Programada {
+  id              String   @id @default(uuid())
+  organizacion_id String
+  sucursal_id     String
+  entrenador_id   String
+  nombre          String
+  capacidad       Int
+  fecha_hora      DateTime
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+  entrenador   Perfil_Staff @relation(fields: [entrenador_id], references: [id])
+  
+  reservas Reserva_Clase[]
+
+  @@map("clases_programadas")
+}
+
+model Reserva_Clase {
+  id         String        @id @default(uuid())
+  clase_id   String
+  cliente_id String
+  estado     EstadoReserva @default(PENDIENTE)
+
+  clase   Clase_Programada @relation(fields: [clase_id], references: [id])
+  cliente Cliente          @relation(fields: [cliente_id], references: [id])
+
+  @@map("reservas_clases")
+}
+
+// ==================================================
+// 4. OPERACIONES: CLIENTES, MEMBRESÍAS Y MARCAJE
+// ==================================================
+
+model Cliente {
+  id               String         @id @default(uuid())
+  organizacion_id  String
+  sucursal_base_id String
+  nombre           String
+  correo           String?
+  estado           EstadoRegistro @default(ACTIVO)
+
+  organizacion  Organizacion @relation(fields: [organizacion_id], references: [id])
+  sucursal_base Sucursal     @relation(fields: [sucursal_base_id], references: [id])
+  
+  membresias           Membresia[]
+  reservas             Reserva_Clase[]
+  registros_asistencia Registro_Asistencia[]
+
+  @@map("clientes")
+}
+
+model Plan {
+  id              String   @id @default(uuid())
+  organizacion_id String
+  nombre          String
+  tipo_plan       TipoPlan
+  precio          Float
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  membresias   Membresia[]
+
+  @@map("planes")
+}
+
+model Membresia {
+  id                   String   @id @default(uuid())
+  cliente_id           String
+  plan_id              String
+  fecha_inicio         DateTime
+  fecha_fin            DateTime?
+  sesiones_disponibles Int?     // Aplica solo si el Plan es por SESIONES
+
+  cliente Cliente @relation(fields: [cliente_id], references: [id])
+  plan    Plan    @relation(fields: [plan_id], references: [id])
+  
+  registros_asistencia Registro_Asistencia[]
+
+  @@map("membresias")
+}
+
+model Registro_Asistencia {
+  id              String   @id @default(uuid())
+  organizacion_id String
+  sucursal_id     String
+  cliente_id      String
+  membresia_id    String?
+  fecha_hora      DateTime @default(now())
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+  cliente      Cliente      @relation(fields: [cliente_id], references: [id])
+  membresia    Membresia?   @relation(fields: [membresia_id], references: [id])
+
+  @@map("registros_asistencias")
+}
+
+// ==================================================
+// 5. FINANZAS AVANZADAS
+// ==================================================
+
+model Apertura_Caja {
+  id             String         @id @default(uuid())
+  caja_id        String
+  usuario_id     String
+  monto_inicial  Float
+  fecha_apertura DateTime       @default(now())
+  estado         EstadoRegistro @default(ACTIVO) // ACTIVO = Abierta, INACTIVO = Cerrada
+
+  caja    Caja_Registradora @relation(fields: [caja_id], references: [id])
+  usuario Usuario           @relation(fields: [usuario_id], references: [id])
+  
+  transacciones Transaccion[]
+
+  @@map("aperturas_cajas")
+}
+
+model Transaccion {
+  id               String          @id @default(uuid())
+  apertura_caja_id String
+  tipo             TipoTransaccion
+  monto            Float
+  metodo_pago      String
+
+  apertura_caja Apertura_Caja         @relation(fields: [apertura_caja_id], references: [id])
+  detalles      Detalle_Transaccion[]
+
+  @@map("transacciones")
+}
+
+model Detalle_Transaccion {
+  id              String @id @default(uuid())
+  transaccion_id  String
+  referencia_tipo String // Ej: "MEMBRESIA", "PRODUCTO"
+  referencia_id   String // ID de la membresía o producto cobrado
+  subtotal        Float
+
+  transaccion Transaccion @relation(fields: [transaccion_id], references: [id])
+
+  @@map("detalles_transacciones")
+}
+
+model Cuenta_Bancaria {
+  id              String     @id @default(uuid())
+  organizacion_id String
+  nombre          String
+  tipo            TipoCuenta
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+
+  @@map("cuentas_bancarias")
+}
+
+// ==================================================
+// 6. CATÁLOGO E INVENTARIO
+// ==================================================
+
+model Producto {
+  id              String         @id @default(uuid())
+  organizacion_id String
+  nombre          String
+  precio_venta    Float
+  estado          EstadoRegistro @default(ACTIVO)
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  inventarios  Inventario[]
+
+  @@map("productos")
+}
+
+model Inventario {
+  id              String @id @default(uuid())
+  producto_id     String
+  sucursal_id     String
+  cantidad_actual Int    @default(0)
+  punto_reorden   Int    @default(0)
+
+  producto Producto @relation(fields: [producto_id], references: [id])
+  sucursal Sucursal @relation(fields: [sucursal_id], references: [id])
+
+  @@map("inventarios")
+}
+
+// ==================================================
+// 7. SISTEMA Y AUDITORÍA
+// ==================================================
+
+model Auditoria {
+  id              String   @id @default(uuid())
+  organizacion_id String
+  usuario_id      String
+  tabla_afectada  String
+  operacion       String
+  valores         Json     // Guardaremos el payload modificado
+  fecha_hora      DateTime @default(now())
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
+
+  @@map("auditorias")
+}
+
+model Notificacion {
+  id                 String   @id @default(uuid())
+  organizacion_id    String
+  usuario_destino_id String
+  tipo               String
+  mensaje            String
+  leido              Boolean  @default(false)
+  fecha_creacion     DateTime @default(now())
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  usuario      Usuario      @relation(fields: [usuario_destino_id], references: [id])
+
+  @@map("notificaciones")
+}
+
+model API_Key {
+  id              String         @id @default(uuid())
+  organizacion_id String
+  llave           String         @unique
+  nombre          String
+  estado          EstadoRegistro @default(ACTIVO)
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+
+  @@map("api_keys")
+}
