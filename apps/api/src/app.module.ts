@@ -1,33 +1,43 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { createClient } from 'redis';
-import { getPrismaClientForTenant } from '@repo/database';
+import { ClsModule, ClsMiddleware } from 'nestjs-cls';
+import { PrismaModule } from './prisma/prisma.module';
 import { OrganizacionModule } from './modules/organizacion/organizacion.module';
 import { UsuarioModule } from './modules/usuario/usuario.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { ClientesModule } from './modules/clientes/clientes.module';
 
 @Module({
-  imports: [OrganizacionModule, UsuarioModule],
+  imports: [
+    ClsModule.forRoot({
+      global: true,
+      middleware: {
+        mount: true,
+        setup: (cls, req) => {
+          // Extraemos el organizacion_id del header o JWT y lo guardamos en el contexto
+          const orgId = req.headers['x-organizacion-id'];
+          if (orgId) {
+            cls.set('organizacion_id', orgId);
+          }
+        },
+      },
+    }),
+    PrismaModule,
+    OrganizacionModule, 
+    UsuarioModule,
+    AuthModule,
+    ClientesModule
+  ],
   controllers: [],
   providers: [
     {
       provide: 'REDIS_CLIENT',
       useFactory: async () => {
-        const client = createClient({ url: 'redis://redis:6379' });
+        const client = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6380' });
         await client.connect();
         return client;
       },
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    // Ejemplo de middleware que extrae el organizacion_id del request (e.g. desde el JWT)
-    consumer.apply((req, res, next) => {
-      // Extraer del JWT o Headers
-      const orgId = req.headers['x-organizacion-id'];
-      if (orgId) {
-        req.prisma = getPrismaClientForTenant(orgId as string);
-      }
-      next();
-    }).forRoutes('*');
-  }
-}
+export class AppModule {}

@@ -64,6 +64,20 @@ model Organizacion {
   auditorias            Auditoria[]
   notificaciones        Notificacion[]
   api_keys              API_Key[]
+  
+  // NUEVAS RELACIONES AÑADIDAS
+  cajas_registradoras   Caja_Registradora[]
+  turnos_trabajo        Turno_Trabajo[]
+  reservas_clase        Reserva_Clase[]
+  membresias            Membresia[]
+  aperturas_caja        Apertura_Caja[]
+  transacciones         Transaccion[]
+  detalles_transacciones Detalle_Transaccion[]
+  inventarios           Inventario[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("organizaciones")
 }
@@ -82,21 +96,31 @@ model Sucursal {
   asignaciones_acceso  Asignacion_Acceso[]
   turnos_trabajo       Turno_Trabajo[]
   clases_programadas   Clase_Programada[]
-  clientes_base        Cliente[]             // Sucursal a la que pertenece el cliente
+  clientes_base        Cliente[]             
   registros_asistencia Registro_Asistencia[]
   inventarios          Inventario[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("sucursales")
 }
 
 model Caja_Registradora {
-  id           String @id @default(uuid())
-  sucursal_id  String
-  nombre       String
-  saldo_actual Float  @default(0.0)
+  id              String @id @default(uuid())
+  organizacion_id String
+  sucursal_id     String
+  nombre          String
+  saldo_actual    Float  @default(0.0)
 
+  organizacion   Organizacion    @relation(fields: [organizacion_id], references: [id])
   sucursal       Sucursal        @relation(fields: [sucursal_id], references: [id])
   aperturas_caja Apertura_Caja[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("cajas_registradoras")
 }
@@ -118,6 +142,10 @@ model Usuario {
   auditorias          Auditoria[]
   notificaciones      Notificacion[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("usuarios")
 }
 
@@ -127,6 +155,10 @@ model Permiso {
   accion String
 
   roles_permiso Rol_Permiso[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("permisos")
 }
@@ -140,6 +172,10 @@ model Rol {
   
   roles_permiso       Rol_Permiso[]
   asignaciones_acceso Asignacion_Acceso[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("roles")
 }
@@ -159,13 +195,17 @@ model Asignacion_Acceso {
   id              String  @id @default(uuid())
   usuario_id      String
   organizacion_id String
-  sucursal_id     String? // Opcional, si el rol es a nivel organización entera
+  sucursal_id     String? 
   rol_id          String
 
   usuario      Usuario      @relation(fields: [usuario_id], references: [id])
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
   sucursal     Sucursal?    @relation(fields: [sucursal_id], references: [id])
   rol          Rol          @relation(fields: [rol_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("asignaciones_acceso")
 }
@@ -187,18 +227,28 @@ model Perfil_Staff {
   turnos_trabajo     Turno_Trabajo[]
   clases_programadas Clase_Programada[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("perfiles_staff")
 }
 
 model Turno_Trabajo {
-  id           String   @id @default(uuid())
-  staff_id     String
-  sucursal_id  String
-  hora_entrada DateTime
-  hora_salida  DateTime?
+  id              String   @id @default(uuid())
+  organizacion_id String
+  staff_id        String
+  sucursal_id     String
+  hora_entrada    DateTime
+  hora_salida     DateTime?
 
-  staff    Perfil_Staff @relation(fields: [staff_id], references: [id])
-  sucursal Sucursal     @relation(fields: [sucursal_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  staff        Perfil_Staff @relation(fields: [staff_id], references: [id])
+  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("turnos_trabajo")
 }
@@ -218,17 +268,27 @@ model Clase_Programada {
   
   reservas Reserva_Clase[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("clases_programadas")
 }
 
 model Reserva_Clase {
-  id         String        @id @default(uuid())
-  clase_id   String
-  cliente_id String
-  estado     EstadoReserva @default(PENDIENTE)
+  id              String        @id @default(uuid())
+  organizacion_id String
+  clase_id        String
+  cliente_id      String
+  estado          EstadoReserva @default(PENDIENTE)
 
-  clase   Clase_Programada @relation(fields: [clase_id], references: [id])
-  cliente Cliente          @relation(fields: [cliente_id], references: [id])
+  organizacion Organizacion     @relation(fields: [organizacion_id], references: [id])
+  clase        Clase_Programada @relation(fields: [clase_id], references: [id])
+  cliente      Cliente          @relation(fields: [cliente_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("reservas_clases")
 }
@@ -252,6 +312,10 @@ model Cliente {
   reservas             Reserva_Clase[]
   registros_asistencia Registro_Asistencia[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("clientes")
 }
 
@@ -265,21 +329,31 @@ model Plan {
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
   membresias   Membresia[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("planes")
 }
 
 model Membresia {
   id                   String   @id @default(uuid())
+  organizacion_id      String
   cliente_id           String
   plan_id              String
   fecha_inicio         DateTime
   fecha_fin            DateTime?
-  sesiones_disponibles Int?     // Aplica solo si el Plan es por SESIONES
+  sesiones_disponibles Int?     
 
-  cliente Cliente @relation(fields: [cliente_id], references: [id])
-  plan    Plan    @relation(fields: [plan_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  cliente      Cliente      @relation(fields: [cliente_id], references: [id])
+  plan         Plan         @relation(fields: [plan_id], references: [id])
   
   registros_asistencia Registro_Asistencia[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("membresias")
 }
@@ -297,6 +371,10 @@ model Registro_Asistencia {
   cliente      Cliente      @relation(fields: [cliente_id], references: [id])
   membresia    Membresia?   @relation(fields: [membresia_id], references: [id])
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("registros_asistencias")
 }
 
@@ -305,42 +383,60 @@ model Registro_Asistencia {
 // ==================================================
 
 model Apertura_Caja {
-  id             String         @id @default(uuid())
-  caja_id        String
-  usuario_id     String
-  monto_inicial  Float
-  fecha_apertura DateTime       @default(now())
-  estado         EstadoRegistro @default(ACTIVO) // ACTIVO = Abierta, INACTIVO = Cerrada
+  id              String         @id @default(uuid())
+  organizacion_id String
+  caja_id         String
+  usuario_id      String
+  monto_inicial   Float
+  fecha_apertura  DateTime       @default(now())
+  estado          EstadoRegistro @default(ACTIVO) 
 
-  caja    Caja_Registradora @relation(fields: [caja_id], references: [id])
-  usuario Usuario           @relation(fields: [usuario_id], references: [id])
+  organizacion Organizacion      @relation(fields: [organizacion_id], references: [id])
+  caja         Caja_Registradora @relation(fields: [caja_id], references: [id])
+  usuario      Usuario           @relation(fields: [usuario_id], references: [id])
   
   transacciones Transaccion[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("aperturas_cajas")
 }
 
 model Transaccion {
   id               String          @id @default(uuid())
+  organizacion_id  String
   apertura_caja_id String
   tipo             TipoTransaccion
   monto            Float
   metodo_pago      String
 
+  organizacion  Organizacion          @relation(fields: [organizacion_id], references: [id])
   apertura_caja Apertura_Caja         @relation(fields: [apertura_caja_id], references: [id])
   detalles      Detalle_Transaccion[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("transacciones")
 }
 
 model Detalle_Transaccion {
   id              String @id @default(uuid())
+  organizacion_id String
   transaccion_id  String
-  referencia_tipo String // Ej: "MEMBRESIA", "PRODUCTO"
-  referencia_id   String // ID de la membresía o producto cobrado
+  referencia_tipo String 
+  referencia_id   String 
   subtotal        Float
 
-  transaccion Transaccion @relation(fields: [transaccion_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  transaccion  Transaccion  @relation(fields: [transaccion_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("detalles_transacciones")
 }
@@ -352,6 +448,10 @@ model Cuenta_Bancaria {
   tipo            TipoCuenta
 
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("cuentas_bancarias")
 }
@@ -370,18 +470,28 @@ model Producto {
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
   inventarios  Inventario[]
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("productos")
 }
 
 model Inventario {
   id              String @id @default(uuid())
+  organizacion_id String
   producto_id     String
   sucursal_id     String
   cantidad_actual Int    @default(0)
   punto_reorden   Int    @default(0)
 
-  producto Producto @relation(fields: [producto_id], references: [id])
-  sucursal Sucursal @relation(fields: [sucursal_id], references: [id])
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  producto     Producto     @relation(fields: [producto_id], references: [id])
+  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("inventarios")
 }
@@ -396,7 +506,7 @@ model Auditoria {
   usuario_id      String
   tabla_afectada  String
   operacion       String
-  valores         Json     // Guardaremos el payload modificado
+  valores         Json     
   fecha_hora      DateTime @default(now())
 
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
@@ -417,6 +527,10 @@ model Notificacion {
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
   usuario      Usuario      @relation(fields: [usuario_destino_id], references: [id])
 
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
   @@map("notificaciones")
 }
 
@@ -428,6 +542,10 @@ model API_Key {
   estado          EstadoRegistro @default(ACTIVO)
 
   organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@map("api_keys")
 }
