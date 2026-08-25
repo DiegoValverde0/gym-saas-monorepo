@@ -1,16 +1,26 @@
 import { Injectable } from '@nestjs/common';
-import { prisma } from '@repo/database';
+import { PrismaService } from '../../prisma/prisma.service';
+import * as crypto from 'crypto';
+
+// Helper de encriptación nativa
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `${salt}:${derivedKey.toString('hex')}`;
+}
 
 @Injectable()
 export class OrganizacionService {
+  constructor(private prisma: PrismaService) {}
+
   async crearOrganizacionConAdmin(datos: { nombreOrg: string; nombreAdmin: string; correo: string; contrasena: string }): Promise<any> {
     // Al crear un tenant, debemos usar la instancia global (admin/root mode)
     // Ya que el RLS todavía no aplica para la creación de un nuevo namespace.
     
-    // Aquí idealmente hasheamos la contraseña con bcrypt.
-    const contrasena_hash = datos.contrasena; // TODO: Usar bcrypt
+    // Hasheamos la contraseña con crypto nativo
+    const contrasena_hash = hashPassword(datos.contrasena);
 
-    return prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       // 1. Crear Organización
       const org = await tx.organizacion.create({
         data: { nombre: datos.nombreOrg },
@@ -42,7 +52,8 @@ export class OrganizacionService {
         },
       });
 
-      return { organizacion: org, admin: usuario };
+      const { contrasena_hash: _, ...usuarioSinContrasena } = usuario;
+      return { organizacion: org, admin: usuarioSinContrasena };
     });
   }
 }

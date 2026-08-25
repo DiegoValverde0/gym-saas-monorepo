@@ -28,8 +28,9 @@ export default function LoginPage() {
         throw new Error('Credenciales inválidas o acceso denegado');
       }
 
-      const data = await res.json();
-      localStorage.setItem('gym_token', data.access_token);
+      const json = await res.json();
+      // El backend ahora devuelve { statusCode, message, data: { access_token } }
+      localStorage.setItem('gym_token', json.data.access_token);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message);

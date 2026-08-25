@@ -13,13 +13,6 @@ import { ClientesModule } from './modules/clientes/clientes.module';
       global: true,
       middleware: {
         mount: true,
-        setup: (cls, req) => {
-          // Extraemos el organizacion_id del header o JWT y lo guardamos en el contexto
-          const orgId = req.headers['x-organizacion-id'];
-          if (orgId) {
-            cls.set('organizacion_id', orgId);
-          }
-        },
       },
     }),
     PrismaModule,

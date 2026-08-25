@@ -3,15 +3,33 @@ import { resolve } from 'path';
 config({ path: resolve(process.cwd(), '../../.env') });
 
 import { PrismaClient, EstadoRegistro, TipoPlan } from '@prisma/client';
+import * as crypto from 'crypto';
+
+// Helper de encriptación nativa
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `${salt}:${derivedKey.toString('hex')}`;
+}
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Iniciando la creación de semillas...');
 
-  // Limpiar la base de datos (Opcional, depende de la configuración de test)
-  // Como estamos agregando y podría haber restricciones, es mejor no hacer deleteAll, 
-  // sino asumir base limpia en desarrollo o reset previo.
+  // Limpiar la base de datos para resetear contraseñas y evitar colisiones
+  console.log('🧹 Limpiando base de datos...');
+  await prisma.registro_Asistencia.deleteMany();
+  await prisma.reserva_Clase.deleteMany();
+  await prisma.membresia.deleteMany();
+  await prisma.cliente.deleteMany();
+  await prisma.plan.deleteMany();
+  await prisma.asignacion_Acceso.deleteMany();
+  await prisma.usuario.deleteMany();
+  await prisma.sucursal.deleteMany();
+  await prisma.rol.deleteMany();
+  await prisma.organizacion.deleteMany();
+  console.log('✨ Base de datos limpia.');
 
   // ==========================================
   // 1. Crear Organización A: Gym Titan
@@ -47,9 +65,10 @@ async function main() {
   // Crear Usuario Admin para Gym Titan
   const userTitan = await prisma.usuario.create({
     data: {
-      nombre_completo: 'Carlos Titan',
+      nombre_completo: 'Admin Gym Titan',
       correo: 'admin@gymtitan.com',
-      contrasena_hash: 'hashed_password_123', // Simulado
+      contrasena_hash: hashPassword('hashed_password_123'),
+      estado: EstadoRegistro.ACTIVO,
       asignaciones_acceso: {
         create: {
           organizacion_id: gymTitan.id,
@@ -126,9 +145,10 @@ async function main() {
   // Crear Usuario para CrossFit Alpha
   const userAlpha = await prisma.usuario.create({
     data: {
-      nombre_completo: 'Maria Alpha',
+      nombre_completo: 'Coach Alpha',
       correo: 'coach@cfalpha.com',
-      contrasena_hash: 'hashed_password_456', 
+      contrasena_hash: hashPassword('hashed_password_456'),
+      estado: EstadoRegistro.ACTIVO,
       asignaciones_acceso: {
         create: {
           organizacion_id: cfAlpha.id,

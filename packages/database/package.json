@@ -5,7 +5,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
-    "db:push": "dotenv -e ../../.env -- prisma db push"
+    "db:push": "dotenv -e ../../.env -- prisma db push",
+    "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0"

@@ -8,73 +8,86 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super();
   }
 
+  private _extendedClient: any;
+
   get extendedClient() {
-    const cls = this.cls;
-    return this.$extends({
-      query: {
-        $allModels: {
-          async $allOperations({ model, operation, args, query }) {
-            // ==========================================
-            // 1. SOFT DELETE EXTENSION
-            // ==========================================
-            const isSoftDelete = ['delete', 'deleteMany'].includes(operation);
-            if (isSoftDelete) {
-              const newOperation = operation === 'delete' ? 'update' : 'updateMany';
-              
-              if (!args) args = {};
-              if (!args['data']) args['data'] = {};
-              
-              args['data'] = { ...args['data'], deleted_at: new Date() };
-              
-              return query({
-                ...args,
-                operation: newOperation,
-              } as any);
-            }
-
-            // Filtrar registros eliminados en consultas
-            const isFind = ['findUnique', 'findFirst', 'findMany', 'count'].includes(operation);
-            if (isFind) {
-              const anyArgs = args as any;
-              if (anyArgs && anyArgs.where) {
-                if (anyArgs.where.deleted_at === undefined) {
-                  anyArgs.where = { ...anyArgs.where, deleted_at: null };
-                }
-              } else {
-                args = { ...anyArgs, where: { deleted_at: null } };
+    if (!this._extendedClient) {
+      const cls = this.cls;
+      this._extendedClient = this.$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ model, operation, args, query }) {
+              // ==========================================
+              // 1. SOFT DELETE EXTENSION
+              // ==========================================
+              const isSoftDelete = ['delete', 'deleteMany'].includes(operation);
+              if (isSoftDelete) {
+                const newOperation = operation === 'delete' ? 'update' : 'updateMany';
+                
+                const deleteArgs = args as any || {};
+                const data = deleteArgs.data || {};
+                
+                return query({
+                  ...deleteArgs,
+                  data: { ...data, deleted_at: new Date() },
+                  operation: newOperation,
+                } as any);
               }
-            }
 
-            // ==========================================
-            // 2. ROW-LEVEL SECURITY (RLS) EXTENSION
-            // ==========================================
-            const organizacionId = cls.get('organizacion_id');
-            const skipRlsModels = ['Usuario', 'Permiso']; // Modelos que no tienen organizacion_id
-            
-            if (organizacionId && !skipRlsModels.includes(model as string)) {
-              const anyArgs = args as any;
-              if (operation === 'create' || operation === 'createMany') {
-                if (anyArgs && anyArgs.data) {
-                   if (Array.isArray(anyArgs.data)) {
-                       anyArgs.data = anyArgs.data.map((d: any) => ({ ...d, organizacion_id: organizacionId }));
-                   } else {
-                       anyArgs.data = { ...anyArgs.data, organizacion_id: organizacionId };
+              // Filtrar registros eliminados en consultas
+              const isFind = ['findUnique', 'findFirst', 'findMany', 'count'].includes(operation);
+              if (isFind) {
+                const findArgs = args as any || {};
+                const where = findArgs.where || {};
+                
+                if (where.deleted_at === undefined) {
+                   findArgs.where = { ...where, deleted_at: null };
+                }
+                args = findArgs;
+              }
+
+              // ==========================================
+              // 2. ROW-LEVEL SECURITY (RLS) EXTENSION
+              // ==========================================
+              const organizacionId = cls.get('organizacion_id');
+              const isSuperAdmin = cls.get('is_superadmin');
+              
+              // Modelos que no tienen organizacion_id obligatorio o son globales
+              const skipRlsModels = ['Usuario', 'Permiso', 'Rol_Permiso', 'Rol']; 
+              
+              if (!skipRlsModels.includes(model as string)) {
+                // BYPASS para administradores
+                if (!isSuperAdmin) {
+                   // MODO ESTRICTO: Si no hay organizacion en el contexto y NO es superadmin, rechazar acceso
+                   if (!organizacionId) {
+                      throw new Error(`[Seguridad RLS] Intento de acceso a modelo tenant '${model as string}' sin organizacion_id en contexto.`);
                    }
-                }
-              } else if (isFind || operation === 'update' || operation === 'updateMany') {
-                if (anyArgs && anyArgs.where) {
-                  anyArgs.where = { ...anyArgs.where, organizacion_id: organizacionId };
-                } else {
-                  args = { ...anyArgs, where: { organizacion_id: organizacionId } };
+
+                   const rlsArgs = args as any || {};
+                   if (operation === 'create' || operation === 'createMany') {
+                      const data = rlsArgs.data;
+                      if (data) {
+                         if (Array.isArray(data)) {
+                             rlsArgs.data = data.map((d: any) => ({ ...d, organizacion_id: organizacionId }));
+                         } else {
+                             rlsArgs.data = { ...data, organizacion_id: organizacionId };
+                         }
+                      }
+                   } else if (isFind || operation === 'update' || operation === 'updateMany') {
+                      const where = rlsArgs.where || {};
+                      rlsArgs.where = { ...where, organizacion_id: organizacionId };
+                   }
+                   args = rlsArgs;
                 }
               }
-            }
 
-            return query(args);
+              return query(args);
+            },
           },
         },
-      },
-    });
+      });
+    }
+    return this._extendedClient;
   }
 
   async onModuleInit() {

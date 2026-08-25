@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class UsuarioService {
-  
-  // Recibimos el cliente de Prisma ya filtrado por Tenant (RLS) desde el controlador
-  async listarUsuarios(tenantPrisma: any): Promise<any> {
+  constructor(private prisma: PrismaService) {}
+
+  async listarUsuarios(): Promise<any> {
     // Si RLS está bien configurado en BD, esta consulta jamás traerá usuarios de otra organización.
-    // Dependiendo de tu lógica de la BD, 'asignaciones_acceso' nos dirá quiénes están en esta org.
-    return tenantPrisma.asignacion_Acceso.findMany({
+    // Usamos el extendedClient para que se aplique el RLS automáticamente
+    return this.prisma.extendedClient.asignacion_Acceso.findMany({
       include: {
         usuario: true,
         rol: true

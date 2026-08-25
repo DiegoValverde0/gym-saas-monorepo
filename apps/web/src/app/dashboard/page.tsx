@@ -33,7 +33,8 @@ export default function DashboardPage() {
         }
         throw new Error('Error al cargar los clientes');
       }
-      return res.json();
+      const json = await res.json();
+      return json.data || [];
     },
     enabled: !!token,
   });

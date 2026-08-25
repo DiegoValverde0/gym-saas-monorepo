@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -15,8 +16,14 @@ export class AuthService {
       include: { asignaciones_acceso: true }
     });
 
-    // MVP: Comparación directa de strings, asumiendo contraseñas como "hashed_password_123" en seed
-    if (user?.contrasena_hash !== pass) {
+    // Validar contraseña usando crypto nativo (mismo nivel que bcrypt)
+    const [salt, key] = user.contrasena_hash.split(':');
+    const hashedBuffer = crypto.scryptSync(pass, salt, 64);
+    
+    const keyBuffer = Buffer.from(key, 'hex');
+    const match = crypto.timingSafeEqual(hashedBuffer, keyBuffer);
+
+    if (!match) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
