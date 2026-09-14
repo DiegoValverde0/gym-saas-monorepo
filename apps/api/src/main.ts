@@ -14,7 +14,12 @@ async function bootstrap() {
   
   // Seguridad HTTP
   app.use(helmet());
-  app.enableCors(); // Opcional, pero necesario para comunicación con la web app
+  // Antes `enableCors()` sin opciones aceptaba cualquier origen. Ahora solo
+  // se aceptan los de FRONTEND_URL (coma-separado); sin esa variable, cae al
+  // dev server local (localhost:3000) en vez de fallar cerrado por completo,
+  // para no romper `pnpm dev` a quien no la haya configurado todavía.
+  const frontendOrigins = process.env.FRONTEND_URL?.split(',').map((o) => o.trim()).filter(Boolean) ?? ['http://localhost:3000'];
+  app.enableCors({ origin: frontendOrigins });
   
   // Validaciones globales
   app.useGlobalPipes(new ValidationPipe({

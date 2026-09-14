@@ -1,177 +1,203 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useTenantStore } from '@/store/use-tenant-store';
+import { useAuth } from '@/hooks/use-auth';
+import { apiGet } from '@/lib/api-client';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Protect } from '@/components/ui/protect';
+import { Users, Wallet, Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
+  const { token } = useAuth();
+  const { activeTenantId } = useTenantStore();
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('gym_token');
-    if (!storedToken) {
-      router.push('/login');
-    } else {
-      setToken(storedToken);
-    }
-  }, [router]);
-
-  const { data: clientes, isLoading, error } = useQuery({
-    queryKey: ['clientes'],
-    queryFn: async () => {
-      if (!token) return [];
-      const res = await fetch('http://localhost:3001/clientes', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem('gym_token');
-          router.push('/login');
-        }
-        throw new Error('Error al cargar los clientes');
-      }
-      const json = await res.json();
-      return json.data || [];
-    },
+  const { data: kpis, isLoading: loadingKpis } = useQuery({
+    queryKey: ['dashboard-kpis', activeTenantId],
+    queryFn: async () => apiGet('/dashboard/kpis'),
     enabled: !!token,
   });
 
-  const handleLogout = () => {
-    localStorage.removeItem('gym_token');
-    router.push('/login');
-  };
+  const { data: chartData, isLoading: loadingCharts } = useQuery({
+    queryKey: ['dashboard-charts', activeTenantId],
+    queryFn: async () => apiGet('/dashboard/charts'),
+    enabled: !!token,
+  });
+
+  const { data: recent, isLoading: loadingRecent } = useQuery({
+    queryKey: ['dashboard-recent', activeTenantId],
+    queryFn: async () => apiGet('/dashboard/recent-activity'),
+    enabled: !!token,
+  });
 
   if (!token) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-      {/* Top Navbar */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex-shrink-0 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold shadow-md">
-                GM
-              </div>
-              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
-                Gym Manager
-              </span>
-            </div>
-            <div>
-              <button 
-                onClick={handleLogout}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-500">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight text-zinc-900">
+          Command Center
+        </h2>
+        <p className="mt-2 text-sm text-zinc-500">
+          Métricas y estado general del gimnasio en tiempo real.
+        </p>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         
-        {/* Header Section */}
-        <div className="md:flex md:items-center md:justify-between mb-8">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-3xl font-bold leading-7 text-gray-900 sm:truncate">
-              Directorio de Clientes
-            </h2>
-            <p className="mt-2 text-sm text-gray-500 max-w-2xl">
-              Estás viendo los datos protegidos por <strong>Row-Level Security (RLS)</strong>. 
-              El backend no aplicó ningún filtro explícito; la base de datos se encarga de aislar este inquilino mágicamente.
-            </p>
-          </div>
-        </div>
+        {/* KPI: Clientes Activos (Vista Operativa) */}
+        <Protect permission="clientes:leer">
+            <Card className="border-indigo-100 shadow-sm overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-bold text-zinc-700">Clientes Activos</CardTitle>
+                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center">
+                    <Users className="h-4 w-4 text-indigo-600" />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-black text-indigo-950">
+                {loadingKpis ? '...' : kpis?.clientesActivos}
+                </div>
+                <p className="text-xs text-zinc-500 font-medium">De {kpis?.clientesTotales} registrados en total</p>
+            </CardContent>
+            </Card>
+        </Protect>
 
-        {/* Table Card */}
-        <div className="bg-white shadow-xl shadow-gray-200/50 rounded-2xl overflow-hidden border border-gray-100">
-          
-          {isLoading ? (
-            <div className="flex justify-center items-center py-24">
-              <div className="relative w-12 h-12">
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-indigo-200 rounded-full"></div>
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="p-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
-                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900">Error al cargar datos</h3>
-              <p className="mt-2 text-sm text-gray-500">{(error as Error).message}</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50/80 backdrop-blur-sm">
-                  <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ID Interno</th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th scope="col" className="relative px-6 py-4"><span className="sr-only">Acciones</span></th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {clientes?.map((cliente: any) => (
-                    <tr key={cliente.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-100 to-purple-100 flex items-center justify-center text-indigo-700 font-bold text-sm border border-indigo-200">
-                              {cliente.nombre.charAt(0)}
-                            </div>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{cliente.nombre}</div>
-                            <div className="text-sm text-gray-500">{cliente.correo || 'Sin correo'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 font-mono">
-                          {cliente.id.split('-')[0]}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
-                          ${cliente.estado === 'ACTIVO' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${cliente.estado === 'ACTIVO' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                          {cliente.estado.toLowerCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button className="text-indigo-600 hover:text-indigo-900 opacity-0 group-hover:opacity-100 transition-opacity">
-                          Ver detalles
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  
-                  {clientes?.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">Sin clientes</h3>
-                        <p className="mt-1 text-sm text-gray-500">No hay clientes registrados en esta organización.</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
+        {/* KPI: Asistencias Hoy (Vista Operativa) */}
+        <Protect permission="asistencias:leer">
+            <Card className="border-emerald-100 shadow-sm overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-bold text-zinc-700">Asistencias Hoy</CardTitle>
+                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                    <Activity className="h-4 w-4 text-emerald-600" />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-black text-emerald-950">
+                {loadingKpis ? '...' : kpis?.asistenciasHoy}
+                </div>
+                <p className="text-xs text-zinc-500 font-medium">Accesos registrados hoy</p>
+            </CardContent>
+            </Card>
+        </Protect>
+
+        {/* KPI: Alerta Membresías (Vista Operativa) */}
+        <Protect permission="membresias:leer">
+            <Card className="border-amber-100 shadow-sm overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-bold text-zinc-700">Próximos a Vencer</CardTitle>
+                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-black text-amber-950">
+                {loadingKpis ? '...' : kpis?.membresiasPorVencer}
+                </div>
+                <p className="text-xs text-zinc-500 font-medium">Membresías expiran en 5 días</p>
+            </CardContent>
+            </Card>
+        </Protect>
+
+        {/* KPI: Ingresos del Mes (Vista Financiera) */}
+        <Protect permission="transacciones:leer">
+            <Card className="bg-zinc-950 border-zinc-900 shadow-lg overflow-hidden relative text-white">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-cyan-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-bold text-zinc-300">Ingresos Hoy</CardTitle>
+                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center">
+                    <Wallet className="h-4 w-4 text-emerald-400" />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-black text-white">
+                {loadingKpis ? '...' : `Bs. ${Number(kpis?.ingresosHoy || 0).toFixed(2)}`}
+                </div>
+                <div className="text-xs text-emerald-400 font-medium flex items-center mt-1 gap-1">
+                    <TrendingUp className="w-3 h-3" />
+                    Mes: Bs. {Number(kpis?.ingresosMes || 0).toFixed(2)}
+                </div>
+            </CardContent>
+            </Card>
+        </Protect>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+        
+        {/* GRÁFICO FINANCIERO */}
+        <Protect permission="transacciones:leer">
+            <Card className="lg:col-span-2 shadow-sm border-zinc-200">
+            <CardHeader>
+                <CardTitle className="text-lg font-bold text-zinc-800">Ingresos (Últimos 7 días)</CardTitle>
+                <CardDescription>Rendimiento económico reciente.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loadingCharts ? (
+                    <div className="h-[300px] flex items-center justify-center text-zinc-400">Cargando gráfica...</div>
+                ) : (
+                    <div className="h-[300px] w-full mt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData || []} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                <Line type="monotone" dataKey="Ingresos" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                                <CartesianGrid stroke="#e4e4e7" strokeDasharray="5 5" vertical={false} />
+                                <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                                <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `Bs ${value}`} dx={-10} />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: any) => [`Bs. ${Number(value || 0).toFixed(2)}`, 'Ingreso']}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
+            </CardContent>
+            </Card>
+        </Protect>
+
+        {/* ACTIVIDAD RECIENTE */}
+        <Protect permission="membresias:leer">
+            <Card className="lg:col-span-1 shadow-sm border-zinc-200 flex flex-col">
+            <CardHeader>
+                <CardTitle className="text-lg font-bold text-zinc-800">Actividad Reciente</CardTitle>
+                <CardDescription>Últimas membresías procesadas.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto">
+                {loadingRecent ? (
+                    <div className="flex items-center justify-center text-zinc-400 h-full">Cargando...</div>
+                ) : (
+                    <div className="space-y-4">
+                        {recent?.length === 0 ? (
+                            <p className="text-zinc-500 text-sm text-center">No hay actividad reciente.</p>
+                        ) : (
+                            recent?.map((item: any) => (
+                                <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-zinc-100 last:border-0">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.estado === 'ACTIVA' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                        {item.estado === 'ACTIVA' ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-zinc-900 truncate">{item.cliente?.nombre}</p>
+                                        <p className="text-xs text-zinc-500 truncate">{item.plan?.nombre}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-sm font-bold text-zinc-900">Bs. {item.montoFinal}</p>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.estado === 'ACTIVA' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                            {item.estado}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+            </CardContent>
+            </Card>
+        </Protect>
+
+      </div>
     </div>
   );
 }

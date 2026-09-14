@@ -1,5 +1,36 @@
+// =============================================================================
+// GYMDVR - ESQUEMA FISICO DE BASE DE DATOS (SAAS MULTI-TENANT)
+// ORM: Prisma 5+ | Motor: PostgreSQL 14+ | Backend: NestJS
+//
+// NOTAS DE ARQUITECTURA (v2 - refinado):
+// 1. AISLAMIENTO: toda tabla "hija" de una entidad ya perteneciente a la
+//    organizacion (ej. Sucursal, Cliente, Plan) referencia a esa entidad con
+//    una FK COMPUESTA [xId, organizacionId] -> [id, organizacionId]. Esto
+//    hace que Postgres RECHACE a nivel de base de datos cualquier fila que
+//    mezcle entidades de dos organizaciones distintas (defensa real contra
+//    fugas de datos entre tenants, no solo una convencion de aplicacion).
+// 2. IDENTIDAD VS. PERTENENCIA: Usuario es una identidad GLOBAL (una persona
+//    puede trabajar, con su mismo login, en mas de un gimnasio). La
+//    pertenencia a una organizacion y el rol se definen en AsignacionAcceso.
+// 3. Rol ahora es SIEMPRE de una organizacion (organizacionId obligatorio):
+//    elimina el riesgo de roles "compartidos" ambiguos entre tenants.
+// 4. FLEXIBILIDAD INFORMAL <-> FORMAL: el modulo de caja (AperturaCaja) es
+//    OPCIONAL para una Transaccion, de forma que un gimnasio informal pueda
+//    registrar cobros sin manejar apertura/cierre de caja, mientras que una
+//    cadena grande si puede exigir ese flujo operativo completo.
+// 5. Los montos "congelados" (ej. Membresia.montoFinal) se guardan de forma
+//    denormalizada intencionalmente para preservar el historial financiero
+//    aunque el Plan/Promocion cambie de precio en el futuro.
+// 6. Reglas que Postgres/Prisma no pueden validar declarativamente (ej. que
+//    en DetalleTransaccion solo un concepto membresia/producto/servicio este
+//    lleno segun tipoConcepto, o que Transaccion.montoTotal sea igual a la
+//    suma de sus Pagos) deben validarse en la capa de aplicacion (DTOs /
+//    servicios de NestJS) o reforzarse con CHECK constraints via SQL crudo.
+// =============================================================================
+
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -7,26 +38,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================================================
-// ENUMS GLOBALES
-// ==================================================
+// =============================================================================
+// ENUMERACIONES DEL SISTEMA
+// =============================================================================
 
-enum EstadoRegistro {
+enum EstadoOrganizacion {
   ACTIVO
   INACTIVO
   SUSPENDIDO
 }
 
-enum TipoPlan {
-  TIEMPO
-  SESIONES
+enum EstadoGeneral {
+  ACTIVO
+  INACTIVO
 }
 
-enum EstadoReserva {
-  PENDIENTE
-  CONFIRMADA
-  CANCELADA
-  ASISTIDA
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  BLOQUEADO
+}
+
+enum TipoDocumento {
+  CI // Cedula/Carnet de Identidad (Bolivia)
+  PASAPORTE
+  CARNET_EXTRANJERO
+  NIT
+  OTRO
+}
+
+enum Genero {
+  MASCULINO
+  FEMENINO
+  OTRO
+  PREFIERE_NO_INFORMAR
+}
+
+enum EstadoCaja {
+  ABIERTA
+  CERRADA
+  MANTENIMIENTO
+}
+
+enum EstadoAperturaCaja {
+  ABIERTA
+  CERRADA
 }
 
 enum TipoTransaccion {
@@ -34,518 +90,903 @@ enum TipoTransaccion {
   EGRESO
 }
 
-enum TipoCuenta {
-  BANCARIA
+enum MetodoPago {
   EFECTIVO
-  PASARELA
+  TARJETA
+  TRANSFERENCIA
+  QR
+  PAGO_MOVIL // billeteras moviles tipo Tigo Money
+  OTRO
 }
 
-// ==================================================
-// 1. CORE INSTITUCIONAL
-// ==================================================
+enum TipoConceptoVenta {
+  MEMBRESIA
+  PRODUCTO
+  SERVICIO
+  OTRO // cobro libre/informal sin catalogo previo (ej. "prestamo de toalla")
+}
+
+enum TipoContratacionStaff {
+  PLANILLA
+  INDEPENDIENTE // entrenador freelance, cobra por comision
+  VOLUNTARIO
+}
+
+enum TipoPlan {
+  TIEMPO
+  SESIONES
+  VISITA // pase de un solo dia / dia suelto
+}
+
+enum EstadoMembresia {
+  PENDIENTE_PAGO
+  EN_ESPERA
+  ACTIVA
+  VENCIDA
+  CANCELADA
+  AGOTADA
+  CONGELADA // pausada temporalmente, ver PausaMembresia
+}
+
+enum EstadoCliente {
+  ACTIVO
+  INACTIVO
+  MOROSO
+  SUSPENDIDO // suspension disciplinaria, distinta de inactivo
+}
+
+enum EstadoReserva {
+  CONFIRMADA
+  CANCELADA
+  ASISTIO
+  NO_ASISTIO
+}
+
+enum EstadoTurno {
+  PROGRAMADO
+  COMPLETADO
+  AUSENTE
+  CANCELADO
+}
+
+enum TipoAsistencia {
+  MIEMBRO
+  INVITADO
+  VISITA_DIA
+  PRUEBA_GRATIS
+}
+
+enum OperacionAuditoria {
+  INSERT
+  UPDATE
+  DELETE
+}
+
+enum MetodoValidacion {
+  MANUAL
+  TARJETA
+  BIOMETRICO
+  QR
+  CODIGO_PIN
+}
+
+enum TipoComprobante {
+  RECIBO_SIMPLE // uso informal, sin validez fiscal SIN
+  FACTURA
+  NOTA_VENTA
+}
+
+// =============================================================================
+// MODULO 1: CORE INSTITUCIONAL (MULTI-TENANT ROOT)
+// =============================================================================
 
 model Organizacion {
-  id             String         @id @default(uuid())
-  nombre         String
-  fecha_registro DateTime       @default(now())
-  estado         EstadoRegistro @default(ACTIVO)
+  id                   String             @id @default(uuid()) @db.Uuid
+  nombre               String             @db.VarChar(150) // nombre comercial / marca
+  razonSocial          String?            @map("razon_social") @db.VarChar(200) // razon social legal, si aplica
+  identificacionFiscal String?            @unique @map("identificacion_fiscal") @db.VarChar(50) // NIT (opcional: gyms informales pueden no tenerlo)
+  moneda               String             @default("BOB") @db.Char(3)
+  zonaHoraria          String             @default("America/La_Paz") @map("zona_horaria") @db.VarChar(50)
+  configuracion        Json?              @db.JsonB // reglas de negocio especificas del tenant
+  fechaRegistro        DateTime           @default(now()) @map("fecha_registro") @db.Timestamptz(6)
+  estado               EstadoOrganizacion @default(ACTIVO)
 
-  // Relaciones Multi-Tenant
-  sucursales            Sucursal[]
-  roles                 Rol[]
-  asignaciones_acceso   Asignacion_Acceso[]
-  perfiles_staff        Perfil_Staff[]
-  clases_programadas    Clase_Programada[]
-  clientes              Cliente[]
-  planes                Plan[]
-  registros_asistencia  Registro_Asistencia[]
-  cuentas_bancarias     Cuenta_Bancaria[]
-  productos             Producto[]
-  auditorias            Auditoria[]
-  notificaciones        Notificacion[]
-  api_keys              API_Key[]
-  
-  // NUEVAS RELACIONES AÑADIDAS
-  cajas_registradoras   Caja_Registradora[]
-  turnos_trabajo        Turno_Trabajo[]
-  reservas_clase        Reserva_Clase[]
-  membresias            Membresia[]
-  aperturas_caja        Apertura_Caja[]
-  transacciones         Transaccion[]
-  detalles_transacciones Detalle_Transaccion[]
-  inventarios           Inventario[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  // Relaciones
+  sucursales          Sucursal[]
+  cajasRegistradoras  CajaRegistradora[]
+  roles               Rol[]
+  asignacionesAcceso  AsignacionAcceso[]
+  disciplinas         Disciplina[]
+  perfilesStaff       PerfilStaff[]
+  staffDisciplinas    StaffDisciplina[]
+  turnosTrabajo       TurnoTrabajo[]
+  clasesProgramadas   ClaseProgramada[]
+  reservasClase       ReservaClase[]
+  clientes            Cliente[]
+  promociones         Promocion[]
+  planes              Plan[]
+  membresias          Membresia[]
+  pausasMembresia     PausaMembresia[]
+  registrosAsistencia RegistroAsistencia[]
+  cuentasBancarias    CuentaBancaria[]
+  aperturasCaja       AperturaCaja[]
+  transacciones       Transaccion[]
+  pagos               Pago[]
+  detallesTransaccion DetalleTransaccion[]
+  comprobantes        Comprobante[]
+  productos           Producto[]
+  servicios           Servicio[]
+  inventarios         Inventario[]
+  auditorias          Auditoria[]
+  notificaciones      Notificacion[]
+  apiKeys             ApiKey[]
 
   @@map("organizaciones")
 }
 
 model Sucursal {
-  id              String         @id @default(uuid())
-  organizacion_id String
-  nombre          String
-  direccion       String?
-  telefono        String?
-  estado          EstadoRegistro @default(ACTIVO)
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  nombre         String        @db.VarChar(100)
+  esPrincipal    Boolean       @default(false) @map("es_principal")
+  direccion      String?       @db.Text
+  telefono       String?       @db.VarChar(30)
+  estado         EstadoGeneral @default(ACTIVO)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  
-  cajas_registradoras  Caja_Registradora[]
-  asignaciones_acceso  Asignacion_Acceso[]
-  turnos_trabajo       Turno_Trabajo[]
-  clases_programadas   Clase_Programada[]
-  clientes_base        Cliente[]             
-  registros_asistencia Registro_Asistencia[]
-  inventarios          Inventario[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  cajasRegistradoras  CajaRegistradora[]
+  asignacionesAcceso  AsignacionAcceso[]
+  turnosTrabajo       TurnoTrabajo[]
+  clasesProgramadas   ClaseProgramada[]
+  clientesBase        Cliente[]
+  registrosAsistencia RegistroAsistencia[]
+  transacciones       Transaccion[]
+  inventarios         Inventario[]
+  membresias          Membresia[]
 
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
   @@map("sucursales")
 }
 
-model Caja_Registradora {
-  id              String @id @default(uuid())
-  organizacion_id String
-  sucursal_id     String
-  nombre          String
-  saldo_actual    Float  @default(0.0)
+model CajaRegistradora {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizacionId String     @map("organizacion_id") @db.Uuid
+  sucursalId     String     @map("sucursal_id") @db.Uuid
+  nombre         String     @db.VarChar(50)
+  saldoActual    Decimal    @default(0.00) @map("saldo_actual") @db.Decimal(12, 2) // cache mantenido por logica de aplicacion
+  estado         EstadoCaja @default(CERRADA)
 
-  organizacion   Organizacion    @relation(fields: [organizacion_id], references: [id])
-  sucursal       Sucursal        @relation(fields: [sucursal_id], references: [id])
-  aperturas_caja Apertura_Caja[]
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion  Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal      Sucursal       @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  creadoPor     Usuario?       @relation("CajasCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  aperturasCaja AperturaCaja[]
 
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
   @@map("cajas_registradoras")
 }
 
-// ==================================================
-// 2. SEGURIDAD Y RBAC
-// ==================================================
+// =============================================================================
+// MODULO 2: SEGURIDAD Y RBAC (IDENTIDAD GLOBAL VS. ACCESO POR ORGANIZACION)
+// =============================================================================
 
 model Usuario {
-  id              String         @id @default(uuid())
-  nombre_completo String
-  correo          String         @unique
-  contrasena_hash String
-  estado          EstadoRegistro @default(ACTIVO)
+  id              String         @id @default(uuid()) @db.Uuid
+  nombreCompleto  String         @map("nombre_completo") @db.VarChar(150)
+  correo          String         @unique @db.VarChar(150)
+  contrasenaHash  String         @map("contrasena_hash") @db.VarChar(255)
+  telefono        String?        @db.VarChar(30)
+  tipoDocumento   TipoDocumento? @map("tipo_documento")
+  numeroDocumento String?        @unique @map("numero_documento") @db.VarChar(30)
+  fechaNacimiento DateTime?      @map("fecha_nacimiento") @db.Date
+  estado          EstadoUsuario  @default(ACTIVO)
+  isSuperAdmin    Boolean        @default(false) @map("is_superadmin")
 
-  asignaciones_acceso Asignacion_Acceso[]
-  perfiles_staff      Perfil_Staff[]
-  aperturas_caja      Apertura_Caja[]
-  auditorias          Auditoria[]
-  notificaciones      Notificacion[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  asignacionesAcceso      AsignacionAcceso[]
+  perfilStaff             PerfilStaff?
+  aperturasCaja           AperturaCaja[]
+  auditorias              Auditoria[]
+  notificacionesRecibidas Notificacion[]
+
+  // Firmas de auditoria operativa (trazabilidad de "quien hizo que")
+  clientesCreados        Cliente[]            @relation("ClientesCreados")
+  membresiasCreadas      Membresia[]          @relation("MembresiasCreadas")
+  transaccionesCreadas   Transaccion[]        @relation("TransaccionesCreadas")
+  cajasCreadas           CajaRegistradora[]   @relation("CajasCreadas")
+  pausasCreadas          PausaMembresia[]     @relation("PausasCreadas")
+  asistenciasRegistradas RegistroAsistencia[] @relation("AsistenciasRegistradas")
 
   @@map("usuarios")
 }
 
 model Permiso {
-  id     String @id @default(uuid())
-  modulo String
-  accion String
+  id          String  @id @default(uuid()) @db.Uuid
+  modulo      String  @db.VarChar(50)
+  accion      String  @db.VarChar(50)
+  descripcion String? @db.Text
 
-  roles_permiso Rol_Permiso[]
+  rolPermisos RolPermiso[]
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
+  @@unique([modulo, accion])
   @@map("permisos")
 }
 
 model Rol {
-  id              String  @id @default(uuid())
-  organizacion_id String? // Nulo si es global, con UUID si es personalizado
-  nombre          String
+  id             String  @id @default(uuid()) @db.Uuid
+  organizacionId String? @map("organizacion_id") @db.Uuid // null = rol global de sistema
+  nombre         String  @db.VarChar(50)
+  descripcion    String? @db.Text
+  esSistema      Boolean @default(false) @map("es_sistema")
 
-  organizacion Organizacion? @relation(fields: [organizacion_id], references: [id])
-  
-  roles_permiso       Rol_Permiso[]
-  asignaciones_acceso Asignacion_Acceso[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion       Organizacion?      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  rolPermisos        RolPermiso[]
+  asignacionesAcceso AsignacionAcceso[]
 
+  @@unique([organizacionId, nombre])
+  @@index([organizacionId])
   @@map("roles")
 }
 
-model Rol_Permiso {
-  rol_id     String
-  permiso_id String
+model RolPermiso {
+  rolId     String @map("rol_id") @db.Uuid
+  permisoId String @map("permiso_id") @db.Uuid
 
-  rol     Rol     @relation(fields: [rol_id], references: [id], onDelete: Cascade)
-  permiso Permiso @relation(fields: [permiso_id], references: [id], onDelete: Cascade)
+  rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  permiso Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade)
 
-  @@id([rol_id, permiso_id])
+  @@id([rolId, permisoId])
   @@map("roles_permisos")
 }
 
-model Asignacion_Acceso {
-  id              String  @id @default(uuid())
-  usuario_id      String
-  organizacion_id String
-  sucursal_id     String? 
-  rol_id          String
+model AsignacionAcceso {
+  id             String  @id @default(uuid()) @db.Uuid
+  usuarioId      String  @map("usuario_id") @db.Uuid
+  organizacionId String? @map("organizacion_id") @db.Uuid // null = acceso global (ej. superadmin)
+  sucursalId     String? @map("sucursal_id") @db.Uuid // null = acceso a todas las sucursales de la organizacion
+  rolId          String  @map("rol_id") @db.Uuid
 
-  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  sucursal     Sucursal?    @relation(fields: [sucursal_id], references: [id])
-  rol          Rol          @relation(fields: [rol_id], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  usuario      Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacion Organizacion? @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal     Sucursal?     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  rol          Rol           @relation(fields: [rolId], references: [id], onDelete: Restrict)
 
+  @@unique([usuarioId, organizacionId, sucursalId, rolId])
+  @@index([usuarioId])
+  @@index([organizacionId, sucursalId])
   @@map("asignaciones_acceso")
 }
 
-// ==================================================
-// 3. GESTIÓN DE PERSONAL, ENTRENADORES Y HORARIOS
-// ==================================================
+// =============================================================================
+// MODULO 3: PERSONAL Y HORARIOS
+// =============================================================================
 
-model Perfil_Staff {
-  id              String @id @default(uuid())
-  usuario_id      String @unique
-  organizacion_id String
-  especialidad    String?
-  costo_por_hora  Float  @default(0.0)
+model Disciplina {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  nombre         String        @db.VarChar(100)
+  descripcion    String?       @db.Text
+  estado         EstadoGeneral @default(ACTIVO)
 
-  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  
-  turnos_trabajo     Turno_Trabajo[]
-  clases_programadas Clase_Programada[]
+  organizacion      Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  staffDisciplinas  StaffDisciplina[]
+  clasesProgramadas ClaseProgramada[]
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  @@unique([id, organizacionId])
+  @@unique([organizacionId, nombre])
+  @@index([organizacionId])
+  @@map("disciplinas")
+}
 
+model PerfilStaff {
+  id                 String                @id @default(uuid()) @db.Uuid
+  usuarioId          String                @unique @map("usuario_id") @db.Uuid
+  organizacionId     String                @map("organizacion_id") @db.Uuid
+  tipoContratacion   TipoContratacionStaff @default(PLANILLA) @map("tipo_contratacion")
+  costoPorHora       Decimal               @default(0.00) @map("costo_por_hora") @db.Decimal(10, 2)
+  comisionPorcentaje Decimal?              @map("comision_porcentaje") @db.Decimal(5, 2) // para entrenadores independientes
+  estado             EstadoGeneral         @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  usuario          Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  organizacion     Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  staffDisciplinas StaffDisciplina[]
+  turnosTrabajo    TurnoTrabajo[]
+  clasesImpartidas ClaseProgramada[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
   @@map("perfiles_staff")
 }
 
-model Turno_Trabajo {
-  id              String   @id @default(uuid())
-  organizacion_id String
-  staff_id        String
-  sucursal_id     String
-  hora_entrada    DateTime
-  hora_salida     DateTime?
+// Tabla puente explicita (reemplaza la m2m implicita original) para poder
+// aplicar la FK compuesta y garantizar que staff y disciplina sean del mismo tenant.
+model StaffDisciplina {
+  id             String @id @default(uuid()) @db.Uuid
+  organizacionId String @map("organizacion_id") @db.Uuid
+  staffId        String @map("staff_id") @db.Uuid
+  disciplinaId   String @map("disciplina_id") @db.Uuid
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  staff        Perfil_Staff @relation(fields: [staff_id], references: [id])
-  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  staff        PerfilStaff  @relation(fields: [staffId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  disciplina   Disciplina   @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
 
+  @@unique([staffId, disciplinaId])
+  @@index([organizacionId])
+  @@map("staff_disciplinas")
+}
+
+model TurnoTrabajo {
+  id              String      @id @default(uuid()) @db.Uuid
+  organizacionId  String      @map("organizacion_id") @db.Uuid
+  staffId         String      @map("staff_id") @db.Uuid
+  sucursalId      String      @map("sucursal_id") @db.Uuid
+  fecha           DateTime    @db.Date
+  horaEntrada     DateTime    @map("hora_entrada") @db.Time(6)
+  horaSalida      DateTime    @map("hora_salida") @db.Time(6)
+  horaIngresoReal DateTime?   @map("hora_ingreso_real") @db.Timestamptz(6) // asistencia real del staff
+  horaSalidaReal  DateTime?   @map("hora_salida_real") @db.Timestamptz(6)
+  estado          EstadoTurno @default(PROGRAMADO)
+  motivoAusencia  String?     @map("motivo_ausencia") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  staff        PerfilStaff  @relation(fields: [staffId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  sucursal     Sucursal     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+
+  @@index([organizacionId, sucursalId, fecha])
+  @@index([staffId])
   @@map("turnos_trabajo")
 }
 
-model Clase_Programada {
-  id              String   @id @default(uuid())
-  organizacion_id String
-  sucursal_id     String
-  entrenador_id   String
-  nombre          String
-  capacidad       Int
-  fecha_hora      DateTime
+model ClaseProgramada {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizacionId  String        @map("organizacion_id") @db.Uuid
+  sucursalId      String        @map("sucursal_id") @db.Uuid
+  disciplinaId    String?       @map("disciplina_id") @db.Uuid
+  entrenadorId    String?       @map("entrenador_id") @db.Uuid
+  nombreClase     String        @map("nombre_clase") @db.VarChar(100)
+  descripcion     String?       @db.Text
+  capacidadMaxima Int           @default(20) @map("capacidad_maxima")
+  fechaHora       DateTime      @map("fecha_hora") @db.Timestamptz(6)
+  duracionMinutos Int           @default(60) @map("duracion_minutos")
+  estado          EstadoGeneral @default(ACTIVO) // permite cancelar la clase completa (distinto de cancelar una reserva individual)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
-  entrenador   Perfil_Staff @relation(fields: [entrenador_id], references: [id])
-  
-  reservas Reserva_Clase[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal     Sucursal       @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  disciplina   Disciplina?    @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  entrenador   PerfilStaff?   @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  reservas     ReservaClase[]
 
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@index([fechaHora])
   @@map("clases_programadas")
 }
 
-model Reserva_Clase {
-  id              String        @id @default(uuid())
-  organizacion_id String
-  clase_id        String
-  cliente_id      String
-  estado          EstadoReserva @default(PENDIENTE)
+model ReservaClase {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  claseId        String        @map("clase_id") @db.Uuid
+  clienteId      String        @map("cliente_id") @db.Uuid
+  fechaReserva   DateTime      @default(now()) @map("fecha_reserva") @db.Timestamptz(6)
+  estado         EstadoReserva @default(CONFIRMADA)
 
-  organizacion Organizacion     @relation(fields: [organizacion_id], references: [id])
-  clase        Clase_Programada @relation(fields: [clase_id], references: [id])
-  cliente      Cliente          @relation(fields: [cliente_id], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  clase        ClaseProgramada @relation(fields: [claseId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  cliente      Cliente         @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
 
+  @@unique([claseId, clienteId])
+  @@index([organizacionId])
   @@map("reservas_clases")
 }
 
-// ==================================================
-// 4. OPERACIONES: CLIENTES, MEMBRESÍAS Y MARCAJE
-// ==================================================
+// =============================================================================
+// MODULO 4: CLIENTES, MEMBRESIAS Y ASISTENCIA
+// =============================================================================
 
 model Cliente {
-  id               String         @id @default(uuid())
-  organizacion_id  String
-  sucursal_base_id String
-  nombre           String
-  correo           String?
-  estado           EstadoRegistro @default(ACTIVO)
+  id                            String         @id @default(uuid()) @db.Uuid
+  organizacionId                String         @map("organizacion_id") @db.Uuid
+  sucursalBaseId                String?        @map("sucursal_base_id") @db.Uuid
+  nombre                        String         @db.VarChar(150)
+  correo                        String?        @db.VarChar(150)
+  telefono                      String?        @db.VarChar(30)
+  tipoDocumento                 TipoDocumento? @map("tipo_documento")
+  numeroDocumento               String?        @map("numero_documento") @db.VarChar(30)
+  fechaNacimiento               DateTime?      @map("fecha_nacimiento") @db.Date
+  genero                        Genero?
+  direccion                     String?        @db.Text
+  fotoUrl                       String?        @map("foto_url") @db.Text // foto de referencia para validacion visual en recepcion
+  contactoEmergenciaNombre      String?        @map("contacto_emergencia_nombre") @db.VarChar(150) // tambien usado como tutor si es menor de edad
+  contactoEmergenciaTelefono    String?        @map("contacto_emergencia_telefono") @db.VarChar(30)
+  condicionesMedicas            String?        @map("condiciones_medicas") @db.Text
+  aceptaDeslindeResponsabilidad Boolean        @default(false) @map("acepta_deslinde_responsabilidad")
+  fechaAceptacionDeslinde       DateTime?      @map("fecha_aceptacion_deslinde") @db.Timestamptz(6)
+  estado                        EstadoCliente  @default(ACTIVO)
 
-  organizacion  Organizacion @relation(fields: [organizacion_id], references: [id])
-  sucursal_base Sucursal     @relation(fields: [sucursal_base_id], references: [id])
-  
-  membresias           Membresia[]
-  reservas             Reserva_Clase[]
-  registros_asistencia Registro_Asistencia[]
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursalBase        Sucursal?            @relation(fields: [sucursalBaseId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  creadoPor           Usuario?             @relation("ClientesCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  reservasClase       ReservaClase[]
+  membresias          Membresia[]
+  registrosAsistencia RegistroAsistencia[]
+  transacciones       Transaccion[]
 
+  @@unique([id, organizacionId])
+  @@unique([organizacionId, numeroDocumento])
+  @@index([organizacionId])
+  @@index([organizacionId, correo])
   @@map("clientes")
 }
 
-model Plan {
-  id              String   @id @default(uuid())
-  organizacion_id String
-  nombre          String
-  tipo_plan       TipoPlan
-  precio          Float
+model Promocion {
+  id                  String        @id @default(uuid()) @db.Uuid
+  organizacionId      String        @map("organizacion_id") @db.Uuid
+  nombre              String        @db.VarChar(150)
+  porcentajeDescuento Decimal?      @map("porcentaje_descuento") @db.Decimal(5, 2)
+  montoDescuentoFijo  Decimal?      @map("monto_descuento_fijo") @db.Decimal(10, 2)
+  fechaInicio         DateTime      @map("fecha_inicio") @db.Timestamptz(6)
+  fechaFin            DateTime      @map("fecha_fin") @db.Timestamptz(6)
+  estado              EstadoGeneral @default(ACTIVO)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   membresias   Membresia[]
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
+  @@map("promociones")
+}
 
+model Plan {
+  id                         String        @id @default(uuid()) @db.Uuid
+  organizacionId             String        @map("organizacion_id") @db.Uuid
+  nombre                     String        @db.VarChar(100)
+  tipoPlan                   TipoPlan      @map("tipo_plan")
+  duracionDias               Int?          @default(30) @map("duracion_dias")
+  limiteDiasSemana           Int?          @map("limite_dias_semana") // ej. solo 3 dias a la semana
+  diasPermitidos             Int[]         @default([]) @map("dias_permitidos") // 0=domingo ... 6=sabado, vacio = sin restriccion
+  cantidadSesiones           Int?          @default(0) @map("cantidad_sesiones")
+  horaInicioAcceso           DateTime?     @map("hora_inicio_acceso") @db.Time(6) // planes por horario (ej. solo manana)
+  horaFinAcceso              DateTime?     @map("hora_fin_acceso") @db.Time(6)
+  esRenovableAutomaticamente Boolean       @default(false) @map("es_renovable_automaticamente")
+  precio                     Decimal       @db.Decimal(10, 2)
+  estado                     EstadoGeneral @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  membresias   Membresia[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
   @@map("planes")
 }
 
 model Membresia {
-  id                   String   @id @default(uuid())
-  organizacion_id      String
-  cliente_id           String
-  plan_id              String
-  fecha_inicio         DateTime
-  fecha_fin            DateTime?
-  sesiones_disponibles Int?     
+  id             String  @id @default(uuid()) @db.Uuid
+  organizacionId String  @map("organizacion_id") @db.Uuid
+  sucursalId     String? @map("sucursal_id") @db.Uuid
+  clienteId      String  @map("cliente_id") @db.Uuid
+  planId         String  @map("plan_id") @db.Uuid
+  promocionId    String? @map("promocion_id") @db.Uuid
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  cliente      Cliente      @relation(fields: [cliente_id], references: [id])
-  plan         Plan         @relation(fields: [plan_id], references: [id])
-  
-  registros_asistencia Registro_Asistencia[]
+  // Trazabilidad estatica financiera (congelamiento del precio al momento de la venta)
+  montoBase         Decimal @map("monto_base") @db.Decimal(10, 2)
+  descuentoAplicado Decimal @default(0.00) @map("descuento_aplicado") @db.Decimal(10, 2)
+  montoFinal        Decimal @map("monto_final") @db.Decimal(10, 2)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  fechaInicio       DateTime        @map("fecha_inicio") @db.Date
+  fechaFin          DateTime?       @map("fecha_fin") @db.Date
+  sesionesRestantes Int?            @default(0) @map("sesiones_restantes")
+  estado            EstadoMembresia @default(PENDIENTE_PAGO)
+  pagada            Boolean         @default(false)
 
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
+
+  organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal            Sucursal?            @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  cliente             Cliente              @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  plan                Plan                 @relation(fields: [planId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  promocion           Promocion?           @relation(fields: [promocionId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  creadoPor           Usuario?             @relation("MembresiasCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  registrosAsistencia RegistroAsistencia[]
+  detallesTransaccion DetalleTransaccion[]
+  pausas              PausaMembresia[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, clienteId])
+  @@index([planId])
   @@map("membresias")
 }
 
-model Registro_Asistencia {
-  id              String   @id @default(uuid())
-  organizacion_id String
-  sucursal_id     String
-  cliente_id      String
-  membresia_id    String?
-  fecha_hora      DateTime @default(now())
+// Congelamiento/pausa de membresia (viajes, lesiones, etc.)
+model PausaMembresia {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizacionId String    @map("organizacion_id") @db.Uuid
+  membresiaId    String    @map("membresia_id") @db.Uuid
+  fechaInicio    DateTime  @map("fecha_inicio") @db.Date
+  fechaFin       DateTime? @map("fecha_fin") @db.Date // null = pausa abierta, aun no reanudada
+  motivo         String?   @db.Text
+  creadoPorId    String?   @map("creado_por_id") @db.Uuid
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
-  cliente      Cliente      @relation(fields: [cliente_id], references: [id])
-  membresia    Membresia?   @relation(fields: [membresia_id], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  membresia    Membresia    @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  creadoPor    Usuario?     @relation("PausasCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
-  @@map("registros_asistencias")
+  @@index([organizacionId, membresiaId])
+  @@map("pausas_membresia")
 }
 
-// ==================================================
-// 5. FINANZAS AVANZADAS
-// ==================================================
+model RegistroAsistencia {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizacionId   String           @map("organizacion_id") @db.Uuid
+  sucursalId       String           @map("sucursal_id") @db.Uuid
+  clienteId        String?          @map("cliente_id") @db.Uuid // null = visita informal/anonima
+  membresiaId      String?          @map("membresia_id") @db.Uuid
+  tipoAsistencia   TipoAsistencia   @default(MIEMBRO) @map("tipo_asistencia")
+  nombreVisitante  String?          @map("nombre_visitante") @db.VarChar(150) // usado cuando no hay clienteId
+  fechaHoraIngreso DateTime         @default(now()) @map("fecha_hora_ingreso") @db.Timestamptz(6)
+  fechaHoraSalida  DateTime?        @map("fecha_hora_salida") @db.Timestamptz(6)
+  metodoValidacion MetodoValidacion @default(MANUAL) @map("metodo_validacion")
+  registradoPorId  String?          @map("registrado_por_id") @db.Uuid // staff que valido el ingreso manual
+  motivoAnulacion  String?          @map("motivo_anulacion") @db.Text
 
-model Apertura_Caja {
-  id              String         @id @default(uuid())
-  organizacion_id String
-  caja_id         String
-  usuario_id      String
-  monto_inicial   Float
-  fecha_apertura  DateTime       @default(now())
-  estado          EstadoRegistro @default(ACTIVO) 
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6) // permite anular un registro erroneo sin perder el rastro de auditoria
 
-  organizacion Organizacion      @relation(fields: [organizacion_id], references: [id])
-  caja         Caja_Registradora @relation(fields: [caja_id], references: [id])
-  usuario      Usuario           @relation(fields: [usuario_id], references: [id])
-  
-  transacciones Transaccion[]
+  organizacion  Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal      Sucursal     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  cliente       Cliente?     @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  membresia     Membresia?   @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  registradoPor Usuario?     @relation("AsistenciasRegistradas", fields: [registradoPorId], references: [id], onDelete: SetNull)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@map("aperturas_cajas")
+  @@index([organizacionId, sucursalId, fechaHoraIngreso])
+  @@index([clienteId])
+  @@map("registros_asistencia")
 }
 
-model Transaccion {
-  id               String          @id @default(uuid())
-  organizacion_id  String
-  apertura_caja_id String
-  tipo             TipoTransaccion
-  monto            Float
-  metodo_pago      String
+// =============================================================================
+// MODULO 5: FINANZAS
+// =============================================================================
 
-  organizacion  Organizacion          @relation(fields: [organizacion_id], references: [id])
-  apertura_caja Apertura_Caja         @relation(fields: [apertura_caja_id], references: [id])
-  detalles      Detalle_Transaccion[]
+model CuentaBancaria {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizacionId String  @map("organizacion_id") @db.Uuid
+  banco          String  @db.VarChar(100)
+  numeroCuenta   String  @map("numero_cuenta") @db.VarChar(50)
+  tipoCuenta     String? @map("tipo_cuenta") @db.VarChar(50)
+  moneda         String  @default("BOB") @db.Char(3)
+  saldo          Decimal @default(0.00) @db.Decimal(12, 2) // cache mantenido por logica de aplicacion
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  @@map("transacciones")
-}
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  pagos        Pago[]
 
-model Detalle_Transaccion {
-  id              String @id @default(uuid())
-  organizacion_id String
-  transaccion_id  String
-  referencia_tipo String 
-  referencia_id   String 
-  subtotal        Float
-
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  transaccion  Transaccion  @relation(fields: [transaccion_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
-  @@map("detalles_transacciones")
-}
-
-model Cuenta_Bancaria {
-  id              String     @id @default(uuid())
-  organizacion_id String
-  nombre          String
-  tipo            TipoCuenta
-
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
   @@map("cuentas_bancarias")
 }
 
-// ==================================================
-// 6. CATÁLOGO E INVENTARIO
-// ==================================================
+model AperturaCaja {
+  id                  String             @id @default(uuid()) @db.Uuid
+  organizacionId      String             @map("organizacion_id") @db.Uuid
+  cajaId              String             @map("caja_id") @db.Uuid
+  usuarioId           String             @map("usuario_id") @db.Uuid
+  montoInicial        Decimal            @default(0.00) @map("monto_inicial") @db.Decimal(12, 2)
+  montoCierreEsperado Decimal?           @map("monto_cierre_esperado") @db.Decimal(12, 2)
+  montoCierreReal     Decimal?           @map("monto_cierre_real") @db.Decimal(12, 2)
+  observaciones       String?            @db.Text // notas de descuadre al cierre
+  fechaApertura       DateTime           @default(now()) @map("fecha_apertura") @db.Timestamptz(6)
+  fechaCierre         DateTime?          @map("fecha_cierre") @db.Timestamptz(6)
+  estado              EstadoAperturaCaja @default(ABIERTA)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organizacion  Organizacion     @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  caja          CajaRegistradora @relation(fields: [cajaId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  usuario       Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  transacciones Transaccion[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, cajaId])
+  @@index([usuarioId])
+  @@map("aperturas_caja")
+}
+
+model Transaccion {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizacionId String          @map("organizacion_id") @db.Uuid
+  sucursalId     String          @map("sucursal_id") @db.Uuid
+  aperturaCajaId String?         @map("apertura_caja_id") @db.Uuid // opcional: permite operar sin flujo formal de caja
+  clienteId      String?         @map("cliente_id") @db.Uuid // opcional: venta de mostrador sin cliente identificado
+  tipo           TipoTransaccion
+  montoTotal     Decimal         @map("monto_total") @db.Decimal(12, 2) // debe igualar la suma de Pagos y de DetalleTransaccion (validar en app)
+  fechaHora      DateTime        @default(now()) @map("fecha_hora") @db.Timestamptz(6)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
+
+  organizacion Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal     Sucursal             @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  aperturaCaja AperturaCaja?        @relation(fields: [aperturaCajaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  cliente      Cliente?             @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  creadoPor    Usuario?             @relation("TransaccionesCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  pagos        Pago[]
+  detalles     DetalleTransaccion[]
+  comprobante  Comprobante?
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@index([organizacionId, aperturaCajaId])
+  @@index([fechaHora])
+  @@index([clienteId])
+  @@map("transacciones")
+}
+
+// Un pago por metodo/monto; una Transaccion puede tener varios (pago dividido efectivo + QR, muy comun)
+model Pago {
+  id               String     @id @default(uuid()) @db.Uuid
+  organizacionId   String     @map("organizacion_id") @db.Uuid
+  transaccionId    String     @map("transaccion_id") @db.Uuid
+  cuentaBancariaId String?    @map("cuenta_bancaria_id") @db.Uuid // para conciliar transferencias/QR con una cuenta especifica
+  metodoPago       MetodoPago @map("metodo_pago")
+  monto            Decimal    @db.Decimal(12, 2)
+  referencia       String?    @db.VarChar(100) // n de operacion, voucher, codigo QR, etc.
+  fechaHora        DateTime   @default(now()) @map("fecha_hora") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organizacion   Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  transaccion    Transaccion     @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  cuentaBancaria CuentaBancaria? @relation(fields: [cuentaBancariaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+
+  @@index([organizacionId, transaccionId])
+  @@index([metodoPago])
+  @@map("pagos")
+}
+
+// Linea de venta polimorfica: cubre membresia formal, producto de inventario,
+// servicio sin inventario (ej. sesion de entrenamiento) o un cobro libre/informal.
+model DetalleTransaccion {
+  id               String            @id @default(uuid()) @db.Uuid
+  organizacionId   String            @map("organizacion_id") @db.Uuid
+  transaccionId    String            @map("transaccion_id") @db.Uuid
+  tipoConcepto     TipoConceptoVenta @map("tipo_concepto")
+  membresiaId      String?           @map("membresia_id") @db.Uuid
+  productoId       String?           @map("producto_id") @db.Uuid
+  servicioId       String?           @map("servicio_id") @db.Uuid
+  descripcionLibre String?           @map("descripcion_libre") @db.VarChar(200) // obligatorio en la app cuando tipoConcepto = OTRO
+  cantidad         Int               @default(1)
+  precioUnitario   Decimal           @map("precio_unitario") @db.Decimal(10, 2)
+  subtotal         Decimal           @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  transaccion  Transaccion  @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  membresia    Membresia?   @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  producto     Producto?    @relation(fields: [productoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  servicio     Servicio?    @relation(fields: [servicioId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+
+  @@index([organizacionId, transaccionId])
+  @@index([membresiaId])
+  @@index([productoId])
+  @@index([servicioId])
+  @@map("detalles_transaccion")
+}
+
+// Comprobante fiscal/no fiscal emitido para una transaccion (recibo simple
+// para el gym informal, factura con datos del SIN para el gym formal).
+model Comprobante {
+  id                 String          @id @default(uuid()) @db.Uuid
+  organizacionId     String          @map("organizacion_id") @db.Uuid
+  transaccionId      String          @map("transaccion_id") @db.Uuid
+  tipoComprobante    TipoComprobante @default(RECIBO_SIMPLE) @map("tipo_comprobante")
+  numeroDocumento    String?         @map("numero_documento") @db.VarChar(50)
+  nitRazonSocial     String?         @map("nit_razon_social") @db.VarChar(150) // NIT/CI y razon social del comprador
+  codigoAutorizacion String?         @map("codigo_autorizacion") @db.VarChar(100) // ej. CUF del Servicio de Impuestos Nacionales
+  fechaEmision       DateTime        @default(now()) @map("fecha_emision") @db.Timestamptz(6)
+  urlDocumento       String?         @map("url_documento") @db.Text // PDF/XML generado
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  transaccion  Transaccion  @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+
+  @@unique([transaccionId, organizacionId])
+  @@unique([organizacionId, numeroDocumento])
+  @@index([organizacionId])
+  @@map("comprobantes")
+}
+
+// =============================================================================
+// MODULO 6: CATALOGO E INVENTARIO
+// =============================================================================
 
 model Producto {
-  id              String         @id @default(uuid())
-  organizacion_id String
-  nombre          String
-  precio_venta    Float
-  estado          EstadoRegistro @default(ACTIVO)
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  sku            String?       @db.VarChar(50)
+  nombre         String        @db.VarChar(150)
+  descripcion    String?       @db.Text
+  precioVenta    Decimal       @map("precio_venta") @db.Decimal(10, 2)
+  estado         EstadoGeneral @default(ACTIVO)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  inventarios  Inventario[]
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  inventarios         Inventario[]
+  detallesTransaccion DetalleTransaccion[]
 
+  @@unique([id, organizacionId])
+  @@unique([organizacionId, sku])
+  @@index([organizacionId])
   @@map("productos")
 }
 
+// Item vendible SIN inventario fisico (dia de acceso, clase suelta, entrenamiento personal, casillero)
+model Servicio {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizacionId  String        @map("organizacion_id") @db.Uuid
+  nombre          String        @db.VarChar(150)
+  descripcion     String?       @db.Text
+  precio          Decimal       @db.Decimal(10, 2)
+  duracionMinutos Int?          @map("duracion_minutos")
+  estado          EstadoGeneral @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  detallesTransaccion DetalleTransaccion[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
+  @@map("servicios")
+}
+
 model Inventario {
-  id              String @id @default(uuid())
-  organizacion_id String
-  producto_id     String
-  sucursal_id     String
-  cantidad_actual Int    @default(0)
-  punto_reorden   Int    @default(0)
+  id              String  @id @default(uuid()) @db.Uuid
+  organizacionId  String  @map("organizacion_id") @db.Uuid
+  sucursalId      String  @map("sucursal_id") @db.Uuid
+  productoId      String  @map("producto_id") @db.Uuid
+  cantidadActual  Int     @default(0) @map("cantidad_actual")
+  puntoReorden    Int     @default(5) @map("punto_reorden")
+  ubicacionBodega String? @map("ubicacion_bodega") @db.VarChar(100)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  producto     Producto     @relation(fields: [producto_id], references: [id])
-  sucursal     Sucursal     @relation(fields: [sucursal_id], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  producto     Producto     @relation(fields: [productoId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  sucursal     Sucursal     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
 
+  @@unique([productoId, sucursalId])
+  @@index([organizacionId, sucursalId])
   @@map("inventarios")
 }
 
-// ==================================================
-// 7. SISTEMA Y AUDITORÍA
-// ==================================================
+// =============================================================================
+// MODULO 7: AUDITORIA Y SISTEMA
+// =============================================================================
 
 model Auditoria {
-  id              String   @id @default(uuid())
-  organizacion_id String
-  usuario_id      String
-  tabla_afectada  String
-  operacion       String
-  valores         Json     
-  fecha_hora      DateTime @default(now())
+  id                String             @id @default(uuid()) @db.Uuid
+  organizacionId    String?            @map("organizacion_id") @db.Uuid
+  usuarioId         String?            @map("usuario_id") @db.Uuid
+  tablaAfectada     String             @map("tabla_afectada") @db.VarChar(100)
+  operacion         OperacionAuditoria
+  valoresAnteriores Json?              @map("valores_anteriores") @db.JsonB
+  valoresNuevos     Json?              @map("valores_nuevos") @db.JsonB
+  fechaHora         DateTime           @default(now()) @map("fecha_hora") @db.Timestamptz(6)
+  ipOrigen          String?            @map("ip_origen") @db.VarChar(45)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  usuario      Usuario      @relation(fields: [usuario_id], references: [id])
+  organizacion Organizacion? @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  usuario      Usuario?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
+  @@index([organizacionId, fechaHora])
+  @@index([usuarioId])
   @@map("auditorias")
 }
 
 model Notificacion {
-  id                 String   @id @default(uuid())
-  organizacion_id    String
-  usuario_destino_id String
-  tipo               String
-  mensaje            String
-  leido              Boolean  @default(false)
-  fecha_creacion     DateTime @default(now())
+  id               String    @id @default(uuid()) @db.Uuid
+  organizacionId   String    @map("organizacion_id") @db.Uuid
+  usuarioDestinoId String    @map("usuario_destino_id") @db.Uuid
+  tipo             String    @db.VarChar(50)
+  titulo           String    @db.VarChar(150)
+  mensaje          String    @db.Text
+  fechaLectura     DateTime? @map("fecha_lectura") @db.Timestamptz(6) // null = no leida
+  fechaCreacion    DateTime  @default(now()) @map("fecha_creacion") @db.Timestamptz(6)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
-  usuario      Usuario      @relation(fields: [usuario_destino_id], references: [id])
+  organizacion   Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  usuarioDestino Usuario      @relation(fields: [usuarioDestinoId], references: [id], onDelete: Cascade)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-
+  @@index([usuarioDestinoId, fechaLectura])
+  @@index([organizacionId])
   @@map("notificaciones")
 }
 
-model API_Key {
-  id              String         @id @default(uuid())
-  organizacion_id String
-  llave           String         @unique
-  nombre          String
-  estado          EstadoRegistro @default(ACTIVO)
+model ApiKey {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizacionId  String        @map("organizacion_id") @db.Uuid
+  nombre          String        @db.VarChar(100)
+  llaveHash       String        @map("llave_hash") @db.VarChar(255)
+  permisosJson    Json?         @map("permisos_json") @db.JsonB
+  estado          EstadoGeneral @default(ACTIVO)
+  fechaExpiracion DateTime?     @map("fecha_expiracion") @db.Timestamptz(6)
+  fechaCreacion   DateTime      @default(now()) @map("fecha_creacion") @db.Timestamptz(6)
 
-  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
 
+  @@index([organizacionId])
   @@map("api_keys")
 }

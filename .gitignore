@@ -12,6 +12,12 @@ dist/
 # turborepo
 .turbo
 
+# reportes de test generados (jest/playwright) y cache incremental de tsc
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+
 # prisma
 *.db
 *.db-journal

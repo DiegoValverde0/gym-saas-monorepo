@@ -5,7 +5,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
-    "db:push": "dotenv -e ../../.env -- prisma db push",
+    "db:push": "dotenv -e ../../.env -- prisma db push && dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
@@ -15,5 +15,8 @@
     "prisma": "^5.0.0",
     "tsx": "^4.23.12",
     "typescript": "^5.0.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

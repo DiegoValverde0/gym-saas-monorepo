@@ -3,11 +3,20 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) {
+  throw new Error(
+    'JWT_SECRET no está configurado. Define la variable de entorno JWT_SECRET antes de iniciar la aplicación.',
+  );
+}
+
 @Module({
   imports: [
+    // JwtModule se registra como global aquí: ningún otro módulo debe volver
+    // a registrarlo, solo importar JwtService donde haga falta.
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET || 'gym_saas_super_secret_jwt_key_2026',
+      secret: jwtSecret,
       signOptions: { expiresIn: '1d' },
     }),
   ],

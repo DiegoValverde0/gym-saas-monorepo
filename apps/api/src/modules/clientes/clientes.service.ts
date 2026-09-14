@@ -1,21 +1,39 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { Prisma } from '@prisma/client';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createClienteDto: CreateClienteDto) {
-    return this.prisma.extendedClient.cliente.create({
-      data: createClienteDto,
-    });
+    try {
+      return await this.prisma.extendedClient.cliente.create({
+        // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+        data: createClienteDto as any,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Ya existe un cliente registrado con ese mismo número de carnet/documento en esta sucursal u organización.');
+        }
+      }
+      throw error;
+    }
   }
 
-  async findAll() {
-    // 100% Ciego al tenant. La magia RLS de Prisma hará el filtrado
-    return this.prisma.extendedClient.cliente.findMany();
+  async findAll(query?: PaginationQueryDto) {
+    // 100% Ciego al tenant. La magia RLS de Prisma hará el filtrado.
+    // Paginado para no traer de golpe toda la tabla de un tenant con miles de clientes.
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [data, total] = await Promise.all([
+      this.prisma.extendedClient.cliente.findMany({ skip, take, orderBy: { createdAt: 'desc' } }),
+      this.prisma.extendedClient.cliente.count(),
+    ]);
+    return paginar(data, total, page, limit);
   }
 
   async findOne(id: string) {

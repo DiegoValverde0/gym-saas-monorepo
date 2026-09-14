@@ -1,9 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail, IsUUID, IsEnum, IsDateString, IsBoolean } from 'class-validator';
+import { TipoDocumento, Genero, EstadoCliente } from '@prisma/client';
 
 export class CreateClienteDto {
   @IsUUID()
-  @IsNotEmpty()
-  sucursal_base_id: string;
+  @IsOptional()
+  sucursalBaseId?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -12,4 +13,48 @@ export class CreateClienteDto {
   @IsEmail()
   @IsOptional()
   correo?: string;
+
+  @IsString()
+  @IsOptional()
+  telefono?: string;
+
+  @IsEnum(TipoDocumento)
+  @IsOptional()
+  tipoDocumento?: TipoDocumento;
+
+  @IsString()
+  @IsOptional()
+  numeroDocumento?: string;
+
+  @IsDateString()
+  @IsOptional()
+  fechaNacimiento?: string;
+
+  @IsEnum(Genero)
+  @IsOptional()
+  genero?: Genero;
+
+  @IsString()
+  @IsOptional()
+  direccion?: string;
+
+  @IsString()
+  @IsOptional()
+  contactoEmergenciaNombre?: string;
+
+  @IsString()
+  @IsOptional()
+  contactoEmergenciaTelefono?: string;
+
+  @IsString()
+  @IsOptional()
+  condicionesMedicas?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  aceptaDeslindeResponsabilidad?: boolean;
+
+  @IsEnum(EstadoCliente)
+  @IsOptional()
+  estado?: EstadoCliente;
 }

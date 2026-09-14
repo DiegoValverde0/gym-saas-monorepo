@@ -16,24 +16,39 @@ export class JwtAuthGuard implements CanActivate {
     }
     
     try {
-      const payload = await this.jwtService.verifyAsync(
-        token,
-        {
-          secret: process.env.JWT_SECRET || 'gym_saas_super_secret_jwt_key_2026'
-        }
-      );
+      // Sin `secret` explícito: usa el configurado globalmente en AuthModule (JWT_SECRET),
+      // que ya falla al arrancar la app si no está definido.
+      const payload = await this.jwtService.verifyAsync(token);
       
       // Inyectar el payload en la request
       request['user'] = payload;
 
-      // PUNTO CRÍTICO: Inyectamos el organizacion_id en el CLS para la extensión RLS de Prisma
-      if (payload.organizacion_id) {
-          this.cls.set('organizacion_id', payload.organizacion_id);
+      // PUNTO CRÍTICO: Inyectamos el organizacionId y is_superadmin en el CLS
+      if (payload.is_superadmin && !payload.organizacionId) {
+          // SYSTEM ADMIN REAL (Global, sin tenant vinculado)
+          this.cls.set('is_superadmin', true);
+          const tenantId = request.headers['x-tenant-id'];
+          if (tenantId === 'all') {
+              this.cls.set('organizacionId', undefined);
+          } else if (tenantId && typeof tenantId === 'string') {
+              this.cls.set('organizacionId', tenantId);
+          }
       } else {
-          throw new UnauthorizedException('El token no contiene una organización válida');
+          // DUEÑO DE GYM O STAFF (Atado a un Tenant)
+          if (payload.organizacionId) {
+              this.cls.set('organizacionId', payload.organizacionId);
+          } else {
+              throw new UnauthorizedException('El token no contiene una organización válida');
+          }
+          if (payload.sucursalId) {
+              this.cls.set('sucursalId', payload.sucursalId);
+          }
+          
+          // Forzamos is_superadmin a falso para Prisma, así nunca se salta el RLS de su tenant
+          this.cls.set('is_superadmin', false);
       }
 
-    } catch {
+    } catch (error) {
       throw new UnauthorizedException('Token inválido o expirado');
     }
     return true;
