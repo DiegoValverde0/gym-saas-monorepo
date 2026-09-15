@@ -44,7 +44,8 @@ async function main() {
     'transacciones',
     'pagos',
     'productos',
-    'inventarios'
+    'inventarios',
+    'dashboard'
   ];
 
   const acciones = ['crear', 'leer', 'actualizar', 'eliminar'];
@@ -127,7 +128,8 @@ async function main() {
     (p.modulo === 'clientes' && p.accion === 'leer') ||
     (p.modulo === 'asistencias' && p.accion === 'leer') ||
     (p.modulo === 'clases') ||
-    (p.modulo === 'disciplinas' && p.accion === 'leer')
+    (p.modulo === 'disciplinas' && p.accion === 'leer') ||
+    (p.modulo === 'dashboard' && p.accion === 'leer')
   );
 
   const permisosRecepcionista = getPermisosIds((p) => 
@@ -146,7 +148,8 @@ async function main() {
     (p.modulo === 'disciplinas' && p.accion === 'leer') ||
     (p.modulo === 'reservas' && p.accion === 'leer') ||
     (p.modulo === 'turnos' && p.accion === 'leer') ||
-    (p.modulo === 'sucursales' && p.accion === 'leer')
+    (p.modulo === 'sucursales' && p.accion === 'leer') ||
+    (p.modulo === 'dashboard' && p.accion === 'leer')
   );
   
   const permisosCliente = getPermisosIds((p) => 

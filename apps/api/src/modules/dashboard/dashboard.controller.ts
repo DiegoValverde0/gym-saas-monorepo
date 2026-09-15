@@ -10,18 +10,21 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('kpis')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getKpis(@Req() req: any) {
     const sucursalId = req.user.sucursalId;
     return this.dashboardService.getKpis(sucursalId);
   }
 
   @Get('charts')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getCharts(@Req() req: any) {
     const sucursalId = req.user.sucursalId;
     return this.dashboardService.getRevenueChart(sucursalId);
   }
 
   @Get('recent-activity')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getRecentActivity(@Req() req: any) {
     const sucursalId = req.user.sucursalId;
     return this.dashboardService.getRecentActivity(sucursalId);

@@ -1,4 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ClsModule, ClsMiddleware } from 'nestjs-cls';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './modules/redis/redis.module';
@@ -31,6 +33,9 @@ import { ScheduleModule } from '@nestjs/schedule';
         mount: true,
       },
     }),
+    // Límite global generoso (protege toda la API de abuso); rutas
+    // sensibles como /auth/login aplican un límite más estricto vía @Throttle.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
     RedisModule,
     PrismaModule,
     OrganizacionModule, 
@@ -55,6 +60,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     ScheduleModule.forRoot()
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

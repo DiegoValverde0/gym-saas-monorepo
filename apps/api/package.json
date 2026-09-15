@@ -14,6 +14,7 @@
     "@nestjs/mapped-types": "^12.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^12.0.1",
+    "@nestjs/throttler": "^6.5.0",
     "@prisma/client": "^5.0.0",
     "@repo/database": "workspace:*",
     "@types/express": "^5.0.6",

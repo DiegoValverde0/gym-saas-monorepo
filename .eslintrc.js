@@ -33,15 +33,33 @@ module.exports = {
         // el superadmin -- el cliente crudo es intencional ahí, ver el
         // comentario en rol.service.ts#update().
         'apps/api/src/modules/rol/rol.service.ts',
+        // SELECT 1 de healthcheck: no toca ningún modelo ni dato de tenant.
+        'apps/api/src/modules/health/health.service.ts',
+        // Sus 2 cron jobs diarios (handleAnulacionMembresiasPendientes,
+        // handleVencimientoMembresiasActivas) operan cross-tenant por diseño
+        // (recorren TODAS las organizaciones), así que no hay un
+        // organizacionId de request del cual colgarse -- usan el cliente
+        // crudo a propósito. El resto de los métodos de este servicio (los
+        // que sí atienden peticiones HTTP de un tenant) siguen usando
+        // extendedClient con normalidad; revisar ese uso en review de código.
+        'apps/api/src/modules/membresia/membresia.service.ts',
       ],
       rules: {
         'no-restricted-syntax': [
           'error',
           {
+            // Antes esta regla exceptuaba cualquier método `this.prisma.$algo`
+            // (p.ej. $transaction, $queryRaw) en TODO el repo, no solo en
+            // excludedFiles -- dejaba invisible al linter el patrón más
+            // peligroso de fuga de RLS: this.prisma.$transaction(tx =>
+            // tx.modelo.x(...)), que opera con el cliente crudo dentro del
+            // callback. Ahora $-métodos también quedan prohibidos fuera de
+            // excludedFiles, forzando a usar this.prisma.extendedClient.$transaction
+            // (que sí propaga el RLS a `tx`, ver prisma.service.ts).
             selector:
-              "MemberExpression[object.type='MemberExpression'][object.object.type='ThisExpression'][object.property.name='prisma']:not([property.name='extendedClient']):not([property.name=/^\\$/])",
+              "MemberExpression[object.type='MemberExpression'][object.object.type='ThisExpression'][object.property.name='prisma']:not([property.name='extendedClient'])",
             message:
-              'Usa this.prisma.extendedClient.<modelo> en vez de this.prisma.<modelo> directo: el cliente crudo se salta el aislamiento multi-tenant (RLS) de PrismaService. Si es un caso legítimo (ej. Organizacion, que no tiene organizacionId), agrega el archivo a "excludedFiles" en .eslintrc.js.',
+              'Usa this.prisma.extendedClient.<modelo> (o this.prisma.extendedClient.$transaction) en vez de this.prisma.<modelo>/this.prisma.$algo directo: el cliente crudo se salta el aislamiento multi-tenant (RLS) de PrismaService. Si es un caso legítimo, agrega el archivo a "excludedFiles" en .eslintrc.js con un comentario explicando por qué.',
           },
         ],
       },
