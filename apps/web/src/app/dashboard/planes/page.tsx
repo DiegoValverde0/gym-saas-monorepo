@@ -9,7 +9,6 @@ import { useForm, Controller } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -52,13 +51,11 @@ const DAYS_OF_WEEK = [
 export default function PlanesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -178,10 +175,6 @@ export default function PlanesPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización en el menú superior antes de crear un plan.', variant: 'destructive' });
-      return;
-    }
     setEditingPlan(null);
     form.reset({
       nombre: '',

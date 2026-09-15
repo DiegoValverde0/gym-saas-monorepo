@@ -9,7 +9,6 @@ import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -46,13 +45,11 @@ type PromocionFormValues = z.infer<typeof promocionSchema>;
 export default function PromocionesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPromocion, setEditingPromocion] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -181,10 +178,6 @@ export default function PromocionesPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización en el menú superior antes de crear.', variant: 'destructive' });
-      return;
-    }
     setEditingPromocion(null);
     form.reset({
       nombre: '',

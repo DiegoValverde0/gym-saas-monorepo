@@ -5,11 +5,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
-import { useForm, useWatch, Controller } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -18,7 +17,7 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { IdCard, Plus, Trash2, Clock, CalendarDays, Ban, CheckCircle2, Search, Info, Edit, Eye, Banknote } from 'lucide-react';
+import { IdCard, Plus, Trash2, Clock, CalendarDays, CheckCircle2, Search, Info, Edit, Eye, Banknote } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { POSModal } from './POSModal';
@@ -58,7 +57,6 @@ export default function MembresiasPage() {
 
   const { activeTenantId } = useTenantStore();
 
-  const userOrgId = user?.organizacionId;
   const userSucursalId = user?.sucursalId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -126,7 +124,7 @@ export default function MembresiasPage() {
   useEffect(() => {
     if (userSucursalId === null || userSucursalId === undefined) {
       if (watchClienteId && clientes) {
-        const clList = Array.isArray(clientes) ? clientes : (clientes as any)?.data || [];
+        const clList = unwrapList(clientes);
         const client = clList.find((c: any) => c.id === watchClienteId);
         if (client && client.sucursalBaseId) {
           form.setValue('sucursalId', client.sucursalBaseId);
@@ -182,10 +180,6 @@ export default function MembresiasPage() {
   });
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización en el menú superior antes de vender.', variant: 'destructive' });
-      return;
-    }
     setEditingMembresia(null);
     setSearchTerm('');
     form.reset({

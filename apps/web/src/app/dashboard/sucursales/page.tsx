@@ -32,13 +32,11 @@ type SucursalFormValues = z.infer<typeof sucursalSchema>;
 export default function SucursalesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSucursal, setEditingSucursal] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   // Modal de confirmación global
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -121,10 +119,6 @@ export default function SucursalesPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización específica en el menú superior antes de crear una sucursal.', variant: 'destructive' });
-      return;
-    }
     setEditingSucursal(null);
     form.reset({ nombre: '', direccion: '', telefono: '', esPrincipal: false, estado: 'ACTIVO' });
     setIsDialogOpen(true);

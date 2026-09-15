@@ -32,13 +32,11 @@ type UsuarioFormValues = z.infer<typeof usuarioSchema>;
 export default function UsuariosPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingAsignacion, setEditingAsignacion] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -164,10 +162,6 @@ export default function UsuariosPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización específica en el menú superior antes de registrar un empleado.', variant: 'destructive' });
-      return;
-    }
     setEditingAsignacion(null);
     form.reset({ nombreCompleto: '', correo: '', telefono: '', contrasena: '', rolId: '', sucursalId: 'global' });
     setIsSheetOpen(true);

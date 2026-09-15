@@ -9,7 +9,6 @@ import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -17,7 +16,7 @@ import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Edit, Trash2, Mail, Phone, MapPin, Search, MoreVertical, Eye } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Mail, Phone, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const clienteSchema = z.object({
@@ -41,7 +40,6 @@ export default function ClientesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
 
-  const userOrgId = user?.organizacionId;
   const userSucursalId = user?.sucursalId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -152,10 +150,6 @@ export default function ClientesPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización en el menú superior antes de crear un cliente.', variant: 'destructive' });
-      return;
-    }
     setEditingCliente(null);
     form.reset({
       nombre: '',

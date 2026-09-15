@@ -31,13 +31,11 @@ type RolFormValues = z.infer<typeof rolSchema>;
 export default function RolesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user, isSuperAdmin } = useAuth();
+  const { token, isSuperAdmin } = useAuth();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingRol, setEditingRol] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -127,10 +125,6 @@ export default function RolesPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización específica en el menú superior antes de crear un rol.', variant: 'destructive' });
-      return;
-    }
     setEditingRol(null);
     form.reset({ nombre: '', descripcion: '', permisosIds: [] });
     setIsSheetOpen(true);

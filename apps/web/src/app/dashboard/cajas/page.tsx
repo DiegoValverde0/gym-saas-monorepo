@@ -30,13 +30,11 @@ type CajaFormValues = z.infer<typeof cajaSchema>;
 export default function CajasPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingCaja, setEditingCaja] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
-
-  const userOrgId = user?.organizacionId;
 
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -174,10 +172,6 @@ export default function CajasPage() {
   };
 
   const handleAddNew = () => {
-    if (!userOrgId && (!activeTenantId || activeTenantId === 'all')) {
-      toast({ title: 'Acción requerida', description: 'Por favor, selecciona una organización específica en el menú superior antes de crear una caja.', variant: 'destructive' });
-      return;
-    }
     setEditingCaja(null);
     form.reset({ nombre: '', sucursalId: '', estado: 'CERRADA' });
     setIsSheetOpen(true);

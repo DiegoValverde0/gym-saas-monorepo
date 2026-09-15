@@ -28,8 +28,7 @@ type CuentaFormValues = z.infer<typeof cuentaSchema>;
 
 export default function CuentasBancariasPage() {
   const { activeTenantId } = useTenantStore();
-  const { token, user } = useAuth();
-  const userOrgId = user?.organizacionId;
+  const { token } = useAuth();
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
