@@ -3,6 +3,8 @@ import { UsuarioService } from './usuario.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { CreateEmpleadoDto } from './dto/create-empleado.dto';
+import { UpdateAsignacionDto } from './dto/update-asignacion.dto';
 
 @Controller('usuario')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -17,13 +19,13 @@ export class UsuarioController {
 
   @Post('empleado')
   @RequirePermissions({ accion: 'crear', modulo: 'usuarios' })
-  async registrarEmpleado(@Body() data: any): Promise<any> {
+  async registrarEmpleado(@Body() data: CreateEmpleadoDto): Promise<any> {
     return this.usuarioService.registrarEmpleado(data);
   }
 
   @Put('asignacion/:id')
   @RequirePermissions({ accion: 'actualizar', modulo: 'usuarios' })
-  async updateAsignacion(@Param('id') id: string, @Body() body: { rolId: string; sucursalId?: string | null }): Promise<any> {
+  async updateAsignacion(@Param('id') id: string, @Body() body: UpdateAsignacionDto): Promise<any> {
     return this.usuarioService.updateAsignacion(id, body.rolId, body.sucursalId);
   }
 

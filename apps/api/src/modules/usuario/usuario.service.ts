@@ -1,7 +1,10 @@
-import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
+import { CreateEmpleadoDto } from './dto/create-empleado.dto';
+import { assertFound } from '../../common/utils/assert-found.util';
 
 @Injectable()
 export class UsuarioService {
@@ -30,7 +33,7 @@ export class UsuarioService {
     });
   }
 
-  async registrarEmpleado(data: any): Promise<any> {
+  async registrarEmpleado(data: CreateEmpleadoDto): Promise<any> {
     // 1. Hashear contraseña
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = crypto.scryptSync(data.contrasena, salt, 64).toString('hex');
@@ -38,48 +41,61 @@ export class UsuarioService {
 
     // 2. Crear usuario (Global) y su AsignacionAcceso (Tenant) en una transacción
     // NOTA ARQUITECTURA: organizacionId se inyecta por RLS en AsignacionAcceso
-    return this.prisma.extendedClient.$transaction(async (tx) => {
-      
-      // Comprobar si el correo ya existe a nivel global
-      let usuario = await tx.usuario.findUnique({
-        where: { correo: data.correo }
-      });
+    try {
+      return await this.prisma.extendedClient.$transaction(async (tx) => {
 
-      if (!usuario) {
-        usuario = await tx.usuario.create({
+        // Comprobar si el correo ya existe a nivel global
+        let usuario = await tx.usuario.findUnique({
+          where: { correo: data.correo }
+        });
+
+        if (!usuario) {
+          usuario = await tx.usuario.create({
+            data: {
+              nombreCompleto: data.nombreCompleto,
+              correo: data.correo,
+              contrasenaHash: contrasenaHash,
+              telefono: data.telefono,
+            }
+          });
+        }
+
+        // Validar si el rol existe en esta organización (RLS aplica automáticamente)
+        const rol = await tx.rol.findUnique({
+          where: { id: data.rolId }
+        });
+
+        if (!rol) {
+          throw new BadRequestException('El rol especificado no existe o no pertenece a su organización.');
+        }
+
+        // Crear asignación (organizacionId lo inyecta RLS)
+        const asignacion = await tx.asignacionAcceso.create({
           data: {
-            nombreCompleto: data.nombreCompleto,
-            correo: data.correo,
-            contrasenaHash: contrasenaHash,
-            telefono: data.telefono,
+            usuarioId: usuario.id,
+            rolId: data.rolId,
+            // sucursalId es opcional
+            ...(data.sucursalId && { sucursalId: data.sucursalId })
           }
         });
-      }
 
-      // Validar si el rol existe en esta organización (RLS aplica automáticamente)
-      const rol = await tx.rol.findUnique({
-        where: { id: data.rolId }
+        return { usuario, asignacion };
       });
-
-      if (!rol) {
-        throw new BadRequestException('El rol especificado no existe o no pertenece a su organización.');
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Este usuario ya tiene una asignación idéntica (mismo rol y sucursal) en esta organización.');
       }
-
-      // Crear asignación (organizacionId lo inyecta RLS)
-      const asignacion = await tx.asignacionAcceso.create({
-        data: {
-          usuarioId: usuario.id,
-          rolId: data.rolId,
-          // sucursalId es opcional
-          ...(data.sucursalId && { sucursalId: data.sucursalId })
-        }
-      });
-
-      return { usuario, asignacion };
-    });
+      throw error;
+    }
   }
 
   async updateAsignacion(asignacionId: string, nuevoRolId: string, sucursalId?: string | null) {
+    // Verificar que la asignación existe y pertenece al tenant
+    assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+      `Asignación con ID ${asignacionId} no encontrada`,
+    );
+
     // Verificar que el rol existe y pertenece al tenant
     const rol = await this.prisma.extendedClient.rol.findUnique({
       where: { id: nuevoRolId },
@@ -92,9 +108,9 @@ export class UsuarioService {
     // Actualizar la asignación (extendedClient valida que la asignación pertenece al tenant)
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.update({
       where: { id: asignacionId },
-      data: { 
+      data: {
           rolId: nuevoRolId,
-          sucursalId: sucursalId !== undefined ? sucursalId : undefined 
+          sucursalId: sucursalId !== undefined ? sucursalId : undefined
       },
     });
 
@@ -106,6 +122,11 @@ export class UsuarioService {
   }
 
   async removerEmpleado(asignacionId: string) {
+    assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+      `Asignación con ID ${asignacionId} no encontrada`,
+    );
+
     // Al eliminar la asignación, revocamos el acceso del usuario a este tenant, pero el usuario global se mantiene
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.delete({
       where: { id: asignacionId },
