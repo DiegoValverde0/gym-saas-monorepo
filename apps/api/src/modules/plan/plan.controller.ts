@@ -41,4 +41,10 @@ export class PlanController {
   remove(@Param('id') id: string) {
     return this.planService.remove(id);
   }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'planes' })
+  restore(@Param('id') id: string) {
+    return this.planService.restore(id);
+  }
 }

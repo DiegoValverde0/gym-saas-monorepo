@@ -3,6 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateMembresiaDto } from './dto/create-membresia.dto';
 import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 // Transiciones de estado permitidas para Membresia.estado vía update() manual
 // (staff). Las transiciones automáticas del sistema (activación al pagar en
@@ -96,8 +98,6 @@ export class MembresiaService {
       fechaInicioFinal.setUTCHours(0, 0, 0, 0);
     }
 
-    let estadoCalculado: any = 'PENDIENTE_PAGO'; // Siempre nace pendiente de pago
-
     let fechaFinFinal = null;
     if (plan.tipoPlan === 'TIEMPO' && plan.duracionDias) {
       fechaFinFinal = new Date(fechaInicioFinal);
@@ -118,21 +118,28 @@ export class MembresiaService {
         fechaInicio: fechaInicioFinal,
         fechaFin: fechaFinFinal,
         sesionesRestantes: plan.tipoPlan === 'SESIONES' ? plan.cantidadSesiones : null,
-        estado: estadoCalculado,
+        estado: 'PENDIENTE_PAGO', // Siempre nace pendiente de pago
         pagada: false,
         creadoPorId: userId,
       } as any,
     });
   }
 
-  async findAll() {
-    return this.prisma.extendedClient.membresia.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        cliente: { select: { nombre: true, numeroDocumento: true } },
-        plan: { select: { nombre: true, tipoPlan: true } },
-      }
-    });
+  async findAll(query?: PaginationQueryDto) {
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [data, total] = await Promise.all([
+      this.prisma.extendedClient.membresia.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          cliente: { select: { nombre: true, numeroDocumento: true } },
+          plan: { select: { nombre: true, tipoPlan: true } },
+        },
+        skip,
+        take,
+      }),
+      this.prisma.extendedClient.membresia.count(),
+    ]);
+    return paginar(data, total, page, limit);
   }
 
   async findByCliente(clienteId: string) {
@@ -188,8 +195,12 @@ export class MembresiaService {
   // Activa la membresía EN_ESPERA más próxima (por fechaInicio) de un cliente,
   // recalculando su fechaInicio/fechaFin a partir de HOY -- el cupo se liberó
   // ahora, no en la fecha que se había estimado al crearla (ver create()).
-  private async promoverSiguienteEnEspera(clienteId: string) {
-    const siguiente = await this.prisma.extendedClient.membresia.findFirst({
+  //
+  // `client` es this.prisma.extendedClient (default, llamadas HTTP dentro de
+  // un tenant ya resuelto) o this.prisma crudo (llamadas desde los cron jobs
+  // cross-tenant de abajo, que no tienen organizacionId de request).
+  private async promoverSiguienteEnEspera(clienteId: string, client: any = this.prisma.extendedClient) {
+    const siguiente = await client.membresia.findFirst({
       where: { clienteId, estado: 'EN_ESPERA' },
       orderBy: { fechaInicio: 'asc' },
       include: { plan: true },
@@ -205,7 +216,7 @@ export class MembresiaService {
       fechaFin.setDate(fechaFin.getDate() + siguiente.plan.duracionDias);
     }
 
-    await this.prisma.extendedClient.membresia.update({
+    await client.membresia.update({
       where: { id: siguiente.id },
       data: { estado: 'ACTIVA', fechaInicio: hoy, fechaFin },
     });
@@ -221,11 +232,23 @@ export class MembresiaService {
     });
   }
 
+  async restore(id: string) {
+    // No usamos findOne porque está filtrado por deletedAt: null
+    return this.prisma.extendedClient.membresia.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
   // =========================================================================
   // TAREAS AUTOMATIZADAS (CRON JOBS)
   // =========================================================================
 
-  // Se ejecuta todos los días a las 00:00 del servidor
+  // Se ejecuta todos los días a las 00:00 del servidor. Recorre TODAS las
+  // organizaciones (no hay un tenant de request al que atarse), así que usa
+  // el cliente crudo de Prisma a propósito -- ver excludedFiles en
+  // .eslintrc.js para el porqué. Nunca se fuerza un organizacionId falso
+  // sobre extendedClient para "simular" un contexto de tenant.
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleAnulacionMembresiasPendientes() {
     this.logger.log('Iniciando proceso de cancelación automática de membresías no pagadas...');
@@ -235,7 +258,7 @@ export class MembresiaService {
     const ayer = new Date();
     ayer.setHours(0, 0, 0, 0);
 
-    const resultado = await this.prisma.extendedClient.membresia.updateMany({
+    const resultado = await this.prisma.membresia.updateMany({
       where: {
         estado: 'PENDIENTE_PAGO',
         createdAt: {
@@ -252,6 +275,7 @@ export class MembresiaService {
 
   // Vence las membresías ACTIVAS cuya fechaFin ya pasó y promueve, para cada
   // cliente afectado, su siguiente membresía EN_ESPERA (si tiene una comprada).
+  // Cliente crudo por el mismo motivo cross-tenant que el cron de arriba.
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleVencimientoMembresiasActivas() {
     this.logger.log('Iniciando proceso de vencimiento de membresías activas...');
@@ -259,17 +283,24 @@ export class MembresiaService {
     const hoy = new Date();
     hoy.setUTCHours(0, 0, 0, 0);
 
-    const vencidas = await this.prisma.extendedClient.membresia.findMany({
+    const vencidas = await this.prisma.membresia.findMany({
       where: { estado: 'ACTIVA', fechaFin: { lt: hoy } },
       select: { id: true, clienteId: true },
     });
 
-    for (const mem of vencidas) {
-      await this.prisma.extendedClient.membresia.update({
-        where: { id: mem.id },
+    // El cambio de estado en sí es una sola operación bulk (no depende de
+    // ningún otro registro). La promoción de la siguiente EN_ESPERA de cada
+    // cliente sí es inherentemente secuencial: depende de leer y decidir por
+    // cliente, así que se queda en el loop.
+    if (vencidas.length > 0) {
+      await this.prisma.membresia.updateMany({
+        where: { id: { in: vencidas.map((m) => m.id) } },
         data: { estado: 'VENCIDA' },
       });
-      await this.promoverSiguienteEnEspera(mem.clienteId);
+    }
+
+    for (const mem of vencidas) {
+      await this.promoverSiguienteEnEspera(mem.clienteId, this.prisma);
     }
 
     this.logger.log(`Proceso completado. Se vencieron ${vencidas.length} membresías activas.`);

@@ -115,4 +115,12 @@ export class PlanService {
       where: { id },
     });
   }
+
+  async restore(id: string) {
+    // No usamos findOne porque está filtrado por deletedAt: null
+    return this.prisma.extendedClient.plan.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
 }

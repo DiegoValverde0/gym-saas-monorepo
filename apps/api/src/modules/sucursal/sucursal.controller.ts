@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { SucursalService } from './sucursal.service';
 import { CreateSucursalDto } from './dto/create-sucursal.dto';
 import { UpdateSucursalDto } from './dto/update-sucursal.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('sucursales')
@@ -19,8 +20,8 @@ export class SucursalController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'sucursales' })
-  findAll() {
-    return this.sucursalService.findAll();
+  findAll(@Query() pagination: PaginationQueryDto) {
+    return this.sucursalService.findAll(pagination);
   }
 
   @Get(':id')

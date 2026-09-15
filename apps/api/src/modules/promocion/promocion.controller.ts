@@ -41,4 +41,10 @@ export class PromocionController {
   remove(@Param('id') id: string) {
     return this.promocionService.remove(id);
   }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'promociones' })
+  restore(@Param('id') id: string) {
+    return this.promocionService.restore(id);
+  }
 }

@@ -1,7 +1,8 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
-import { TipoConceptoVenta } from '@prisma/client';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class TransaccionService {
@@ -67,24 +68,27 @@ export class TransaccionService {
             } as any
         });
 
-        // B. Crear Detalles y validar Membresías
-        for (const det of dto.detalles) {
-            await tx.detalleTransaccion.create({
-                // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-                data: {
-                    transaccionId: transaccion.id,
-                    tipoConcepto: det.tipoConcepto,
-                    membresiaId: det.membresiaId,
-                    productoId: det.productoId,
-                    servicioId: det.servicioId,
-                    descripcionLibre: det.descripcionLibre,
-                    cantidad: det.cantidad,
-                    precioUnitario: det.precioUnitario,
-                    subtotal: det.subtotal,
-                } as any
-            });
+        // B. Crear Detalles (una sola operación bulk en vez de un create por línea)
+        await tx.detalleTransaccion.createMany({
+            // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+            data: dto.detalles.map((det) => ({
+                transaccionId: transaccion.id,
+                tipoConcepto: det.tipoConcepto,
+                membresiaId: det.membresiaId,
+                productoId: det.productoId,
+                servicioId: det.servicioId,
+                descripcionLibre: det.descripcionLibre,
+                cantidad: det.cantidad,
+                precioUnitario: det.precioUnitario,
+                subtotal: det.subtotal,
+            })) as any,
+        });
 
-            // Lógica de Activación de Membresía
+        // Activación de Membresía: a diferencia de la creación de detalles de
+        // arriba, esto no se puede volver una sola operación bulk porque cada
+        // membresía se valida y transiciona individualmente. En la práctica
+        // solo itera los pocos detalles (normalmente 0 o 1) de tipo MEMBRESIA.
+        for (const det of dto.detalles) {
             if (det.tipoConcepto === 'MEMBRESIA' && det.membresiaId) {
                 const mem = await tx.membresia.findUnique({ where: { id: det.membresiaId } });
                 if (!mem) throw new BadRequestException(`La membresía ${det.membresiaId} no existe.`);
@@ -107,41 +111,53 @@ export class TransaccionService {
             }
         }
 
-        // C. Crear Pagos e Incrementar Saldos
+        // C. Crear Pagos (validar todos antes de escribir nada, igual que antes)
         for (const pago of dto.pagos) {
-            // Validar cuenta bancaria para todos los métodos (incluyendo efectivo)
             if (!pago.cuentaBancariaId) {
                 throw new BadRequestException(`El método de pago ${pago.metodoPago} exige seleccionar una cuenta bancaria destino (Caja Central o Cuenta de Banco).`);
             }
+        }
 
-            await tx.pago.create({
-                // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-                data: {
-                    transaccionId: transaccion.id,
-                    metodoPago: pago.metodoPago,
-                    monto: pago.monto,
-                    cuentaBancariaId: pago.cuentaBancariaId || null,
-                    referencia: pago.referencia
-                } as any
-            });
+        await tx.pago.createMany({
+            // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+            data: dto.pagos.map((pago) => ({
+                transaccionId: transaccion.id,
+                metodoPago: pago.metodoPago,
+                monto: pago.monto,
+                cuentaBancariaId: pago.cuentaBancariaId,
+                referencia: pago.referencia,
+            })) as any,
+        });
 
-            // Afectación de saldos contables
-            if (dto.tipo === 'INGRESO') {
-                // Doble contabilidad: Se registra en la gaveta física si hay turno abierto
+        // Afectación de saldos contables: se suma el incremento total por
+        // cuenta destino (en vez de un update por cada pago individual) y se
+        // aplica en una sola operación por cuenta afectada.
+        if (dto.tipo === 'INGRESO') {
+            let incrementoCaja = 0;
+            const incrementosPorCuenta = new Map<string, number>();
+
+            for (const pago of dto.pagos) {
                 if (pago.metodoPago === 'EFECTIVO' && aperturaCaja) {
-                    await tx.cajaRegistradora.update({
-                        where: { id: aperturaCaja.cajaId },
-                        data: { saldoActual: { increment: pago.monto } }
-                    });
+                    incrementoCaja += Number(pago.monto);
                 }
-                
-                // Y siempre se registra en la cuenta bancaria / fondo general seleccionado
-                if (pago.cuentaBancariaId) {
-                    await tx.cuentaBancaria.update({
-                        where: { id: pago.cuentaBancariaId },
-                        data: { saldo: { increment: pago.monto } }
-                    });
-                }
+                const cuentaId = pago.cuentaBancariaId as string;
+                incrementosPorCuenta.set(cuentaId, (incrementosPorCuenta.get(cuentaId) || 0) + Number(pago.monto));
+            }
+
+            // Doble contabilidad: Se registra en la gaveta física si hay turno abierto
+            if (incrementoCaja > 0 && aperturaCaja) {
+                await tx.cajaRegistradora.update({
+                    where: { id: aperturaCaja.cajaId },
+                    data: { saldoActual: { increment: incrementoCaja } }
+                });
+            }
+
+            // Y siempre se registra en la cuenta bancaria / fondo general seleccionado
+            for (const [cuentaBancariaId, monto] of incrementosPorCuenta) {
+                await tx.cuentaBancaria.update({
+                    where: { id: cuentaBancariaId },
+                    data: { saldo: { increment: monto } }
+                });
             }
         }
 
@@ -149,31 +165,34 @@ export class TransaccionService {
     });
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, query?: PaginationQueryDto) {
     const whereClause: any = {};
     if (tenantId && tenantId !== 'all') {
       whereClause.organizacionId = tenantId;
     }
 
-    const transacciones = await this.prisma.extendedClient.transaccion.findMany({
-      where: whereClause,
-      include: {
-        cliente: { select: { nombre: true, numeroDocumento: true } },
-        sucursal: { select: { nombre: true } },
-        creadoPor: { select: { nombreCompleto: true, correo: true } },
-        pagos: {
-          include: {
-            cuentaBancaria: { select: { banco: true, numeroCuenta: true } }
-          }
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [transacciones, total] = await Promise.all([
+      this.prisma.extendedClient.transaccion.findMany({
+        where: whereClause,
+        include: {
+          cliente: { select: { nombre: true, numeroDocumento: true } },
+          sucursal: { select: { nombre: true } },
+          creadoPor: { select: { nombreCompleto: true, correo: true } },
+          pagos: {
+            include: {
+              cuentaBancaria: { select: { banco: true, numeroCuenta: true } }
+            }
+          },
+          detalles: true
         },
-        detalles: true
-      },
-      orderBy: { fechaHora: 'desc' }
-    });
+        orderBy: { fechaHora: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.extendedClient.transaccion.count({ where: whereClause }),
+    ]);
 
-    return {
-      message: 'Transacciones recuperadas',
-      data: transacciones
-    };
+    return paginar(transacciones, total, page, limit);
   }
 }

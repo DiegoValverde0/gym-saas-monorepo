@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSucursalDto } from './dto/create-sucursal.dto';
 import { UpdateSucursalDto } from './dto/update-sucursal.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class SucursalService {
@@ -14,10 +16,17 @@ export class SucursalService {
     });
   }
 
-  async findAll() {
-    return this.prisma.extendedClient.sucursal.findMany({
-      orderBy: { nombre: 'asc' },
-    });
+  async findAll(query?: PaginationQueryDto) {
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [data, total] = await Promise.all([
+      this.prisma.extendedClient.sucursal.findMany({
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.extendedClient.sucursal.count(),
+    ]);
+    return paginar(data, total, page, limit);
   }
 
   async findOne(id: string) {

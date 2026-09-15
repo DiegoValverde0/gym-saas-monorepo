@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { MembresiaService } from './membresia.service';
 import { CreateMembresiaDto } from './dto/create-membresia.dto';
 import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('membresias')
@@ -20,8 +21,8 @@ export class MembresiaController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'membresias' })
-  findAll() {
-    return this.membresiaService.findAll();
+  findAll(@Query() pagination: PaginationQueryDto) {
+    return this.membresiaService.findAll(pagination);
   }
 
   @Get('cliente/:clienteId')
@@ -46,5 +47,11 @@ export class MembresiaController {
   @RequirePermissions({ accion: 'eliminar', modulo: 'membresias' })
   remove(@Param('id') id: string) {
     return this.membresiaService.remove(id);
+  }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'membresias' })
+  restore(@Param('id') id: string) {
+    return this.membresiaService.restore(id);
   }
 }

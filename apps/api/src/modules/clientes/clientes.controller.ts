@@ -43,4 +43,10 @@ export class ClientesController {
   async remove(@Param('id') id: string) {
     return this.clientesService.remove(id);
   }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'clientes' })
+  async restore(@Param('id') id: string) {
+    return this.clientesService.restore(id);
+  }
 }

@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
 import { CajaRegistradoraService } from './caja-registradora.service';
 import { CreateCajaRegistradoraDto } from './dto/create-caja-registradora.dto';
 import { UpdateCajaRegistradoraDto } from './dto/update-caja-registradora.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('cajas-registradoras')
@@ -20,8 +21,8 @@ export class CajaRegistradoraController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'cajas_registradoras' })
-  findAll() {
-    return this.cajaRegistradoraService.findAll();
+  findAll(@Query() pagination: PaginationQueryDto) {
+    return this.cajaRegistradoraService.findAll(pagination);
   }
 
   @Get(':id')
@@ -40,5 +41,11 @@ export class CajaRegistradoraController {
   @RequirePermissions({ accion: 'eliminar', modulo: 'cajas_registradoras' })
   remove(@Param('id') id: string) {
     return this.cajaRegistradoraService.remove(id);
+  }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'cajas_registradoras' })
+  restore(@Param('id') id: string) {
+    return this.cajaRegistradoraService.restore(id);
   }
 }

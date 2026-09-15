@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { CuentaBancariaService } from './cuenta-bancaria.service';
 import { CreateCuentaBancariaDto } from './dto/create-cuenta-bancaria.dto';
 import { UpdateCuentaBancariaDto } from './dto/update-cuenta-bancaria.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('cuentas-bancarias')
@@ -19,8 +20,8 @@ export class CuentaBancariaController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'cuentas_bancarias' })
-  findAll() {
-    return this.cuentaBancariaService.findAll();
+  findAll(@Query() pagination: PaginationQueryDto) {
+    return this.cuentaBancariaService.findAll(pagination);
   }
 
   @Get(':id')

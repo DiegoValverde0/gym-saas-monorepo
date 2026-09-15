@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma } from '@repo/database';
 import { startOfDay, startOfMonth, subDays, format } from 'date-fns';
 
 @Injectable()
@@ -78,26 +77,30 @@ export class DashboardService {
 
   async getRevenueChart(sucursalId?: string) {
     const filterTransaccion = sucursalId ? { sucursalId } : {};
-    const chartData = [];
+    const desde = startOfDay(subDays(new Date(), 6));
 
-    // Últimos 7 días
+    // Una sola consulta trae los ingresos de los últimos 7 días; el
+    // agrupamiento por día se hace en memoria en vez de 7 aggregate()
+    // separados (uno por día).
+    const transacciones = await this.prisma.extendedClient.transaccion.findMany({
+      where: { ...filterTransaccion, tipo: 'INGRESO', createdAt: { gte: desde } },
+      select: { createdAt: true, montoTotal: true },
+    });
+
+    const totalesPorDia = new Map<string, number>();
+    for (const t of transacciones) {
+      const key = format(startOfDay(t.createdAt), 'yyyy-MM-dd');
+      totalesPorDia.set(key, (totalesPorDia.get(key) || 0) + Number(t.montoTotal));
+    }
+
+    const chartData = [];
     for (let i = 6; i >= 0; i--) {
         const dateStart = startOfDay(subDays(new Date(), i));
-        const dateEnd = new Date(dateStart);
-        dateEnd.setDate(dateEnd.getDate() + 1);
-
-        const agg = await this.prisma.extendedClient.transaccion.aggregate({
-            where: { 
-                ...filterTransaccion, 
-                tipo: 'INGRESO', 
-                createdAt: { gte: dateStart, lt: dateEnd } 
-            },
-            _sum: { montoTotal: true }
-        });
+        const key = format(dateStart, 'yyyy-MM-dd');
 
         chartData.push({
             name: format(dateStart, 'dd MMM'),
-            Ingresos: Number(agg._sum.montoTotal || 0)
+            Ingresos: totalesPorDia.get(key) || 0
         });
     }
 
@@ -105,8 +108,6 @@ export class DashboardService {
   }
 
   async getRecentActivity(sucursalId?: string) {
-    const filterCliente = sucursalId ? { sucursalBaseId: sucursalId } : {};
-    
     const recientes = await this.prisma.extendedClient.membresia.findMany({
       where: {
          cliente: sucursalId ? { sucursalBaseId: sucursalId } : undefined

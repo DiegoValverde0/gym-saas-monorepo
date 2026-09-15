@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCajaRegistradoraDto } from './dto/create-caja-registradora.dto';
 import { UpdateCajaRegistradoraDto } from './dto/update-caja-registradora.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class CajaRegistradoraService {
@@ -18,13 +20,20 @@ export class CajaRegistradoraService {
     });
   }
 
-  async findAll() {
-    return this.prisma.extendedClient.cajaRegistradora.findMany({
-      include: {
-        sucursal: true,
-      },
-      orderBy: { nombre: 'asc' },
-    });
+  async findAll(query?: PaginationQueryDto) {
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [data, total] = await Promise.all([
+      this.prisma.extendedClient.cajaRegistradora.findMany({
+        include: {
+          sucursal: true,
+        },
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.extendedClient.cajaRegistradora.count(),
+    ]);
+    return paginar(data, total, page, limit);
   }
 
   async findOne(id: string) {
@@ -52,6 +61,14 @@ export class CajaRegistradoraService {
     await this.findOne(id);
     return this.prisma.extendedClient.cajaRegistradora.delete({
       where: { id },
+    });
+  }
+
+  async restore(id: string) {
+    // No usamos findOne porque está filtrado por deletedAt: null
+    return this.prisma.extendedClient.cajaRegistradora.update({
+      where: { id },
+      data: { deletedAt: null },
     });
   }
 }

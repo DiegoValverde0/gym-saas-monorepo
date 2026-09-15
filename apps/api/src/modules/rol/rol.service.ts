@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
+import { Prisma } from '@prisma/client';
 import { CreateRolDto } from './dto/create-rol.dto';
 import { UpdateRolDto } from './dto/update-rol.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class RolService {
@@ -34,35 +37,49 @@ export class RolService {
     const { permisosIds, ...rolData } = createRolDto;
     await this.assertPermisosAsignables(permisosIds);
 
-    return this.prisma.extendedClient.$transaction(async (tx) => {
-      const rol = await tx.rol.create({
-        data: rolData,
-      });
-
-      if (permisosIds && permisosIds.length > 0) {
-        await tx.rolPermiso.createMany({
-          data: permisosIds.map((permisoId) => ({
-            rolId: rol.id,
-            permisoId,
-          })),
+    try {
+      return await this.prisma.extendedClient.$transaction(async (tx) => {
+        const rol = await tx.rol.create({
+          data: rolData,
         });
-      }
 
-      return rol;
-    });
+        if (permisosIds && permisosIds.length > 0) {
+          await tx.rolPermiso.createMany({
+            data: permisosIds.map((permisoId) => ({
+              rolId: rol.id,
+              permisoId,
+            })),
+          });
+        }
+
+        return rol;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`Ya existe un rol llamado "${rolData.nombre}" en esta organización.`);
+      }
+      throw error;
+    }
   }
 
-  async findAll() {
-    return this.prisma.extendedClient.rol.findMany({
-      include: {
-        rolPermisos: {
-          include: {
-            permiso: true,
+  async findAll(query?: PaginationQueryDto) {
+    const { page, limit, skip, take } = resolverPaginacion(query);
+    const [data, total] = await Promise.all([
+      this.prisma.extendedClient.rol.findMany({
+        include: {
+          rolPermisos: {
+            include: {
+              permiso: true,
+            },
           },
         },
-      },
-      orderBy: { nombre: 'asc' },
-    });
+        orderBy: { nombre: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.extendedClient.rol.count(),
+    ]);
+    return paginar(data, total, page, limit);
   }
 
   async findOne(id: string) {
@@ -107,48 +124,55 @@ export class RolService {
     await this.assertPermisosAsignables(permisosIds);
 
     let result;
-    if (isGlobalRole) {
-      // Rol global: se edita con el cliente crudo de Prisma. El
-      // extendedClient bloquea CUALQUIER escritura de un superadmin sobre un
-      // modelo con organizacionId sin distinguir si la fila es global o de
-      // un tenant (ver prisma.service.ts) -- esa distinción ya la hicimos
-      // arriba con datos frescos de BD, y la repetimos dentro de la propia
-      // transacción por si el rol cambiara de dueño en la carrera entre
-      // ambas lecturas.
-      result = await this.prisma.$transaction(async (tx) => {
-        const fresh = await tx.rol.findUniqueOrThrow({ where: { id }, select: { organizacionId: true } });
-        if (fresh.organizacionId !== null) {
-          throw new ForbiddenException('El rol dejó de ser global durante la operación; vuelve a intentarlo.');
-        }
-
-        const rol = await tx.rol.update({ where: { id }, data: rolData });
-
-        if (permisosIds !== undefined) {
-          await tx.rolPermiso.deleteMany({ where: { rolId: id } });
-          if (permisosIds.length > 0) {
-            await tx.rolPermiso.createMany({
-              data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
-            });
+    try {
+      if (isGlobalRole) {
+        // Rol global: se edita con el cliente crudo de Prisma. El
+        // extendedClient bloquea CUALQUIER escritura de un superadmin sobre un
+        // modelo con organizacionId sin distinguir si la fila es global o de
+        // un tenant (ver prisma.service.ts) -- esa distinción ya la hicimos
+        // arriba con datos frescos de BD, y la repetimos dentro de la propia
+        // transacción por si el rol cambiara de dueño en la carrera entre
+        // ambas lecturas.
+        result = await this.prisma.$transaction(async (tx) => {
+          const fresh = await tx.rol.findUniqueOrThrow({ where: { id }, select: { organizacionId: true } });
+          if (fresh.organizacionId !== null) {
+            throw new ForbiddenException('El rol dejó de ser global durante la operación; vuelve a intentarlo.');
           }
-        }
 
-        return rol;
-      });
-    } else {
-      result = await this.prisma.extendedClient.$transaction(async (tx) => {
-        const rol = await tx.rol.update({ where: { id }, data: rolData });
+          const rol = await tx.rol.update({ where: { id }, data: rolData });
 
-        if (permisosIds !== undefined) {
-          await tx.rolPermiso.deleteMany({ where: { rolId: id } });
-          if (permisosIds.length > 0) {
-            await tx.rolPermiso.createMany({
-              data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
-            });
+          if (permisosIds !== undefined) {
+            await tx.rolPermiso.deleteMany({ where: { rolId: id } });
+            if (permisosIds.length > 0) {
+              await tx.rolPermiso.createMany({
+                data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
+              });
+            }
           }
-        }
 
-        return rol;
-      });
+          return rol;
+        });
+      } else {
+        result = await this.prisma.extendedClient.$transaction(async (tx) => {
+          const rol = await tx.rol.update({ where: { id }, data: rolData });
+
+          if (permisosIds !== undefined) {
+            await tx.rolPermiso.deleteMany({ where: { rolId: id } });
+            if (permisosIds.length > 0) {
+              await tx.rolPermiso.createMany({
+                data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
+              });
+            }
+          }
+
+          return rol;
+        });
+      }
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Ya existe un rol con ese mismo nombre en esta organización.');
+      }
+      throw error;
     }
 
     // Auditoría: Invalidar caché de Redis para todos los usuarios con este

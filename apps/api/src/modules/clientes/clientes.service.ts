@@ -49,16 +49,33 @@ export class ClientesService {
   async update(id: string, updateData: Prisma.ClienteUpdateInput) {
     // Primero verificamos si existe (y si pertenece al tenant gracias a RLS implícito)
     await this.findOne(id);
-    return this.prisma.extendedClient.cliente.update({
-      where: { id },
-      data: updateData,
-    });
+    try {
+      return await this.prisma.extendedClient.cliente.update({
+        where: { id },
+        data: updateData,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Ya existe un cliente registrado con ese mismo número de carnet/documento en esta sucursal u organización.');
+        }
+      }
+      throw error;
+    }
   }
 
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.extendedClient.cliente.delete({
       where: { id },
+    });
+  }
+
+  async restore(id: string) {
+    // No usamos findOne porque está filtrado por deletedAt: null
+    return this.prisma.extendedClient.cliente.update({
+      where: { id },
+      data: { deletedAt: null },
     });
   }
 }
