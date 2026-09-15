@@ -42,7 +42,9 @@ async function main() {
     'cuentas_bancarias',
     'aperturas_caja',
     'transacciones',
-    'pagos'
+    'pagos',
+    'productos',
+    'inventarios'
   ];
 
   const acciones = ['crear', 'leer', 'actualizar', 'eliminar'];
@@ -121,7 +123,7 @@ async function main() {
   // crear/suspender/reactivar organizaciones (eso es solo de plataforma/superadmin).
   const permisosAdminGym = getPermisosIds((p) => p.modulo !== 'organizaciones' || p.accion === 'actualizar');
   
-  const permisosEntrenador = getPermisosIds((p) => 
+  const permisosEntrenador = getPermisosIds((p) =>
     (p.modulo === 'clientes' && p.accion === 'leer') ||
     (p.modulo === 'asistencias' && p.accion === 'leer') ||
     (p.modulo === 'clases') ||
@@ -138,6 +140,7 @@ async function main() {
     (p.modulo === 'pagos' && ['crear', 'leer'].includes(p.accion)) ||
     (p.modulo === 'planes' && p.accion === 'leer') ||
     (p.modulo === 'promociones' && p.accion === 'leer') ||
+    (p.modulo === 'productos' && p.accion === 'leer') ||
     (p.modulo === 'clases' && p.accion === 'leer') ||
     (p.modulo === 'cuentas_bancarias' && p.accion === 'leer') ||
     (p.modulo === 'disciplinas' && p.accion === 'leer') ||

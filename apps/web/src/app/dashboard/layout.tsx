@@ -28,7 +28,8 @@ import {
   UserCircle,
   Banknote,
   FileText,
-  Activity
+  Activity,
+  Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -64,7 +65,8 @@ const navigationGroups: NavGroup[] = [
     items: [
       { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
       { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer' },
-      { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' }
+      { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
+      { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
     ]
   },
   {

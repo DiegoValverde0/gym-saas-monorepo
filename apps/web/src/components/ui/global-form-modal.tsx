@@ -36,6 +36,7 @@ export interface FieldConfig {
   description?: string;
   disabled?: boolean;
   colSpan?: 1 | 2;
+  allowDecimals?: boolean; // solo aplica a type: 'number' (ver NumberInput)
   renderCustom?: (form: UseFormReturn<any>) => ReactNode;
 }
 
@@ -150,6 +151,7 @@ function GlobalFormModalInner({
             {...form.register(field.name)}
             placeholder={field.placeholder}
             disabled={field.disabled}
+            allowDecimals={field.allowDecimals}
             className={inputClass}
             aria-invalid={hasError}
           />

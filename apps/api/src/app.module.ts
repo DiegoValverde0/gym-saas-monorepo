@@ -19,6 +19,8 @@ import { CuentaBancariaModule } from './modules/cuenta-bancaria/cuenta-bancaria.
 import { AperturaCajaModule } from './modules/apertura-caja/apertura-caja.module';
 import { TransaccionModule } from './modules/transaccion/transaccion.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ProductoModule } from './modules/producto/producto.module';
+import { InventarioModule } from './modules/inventario/inventario.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -48,6 +50,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     AperturaCajaModule,
     TransaccionModule,
     DashboardModule,
+    ProductoModule,
+    InventarioModule,
     ScheduleModule.forRoot()
   ],
   controllers: [],
