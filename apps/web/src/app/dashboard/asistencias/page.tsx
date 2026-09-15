@@ -66,6 +66,9 @@ export default function AsistenciasPage() {
   // Validation Check (Dry Run)
   const validateMutation = useMutation({
     mutationFn: async (clienteId: string) => apiPost('/asistencias/validate', { clienteId }),
+    onError: (err: any) => {
+        toast({ title: 'No se pudo validar el acceso', description: err.message, variant: 'destructive' });
+    }
   });
 
   // CheckIn
@@ -96,6 +99,9 @@ export default function AsistenciasPage() {
       onSuccess: () => {
           toast({ title: 'Salida Registrada', variant: 'default' });
           queryClient.invalidateQueries({ queryKey: ['asistencias_activas'] });
+      },
+      onError: (err: any) => {
+          toast({ title: 'No se pudo registrar la salida', description: err.message, variant: 'destructive' });
       }
   });
 
@@ -267,6 +273,21 @@ export default function AsistenciasPage() {
                                               </div>
                                           </div>
                                       )
+                                  ) : validateMutation.isError ? (
+                                      <div className="bg-zinc-50 border-2 border-zinc-300 rounded-xl p-5 text-zinc-700 space-y-4">
+                                          <div className="flex items-center gap-3">
+                                              <Info className="w-8 h-8 text-zinc-500" />
+                                              <h3 className="font-bold text-xl">No se pudo validar</h3>
+                                          </div>
+                                          <p className="text-zinc-600">Ocurrió un error al consultar el estado del cliente. Intenta de nuevo.</p>
+                                          <Button
+                                              variant="outline"
+                                              className="w-full"
+                                              onClick={() => validateMutation.mutate(selectedCliente.id)}
+                                          >
+                                              Reintentar
+                                          </Button>
+                                      </div>
                                   ) : null}
 
                                   <Button variant="ghost" className="w-full text-zinc-500" onClick={handleResetSearch}>
