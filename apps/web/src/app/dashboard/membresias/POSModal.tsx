@@ -9,7 +9,41 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
 
-export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenChange: (open: boolean) => void, item: any }) {
+interface MembresiaItem {
+  id: string;
+  montoFinal: string | number;
+  sucursalId?: string;
+  clienteId: string;
+  cliente?: { nombre: string };
+  plan?: { nombre: string };
+}
+
+interface TransaccionPayload {
+  sucursalId: string;
+  clienteId: string;
+  tipo: string;
+  montoTotal: number;
+  detalles: Array<{
+    tipoConcepto: string;
+    membresiaId: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }>;
+  pagos: Array<{
+    metodoPago: string;
+    monto: number;
+    cuentaBancariaId?: string;
+  }>;
+}
+
+interface CuentaBancaria {
+  id: string;
+  banco: string;
+  numeroCuenta: string;
+}
+
+export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenChange: (open: boolean) => void, item: MembresiaItem | null }) {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -39,7 +73,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
 
   useEffect(() => {
       if (open && item) {
-          const cuentaDefault = cuentasList.length === 1 ? cuentasList[0].id : '';
+          const cuentaDefault = cuentasList.length === 1 ? (cuentasList[0] as any).id : '';
           setPagos([{ id: Date.now(), metodoPago: 'EFECTIVO', monto: String(montoTotal), cuentaBancariaId: cuentaDefault }]);
           setEfectivoRecibido(String(montoTotal));
       }
@@ -47,14 +81,14 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
   }, [open, item, montoTotal, cuentasData]);
 
   const cobrarMutation = useMutation({
-    mutationFn: async (payload: any) => apiPost('/transacciones', payload),
+    mutationFn: async (payload: TransaccionPayload) => apiPost('/transacciones', payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['membresias'] });
       queryClient.invalidateQueries({ queryKey: ['cajas'] });
       onOpenChange(false);
       toast({ title: 'Cobro Exitoso', description: 'La membresía ha sido pagada y activada.', variant: 'success' });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   });
@@ -71,7 +105,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
   }
 
   const handleCobrar = () => {
-      if (!estadoApertura?.abierta) {
+      if (!(estadoApertura as any)?.abierta) {
           toast({ title: 'Caja Cerrada', description: 'Debes abrir tu turno de caja para cobrar.', variant: 'destructive' });
           return;
       }
@@ -110,7 +144,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
           pagos: pagosPayload
       };
 
-      cobrarMutation.mutate(payload);
+      cobrarMutation.mutate(payload as any);
   };
 
   return (
@@ -123,7 +157,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
           </DialogTitle>
         </DialogHeader>
 
-        {estadoApertura && !estadoApertura.abierta && (
+        {(estadoApertura as any) && !(estadoApertura as any).abierta && (
             <div className="bg-red-50 text-red-700 p-4 rounded-md flex items-center gap-3 border border-red-200">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <p className="font-bold text-sm">NO TIENES UN TURNO DE CAJA ABIERTO. Ve al módulo de Cajas y abre tu turno antes de procesar ventas.</p>
@@ -159,7 +193,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
                 </div>
 
                 <div className="space-y-3">
-                    {pagos.map((p, index) => (
+                    {pagos.map((p) => (
                         <div key={p.id} className="bg-white p-4 rounded-xl border shadow-sm space-y-3 relative">
                             {pagos.length > 1 && (
                                 <button onClick={() => setPagos(pagos.filter(x => x.id !== p.id))} className="absolute top-2 right-2 text-zinc-400 hover:text-red-500">
@@ -202,7 +236,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
                                     onChange={e => setPagos(pagos.map(x => x.id === p.id ? { ...x, cuentaBancariaId: e.target.value } : x))}
                                 >
                                     <option value="">Selecciona una cuenta...</option>
-                                    {cuentasList.map((c: any) => (
+                                    {(cuentasList as CuentaBancaria[]).map((c: CuentaBancaria) => (
                                         <option key={c.id} value={c.id}>{c.banco} - {c.numeroCuenta}</option>
                                     ))}
                                 </select>
@@ -248,7 +282,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
                 <Button 
                     className="w-full h-12 text-lg font-bold bg-emerald-600 hover:bg-emerald-700" 
                     onClick={handleCobrar}
-                    disabled={cobrarMutation.isPending || !estadoApertura?.abierta || Math.abs(diferencia) > 0.01}
+                    disabled={cobrarMutation.isPending || !(estadoApertura as any)?.abierta || Math.abs(diferencia) > 0.01}
                 >
                     {cobrarMutation.isPending ? 'Procesando...' : 'Confirmar Cobro'}
                 </Button>

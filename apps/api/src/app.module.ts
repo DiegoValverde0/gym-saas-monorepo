@@ -1,7 +1,8 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { DeletedInterceptor } from './common/interceptors/deleted.interceptor';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { ClsModule, ClsMiddleware } from 'nestjs-cls';
+import { ClsModule } from 'nestjs-cls';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { OrganizacionModule } from './modules/organizacion/organizacion.module';
@@ -23,6 +24,12 @@ import { TransaccionModule } from './modules/transaccion/transaccion.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ProductoModule } from './modules/producto/producto.module';
 import { InventarioModule } from './modules/inventario/inventario.module';
+import { DisciplinaModule } from './modules/disciplina/disciplina.module';
+import { PersonalModule } from './modules/personal/personal.module';
+import { TurnoTrabajoModule } from './modules/turno-trabajo/turno-trabajo.module';
+import { ClaseProgramadaModule } from './modules/clase-programada/clase-programada.module';
+import { ReservaClaseModule } from './modules/reserva-clase/reserva-clase.module';
+import { SistemaModule } from './modules/sistema/sistema.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -57,11 +64,18 @@ import { ScheduleModule } from '@nestjs/schedule';
     DashboardModule,
     ProductoModule,
     InventarioModule,
+    DisciplinaModule,
+    PersonalModule,
+    TurnoTrabajoModule,
+    ClaseProgramadaModule,
+    ReservaClaseModule,
+    SistemaModule,
     ScheduleModule.forRoot()
   ],
   controllers: [],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: DeletedInterceptor },
   ],
 })
 export class AppModule {}

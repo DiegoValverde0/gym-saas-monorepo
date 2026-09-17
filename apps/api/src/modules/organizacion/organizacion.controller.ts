@@ -1,10 +1,17 @@
 import { Controller, Post, Body, Get, Put, Delete, UseGuards, Param, ForbiddenException, Req } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { OrganizacionService } from './organizacion.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+
+interface RequestWithUser extends ExpressRequest {
+  user?: {
+    is_superadmin?: boolean;
+  };
+}
 
 @Controller('organizaciones')
 export class OrganizacionController {
@@ -24,7 +31,7 @@ export class OrganizacionController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'leer', modulo: 'organizaciones' })
-  async getAllOrganizaciones(@Req() req: any): Promise<any> {
+  async getAllOrganizaciones(@Req() req: RequestWithUser): Promise<unknown> {
     this.assertSuperAdmin(req);
     return this.organizacionService.getAllOrganizaciones();
   }
@@ -32,7 +39,7 @@ export class OrganizacionController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'crear', modulo: 'organizaciones' })
-  async registrarOrganizacion(@Req() req: any, @Body() body: CrearOrganizacionDto): Promise<any> {
+  async registrarOrganizacion(@Req() req: RequestWithUser, @Body() body: CrearOrganizacionDto): Promise<unknown> {
     this.assertSuperAdmin(req);
     return this.organizacionService.crearOrganizacionConAdmin(body);
   }
@@ -40,7 +47,7 @@ export class OrganizacionController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'suspender', modulo: 'organizaciones' })
-  async suspenderOrganizacion(@Req() req: any, @Param('id') id: string): Promise<any> {
+  async suspenderOrganizacion(@Req() req: RequestWithUser, @Param('id') id: string): Promise<unknown> {
     this.assertSuperAdmin(req);
     return this.organizacionService.suspenderOrganizacion(id);
   }
@@ -48,12 +55,12 @@ export class OrganizacionController {
   @Post(':id/restore')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'suspender', modulo: 'organizaciones' })
-  async reactivarOrganizacion(@Req() req: any, @Param('id') id: string): Promise<any> {
+  async reactivarOrganizacion(@Req() req: RequestWithUser, @Param('id') id: string): Promise<unknown> {
     this.assertSuperAdmin(req);
     return this.organizacionService.reactivarOrganizacion(id);
   }
 
-  private assertSuperAdmin(req: any) {
+  private assertSuperAdmin(req: RequestWithUser) {
     if (!req.user?.is_superadmin) {
       throw new ForbiddenException('Este endpoint es exclusivo del superadmin de plataforma.');
     }
@@ -66,7 +73,7 @@ export class OrganizacionController {
 
   @Get('me/info')
   @UseGuards(JwtAuthGuard)
-  async getMiOrganizacion(): Promise<any> {
+  async getMiOrganizacion(): Promise<unknown> {
     // Todos los usuarios autenticados de un tenant pueden ver la info de su propia org
     return this.organizacionService.getMiOrganizacion();
   }
@@ -74,7 +81,7 @@ export class OrganizacionController {
   @Put('me/info')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'actualizar', modulo: 'organizaciones' })
-  async updateMiOrganizacion(@Body() data: UpdateMiOrganizacionDto): Promise<any> {
+  async updateMiOrganizacion(@Body() data: UpdateMiOrganizacionDto): Promise<unknown> {
     return this.organizacionService.updateMiOrganizacion(data);
   }
 }

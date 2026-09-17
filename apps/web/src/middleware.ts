@@ -1,22 +1,33 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
-// Mitigación pragmática (ver Auditoria_Claude.md, Fase E5): el JWT real vive
-// en localStorage, invisible para un middleware de servidor, así que no
-// podemos validar permisos aquí. Lo que SÍ podemos evitar es el "flash" de
-// contenido protegido: `has_session` es una cookie no sensible (nunca lleva
-// el token) que el login setea y el logout borra; si no está, redirigimos
-// antes de que el bundle del dashboard llegue a montarse. La autorización
-// real sigue ocurriendo en cada request al backend con el Bearer token.
-export function middleware(request: NextRequest) {
-  const hasSession = request.cookies.get('has_session')?.value === '1';
+// El JWT ahora vive en una cookie HttpOnly llamada `gym_token`.
+export async function middleware(request: NextRequest) {
+  const token = request.cookies.get('gym_token')?.value;
 
-  if (!hasSession) {
+  if (!token) {
     const loginUrl = new URL('/login', request.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  if (!process.env.JWT_SECRET) {
+    // Igual que auth.module.ts en la API: sin secreto no hay forma segura de
+    // validar el token, así que fallamos cerrado en vez de caer a un valor
+    // por defecto (nunca hardcodear el secreto real en el código fuente).
+    throw new Error('JWT_SECRET no está configurado. Define la variable de entorno JWT_SECRET antes de iniciar la aplicación.');
+  }
+
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    await jwtVerify(token, secret);
+    return NextResponse.next();
+  } catch {
+    const loginUrl = new URL('/login', request.url);
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete('gym_token');
+    return response;
+  }
 }
 
 export const config = {

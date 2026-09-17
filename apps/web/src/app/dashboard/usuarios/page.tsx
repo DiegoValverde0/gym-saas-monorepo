@@ -194,19 +194,19 @@ export default function UsuariosPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Usuarios</h2>
-            <p className="text-sm text-slate-500 mt-1">Gestiona los empleados y sus niveles de acceso (RBAC).</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Usuarios</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona los empleados y sus niveles de acceso (RBAC).</p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Buscar empleado..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
               />
             </div>
             <Protect permission="usuarios:crear">
@@ -224,12 +224,12 @@ export default function UsuariosPage() {
             description={editingAsignacion 
               ? 'Actualiza el rol y la sucursal de este usuario.' 
               : 'Crea una cuenta global para el empleado y asígnale un rol en tu organización.'}
-            form={form}
+            form={form as any}
             maxWidthClass="sm:max-w-xl"
             sections={[
               {
                 title: 'Datos de Identidad (Global)',
-                icon: <Users className="w-4 h-4 text-indigo-600" />,
+                icon: <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
                 fields: [
                   { name: 'nombreCompleto', label: 'Nombre Completo', type: 'text', placeholder: 'Ej. Juan Pérez', disabled: !!editingAsignacion, colSpan: 2 },
                   { name: 'correo', label: 'Correo Electrónico', type: 'email', placeholder: 'juan@gym.com', disabled: !!editingAsignacion },
@@ -247,24 +247,24 @@ export default function UsuariosPage() {
               },
               {
                 title: 'Asignación de Acceso (Tenant)',
-                icon: <ShieldCheck className="w-4 h-4 text-indigo-600" />,
+                icon: <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
                 fields: [
                   { 
                     name: 'rolId', 
                     label: 'Rol en la Organización', 
                     type: 'select', 
                     placeholder: 'Selecciona el rol',
-                    options: roles?.map((r: any) => ({ label: r.nombre, value: r.id })) || [],
+                    options: (roles as any[] | undefined)?.map((r: any) => ({ label: r.nombre, value: r.id })) || [],
                     colSpan: 2
                   },
                   {
                     name: 'sucursalId',
-                    label: 'Restricción por Sucursal',
+                    label: 'Sucursal Asignada',
                     type: 'select',
                     placeholder: 'Acceso Global (Todas las sucursales)',
                     options: [
-                      { label: 'Acceso Global (Todas)', value: 'global', className: 'font-semibold text-indigo-600' },
-                      ...(sucursales?.map((s: any) => ({ label: s.nombre, value: s.id })) || [])
+                      { label: 'Acceso Global (Todas)', value: 'global', className: 'font-semibold text-indigo-600 dark:text-indigo-400' },
+                      ...((sucursales as any[] | undefined)?.map((s: any) => ({ label: s.nombre, value: s.id })) || [])
                     ],
                     description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de dicha sede.',
                     colSpan: 2
@@ -272,28 +272,28 @@ export default function UsuariosPage() {
                 ]
               }
             ]}
-            onSubmit={onSubmit}
+            onSubmit={onSubmit as any}
             isPending={createMutation.isPending || updateMutation.isPending}
             submitLabel="Guardar Empleado"
           />
         </div>
 
         {loadingUsuarios ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
             <div className="animate-pulse flex flex-col items-center gap-4">
-              <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-              <div className="h-4 w-32 bg-slate-200 rounded"></div>
+              <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
             </div>
           </div>
         ) : filteredAsignaciones.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
               <Users className="w-6 h-6" />
             </div>
-            <p className="text-base font-semibold text-slate-900">
+            <p className="text-base font-semibold text-slate-900 dark:text-white">
               {searchTerm ? 'Ningún empleado coincide con la búsqueda' : 'No hay personal registrado'}
             </p>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {searchTerm ? 'Prueba con otro nombre, correo o rol.' : 'Registra a tu primer empleado en esta organización.'}
             </p>
           </div>
@@ -312,12 +312,12 @@ export default function UsuariosPage() {
                 <TableRow key={asign.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-xs shrink-0">
                         {asign.usuario?.nombreCompleto?.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 text-sm">{asign.usuario?.nombreCompleto}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{asign.usuario?.correo}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{asign.usuario?.nombreCompleto}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{asign.usuario?.correo}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -329,20 +329,20 @@ export default function UsuariosPage() {
                   </TableCell>
                   <TableCell>
                     {asign.sucursal ? (
-                      <span className="text-xs text-slate-600">{asign.sucursal.nombre}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400">{asign.sucursal.nombre}</span>
                     ) : (
-                      <span className="text-xs text-emerald-600 font-semibold">Global (Todas)</span>
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Global (Todas)</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Protect permission="usuarios:actualizar">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(asign)} className="text-slate-500 hover:text-indigo-600">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(asign)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                           <Edit className="h-4 w-4 mr-1.5" /> Permisos
                         </Button>
                       </Protect>
                       <Protect permission="usuarios:eliminar">
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(asign.id)} className="text-slate-500 hover:text-rose-600">
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(asign.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
                           <Trash2 className="h-4 w-4 mr-1.5" /> Revocar
                         </Button>
                       </Protect>

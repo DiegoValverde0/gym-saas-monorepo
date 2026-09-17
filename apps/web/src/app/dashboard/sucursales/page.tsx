@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { Protect } from '@/components/ui/protect';
+import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
-import { Building2, Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Building2, Plus, Edit, Trash2, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,8 @@ export default function SucursalesPage() {
   const [editingSucursal, setEditingSucursal] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
+  
+  const [showDeleted, setShowDeleted] = useState(false);
 
   // Modal de confirmación global
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -48,7 +51,7 @@ export default function SucursalesPage() {
   });
 
   const form = useForm<SucursalFormValues>({
-    resolver: zodResolver(sucursalSchema),
+    resolver: zodResolver(sucursalSchema) as any,
     mode: 'onChange',
     defaultValues: {
       nombre: '',
@@ -60,8 +63,8 @@ export default function SucursalesPage() {
   });
 
   const { data: sucursales, isLoading } = useQuery({
-    queryKey: ['sucursales', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/sucursales')),
+    queryKey: ['sucursales', activeTenantId, showDeleted],
+    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/sucursales?deleted=true' : '/sucursales')),
     enabled: !!token,
   });
 
@@ -92,9 +95,10 @@ export default function SucursalesPage() {
     }
   });
 
-  const { deleteItem } = useSoftDelete({
-    queryKey: ['sucursales'],
+  const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
+    queryKey: ['sucursales', activeTenantId, showDeleted],
     endpoint: 'sucursales',
+    modelName: 'sucursal',
     itemName: 'La sucursal'
   });
 
@@ -147,21 +151,24 @@ export default function SucursalesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Sucursales</h2>
-            <p className="text-sm text-slate-500 mt-1">Gestiona las sedes de tu organización.</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Sucursales</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona las sedes de tu organización.</p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Buscar sucursal..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
               />
             </div>
+            
+            <PapeleraToggle showDeleted={showDeleted} setShowDeleted={setShowDeleted} />
+
             <Protect permission="sucursales:crear">
               <TenantRequiredButton
                 onClick={handleAddNew}
@@ -175,7 +182,7 @@ export default function SucursalesPage() {
             onOpenChange={setIsDialogOpen}
             title={editingSucursal ? 'Editar Sucursal' : 'Nueva Sucursal'}
             description={editingSucursal ? 'Modifica los detalles de la sucursal.' : 'Agrega una nueva sede a tu organización.'}
-            form={form}
+            form={form as any}
             sections={[
               {
                 fields: [
@@ -187,28 +194,28 @@ export default function SucursalesPage() {
                 ]
               }
             ]}
-            onSubmit={onSubmit}
+            onSubmit={onSubmit as any}
             isPending={createMutation.isPending || updateMutation.isPending}
             submitLabel="Guardar Sede"
           />
         </div>
 
         {isLoading ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
             <div className="animate-pulse flex flex-col items-center gap-4">
-              <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-              <div className="h-4 w-32 bg-slate-200 rounded"></div>
+              <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
             </div>
           </div>
         ) : filteredSucursales.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
               <Building2 className="w-6 h-6" />
             </div>
-            <p className="text-base font-semibold text-slate-900">
+            <p className="text-base font-semibold text-slate-900 dark:text-white">
               {searchTerm ? 'Ninguna sucursal coincide con la búsqueda' : 'No hay sucursales registradas'}
             </p>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {searchTerm ? 'Prueba con otro nombre o dirección.' : 'Agrega tu primera sede.'}
             </p>
           </div>
@@ -225,39 +232,55 @@ export default function SucursalesPage() {
             </TableHeader>
             <TableBody>
               {filteredSucursales.map((sucursal: any) => (
-                <TableRow key={sucursal.id}>
+                <TableRow key={sucursal.id} className={showDeleted ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                         <Building2 className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 text-sm">{sucursal.nombre}</p>
-                        {sucursal.esPrincipal && <p className="text-xs text-indigo-600 font-medium mt-0.5">Sede principal</p>}
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{sucursal.nombre}</p>
+                        {sucursal.esPrincipal && <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Sede principal</p>}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-slate-600">{sucursal.direccion || 'Sin dirección registrada'}</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{sucursal.direccion || 'Sin dirección registrada'}</span>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-slate-600">{sucursal.telefono || '-'}</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{sucursal.telefono || '-'}</span>
                   </TableCell>
                   <TableCell>
                     {sucursal.estado === 'ACTIVO' ? <Badge variant="success">Activo</Badge> : <Badge variant="default">Inactivo</Badge>}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Protect permission="sucursales:actualizar">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(sucursal)} className="text-slate-500 hover:text-indigo-600">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Protect>
-                      <Protect permission="sucursales:eliminar">
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(sucursal.id)} className="text-slate-500 hover:text-rose-600">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </Protect>
+                    <div className="flex justify-end gap-2">
+                      {showDeleted ? (
+                        <Protect permission="sistema:restaurar">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => restoreItem(sucursal.id)} 
+                            disabled={isRestoring}
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                          >
+                            <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                          </Button>
+                        </Protect>
+                      ) : (
+                        <>
+                          <Protect permission="sucursales:actualizar">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(sucursal)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Protect>
+                          <Protect permission="sucursales:eliminar">
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(sucursal.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Protect>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

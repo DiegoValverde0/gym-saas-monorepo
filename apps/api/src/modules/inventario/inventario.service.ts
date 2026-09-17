@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInventarioDto } from './dto/create-inventario.dto';
@@ -11,18 +11,11 @@ export class InventarioService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createInventarioDto: CreateInventarioDto) {
-    try {
-      return await this.prisma.extendedClient.inventario.create({
-        // organizacionId y sucursalId (si el usuario está atado a una) los
-        // inyecta la extensión RLS en runtime (ver prisma.service.ts).
-        data: createInventarioDto as any,
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Ya existe un registro de inventario para este producto en esta sucursal; edítalo en vez de crear uno nuevo.');
-      }
-      throw error;
-    }
+    return await this.prisma.extendedClient.inventario.create({
+      // organizacionId y sucursalId (si el usuario está atado a una) los
+      // inyecta la extensión RLS en runtime (ver prisma.service.ts).
+      data: createInventarioDto as unknown as Prisma.InventarioUncheckedCreateInput,
+    });
   }
 
   async findAll(query?: PaginationQueryDto) {
@@ -58,17 +51,10 @@ export class InventarioService {
 
   async update(id: string, updateInventarioDto: UpdateInventarioDto) {
     await this.findOne(id);
-    try {
-      return await this.prisma.extendedClient.inventario.update({
-        where: { id },
-        data: updateInventarioDto,
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Ya existe un registro de inventario para este producto en esta sucursal.');
-      }
-      throw error;
-    }
+    return await this.prisma.extendedClient.inventario.update({
+      where: { id },
+      data: updateInventarioDto,
+    });
   }
 
   async remove(id: string) {

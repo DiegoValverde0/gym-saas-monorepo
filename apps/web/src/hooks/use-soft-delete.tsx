@@ -4,17 +4,18 @@ import { Button } from '@/components/ui/button';
 import { apiPost, apiDelete } from '@/lib/api-client';
 
 interface UseSoftDeleteOptions {
-  queryKey: string[];
+  queryKey: unknown[];
   endpoint: string; // e.g., 'sucursales' or 'roles'
+  modelName: string; // e.g., 'sucursal', 'rol'
   itemName?: string; // e.g., 'La sucursal'
 }
 
-export function useSoftDelete({ queryKey, endpoint, itemName = 'El registro' }: UseSoftDeleteOptions) {
+export function useSoftDelete({ queryKey, endpoint, modelName, itemName = 'El registro' }: UseSoftDeleteOptions) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const restoreMutation = useMutation({
-    mutationFn: async (id: string) => apiPost(`/${endpoint}/${id}/restore`),
+    mutationFn: async (id: string) => apiPost(`/sistema/restaurar`, { modelo: modelName, id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       toast({ 
@@ -23,7 +24,7 @@ export function useSoftDelete({ queryKey, endpoint, itemName = 'El registro' }: 
         variant: 'success' 
       });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ 
         title: 'Error al restaurar', 
         description: err.message, 
@@ -56,7 +57,7 @@ export function useSoftDelete({ queryKey, endpoint, itemName = 'El registro' }: 
         )
       });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ 
         title: 'Error al eliminar', 
         description: err.message, 
@@ -67,6 +68,7 @@ export function useSoftDelete({ queryKey, endpoint, itemName = 'El registro' }: 
 
   return {
     deleteItem: deleteMutation.mutate,
+    restoreItem: restoreMutation.mutate,
     isDeleting: deleteMutation.isPending,
     isRestoring: restoreMutation.isPending,
   };

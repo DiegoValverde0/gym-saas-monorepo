@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateMembresiaDto } from './dto/create-membresia.dto';
 import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -121,7 +122,7 @@ export class MembresiaService {
         estado: 'PENDIENTE_PAGO', // Siempre nace pendiente de pago
         pagada: false,
         creadoPorId: userId,
-      } as any,
+      } as unknown as Prisma.MembresiaUncheckedCreateInput,
     });
   }
 
@@ -199,7 +200,9 @@ export class MembresiaService {
   // `client` es this.prisma.extendedClient (default, llamadas HTTP dentro de
   // un tenant ya resuelto) o this.prisma crudo (llamadas desde los cron jobs
   // cross-tenant de abajo, que no tienen organizacionId de request).
-  private async promoverSiguienteEnEspera(clienteId: string, client: any = this.prisma.extendedClient) {
+  private async promoverSiguienteEnEspera(clienteId: string, clientParams?: unknown) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = (clientParams || this.prisma.extendedClient) as any;
     const siguiente = await client.membresia.findFirst({
       where: { clienteId, estado: 'EN_ESPERA' },
       orderBy: { fechaInicio: 'asc' },

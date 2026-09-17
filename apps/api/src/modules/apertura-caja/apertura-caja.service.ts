@@ -58,7 +58,7 @@ export class AperturaCajaService {
             montoInicial: dto.montoInicial,
             estado: 'ABIERTA',
             fechaApertura: new Date()
-          } as any,
+          } as unknown as Prisma.AperturaCajaUncheckedCreateInput,
           include: {
             caja: true
           }
@@ -88,7 +88,7 @@ export class AperturaCajaService {
       },
       include: {
         caja: {
-          select: { nombre: true, sucursalId: true }
+          select: { nombre: true, sucursalId: true, saldoActual: true }
         }
       }
     });
@@ -111,7 +111,7 @@ export class AperturaCajaService {
       acc[p.metodoPago] = (acc[p.metodoPago] || 0) + Number(p.monto);
       acc.total += Number(p.monto);
       return acc;
-    }, { total: 0 } as any);
+    }, { total: 0 } as Record<string, number>);
 
     return {
       abierta: true,

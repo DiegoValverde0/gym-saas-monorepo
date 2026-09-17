@@ -96,7 +96,14 @@ async function main() {
       descripcion: 'Permite forzar un ingreso que no pasó las validaciones normales (membresía, horario, etc.)',
     }
   });
-  permisosInsertados.push(permisoAsistenciaMultiplePorDia, permisoAsistenciaForzar);
+  const permisoRestaurar = await prisma.permiso.create({
+    data: {
+      modulo: 'sistema',
+      accion: 'restaurar',
+      descripcion: 'Permite restaurar registros que han sido eliminados (enviados a la papelera)',
+    }
+  });
+  permisosInsertados.push(permisoAsistenciaMultiplePorDia, permisoAsistenciaForzar, permisoRestaurar);
 
   // Helpers para buscar permisos por acción
   const getPermisosIds = (condicion: (p: any) => boolean) => permisosInsertados.filter(condicion).map(p => ({ permisoId: p.id }));
@@ -117,11 +124,13 @@ async function main() {
     ...getPermisosIds((p) => p.modulo === 'organizaciones' && p.accion === 'crear'),
     ...getPermisosIds((p) => p.modulo === 'roles' && p.accion === 'actualizar'),
     { permisoId: permisoSuspenderOrg.id },
+    { permisoId: permisoRestaurar.id },
   ];
 
   // Todo lo interno de su tenant, más "actualizar" su propia organización
   // (PUT /organizaciones/me/info) -- nunca leer el listado global, ni
   // crear/suspender/reactivar organizaciones (eso es solo de plataforma/superadmin).
+  // Se añade explícitamente el permiso de restaurar registros eliminados.
   const permisosAdminGym = getPermisosIds((p) => p.modulo !== 'organizaciones' || p.accion === 'actualizar');
   
   const permisosEntrenador = getPermisosIds((p) =>
@@ -129,6 +138,8 @@ async function main() {
     (p.modulo === 'asistencias' && p.accion === 'leer') ||
     (p.modulo === 'clases') ||
     (p.modulo === 'disciplinas' && p.accion === 'leer') ||
+    (p.modulo === 'turnos' && p.accion === 'leer') ||
+    (p.modulo === 'reservas' && p.accion === 'leer') ||
     (p.modulo === 'dashboard' && p.accion === 'leer')
   );
 
@@ -146,7 +157,7 @@ async function main() {
     (p.modulo === 'clases' && p.accion === 'leer') ||
     (p.modulo === 'cuentas_bancarias' && p.accion === 'leer') ||
     (p.modulo === 'disciplinas' && p.accion === 'leer') ||
-    (p.modulo === 'reservas' && p.accion === 'leer') ||
+    (p.modulo === 'reservas' && ['crear', 'leer', 'actualizar'].includes(p.accion)) ||
     (p.modulo === 'turnos' && p.accion === 'leer') ||
     (p.modulo === 'sucursales' && p.accion === 'leer') ||
     (p.modulo === 'dashboard' && p.accion === 'leer')

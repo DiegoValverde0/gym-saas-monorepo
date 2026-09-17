@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreatePromocionDto } from './dto/create-promocion.dto';
 import { UpdatePromocionDto } from './dto/update-promocion.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -38,7 +39,7 @@ export class PromocionService {
 
     return this.prisma.extendedClient.promocion.create({
       // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-      data: createPromocionDto as any,
+      data: createPromocionDto as unknown as Prisma.PromocionUncheckedCreateInput,
     });
   }
 

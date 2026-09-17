@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
@@ -65,7 +66,7 @@ export class TransaccionService {
                 tipo: dto.tipo,
                 montoTotal: dto.montoTotal,
                 creadoPorId: userId,
-            } as any
+            } as unknown as Prisma.TransaccionUncheckedCreateInput
         });
 
         // B. Crear Detalles (una sola operación bulk en vez de un create por línea)
@@ -81,7 +82,7 @@ export class TransaccionService {
                 cantidad: det.cantidad,
                 precioUnitario: det.precioUnitario,
                 subtotal: det.subtotal,
-            })) as any,
+            })) as unknown as Prisma.DetalleTransaccionCreateManyInput[],
         });
 
         // Activación de Membresía: a diferencia de la creación de detalles de
@@ -126,7 +127,7 @@ export class TransaccionService {
                 monto: pago.monto,
                 cuentaBancariaId: pago.cuentaBancariaId,
                 referencia: pago.referencia,
-            })) as any,
+            })) as unknown as Prisma.PagoCreateManyInput[],
         });
 
         // Afectación de saldos contables: se suma el incremento total por
@@ -165,11 +166,8 @@ export class TransaccionService {
     });
   }
 
-  async findAll(tenantId: string, query?: PaginationQueryDto) {
-    const whereClause: any = {};
-    if (tenantId && tenantId !== 'all') {
-      whereClause.organizacionId = tenantId;
-    }
+  async findAll(query?: PaginationQueryDto) {
+    const whereClause: Prisma.TransaccionWhereInput = {};
 
     const { page, limit, skip, take } = resolverPaginacion(query);
     const [transacciones, total] = await Promise.all([

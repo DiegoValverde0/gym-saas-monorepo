@@ -4,10 +4,13 @@ import { CreateProductoDto } from './dto/create-producto.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
+@RequiereModulo('puntoVenta')
 @Controller('productos')
 export class ProductoController {
   constructor(private readonly productoService: ProductoService) {}

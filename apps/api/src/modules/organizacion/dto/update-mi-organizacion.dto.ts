@@ -1,8 +1,74 @@
-import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ModulosConfigDto {
+  @IsOptional()
+  @IsBoolean()
+  puntoVenta?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  clasesGrupales?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  controlPersonal?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  reportesAvanzados?: boolean;
+}
+
+export class RequerimientosClienteConfigDto {
+  @IsOptional()
+  @IsBoolean()
+  exigirDni?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  exigirCorreo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  exigirTelefono?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  exigirHuella?: boolean;
+}
+
+export class PreferenciasOperativasConfigDto {
+  @IsOptional()
+  @IsBoolean()
+  renovacionAutomaticaPlanes?: boolean;
+
+  @IsOptional()
+  @IsString()
+  impresionTickets?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  notificacionesWhatsapp?: boolean;
+}
+
+export class ConfiguracionTenantDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ModulosConfigDto)
+  modulos?: ModulosConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RequerimientosClienteConfigDto)
+  requerimientosCliente?: RequerimientosClienteConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PreferenciasOperativasConfigDto)
+  preferenciasOperativas?: PreferenciasOperativasConfigDto;
+}
 
 // Campos que el propio tenant (dueño de gym) puede editar de su organización.
-// Deliberadamente NO incluye `estado`, `deletedAt` ni `identificacionFiscal`:
-// esos quedan fuera del alcance de autoedición del tenant.
 export class UpdateMiOrganizacionDto {
   @IsOptional()
   @IsString()
@@ -21,6 +87,16 @@ export class UpdateMiOrganizacionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(150)
+  emailContacto?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  identificacionFiscal?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(3)
   moneda?: string;
 
@@ -29,10 +105,8 @@ export class UpdateMiOrganizacionDto {
   @MaxLength(50)
   zonaHoraria?: string;
 
-  // `any` deliberado: Prisma exige su propio tipo recursivo InputJsonValue
-  // para columnas JSON, incompatible estructuralmente con un Record simple.
-  // class-validator igual valida en runtime que sea un objeto.
   @IsOptional()
-  @IsObject()
-  configuracion?: any;
+  @ValidateNested()
+  @Type(() => ConfiguracionTenantDto)
+  configuracion?: ConfiguracionTenantDto;
 }

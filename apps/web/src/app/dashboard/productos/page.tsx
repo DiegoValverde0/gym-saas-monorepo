@@ -17,8 +17,10 @@ import { Protect } from '@/components/ui/protect';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, Plus, Edit, Trash2, Search, Warehouse } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Search, Warehouse, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PapeleraToggle } from '@/components/ui/papelera-toggle';
+import { Label } from '@/components/ui/label';
 
 const productoSchema = z.object({
   nombre: z.string({ message: 'El nombre es obligatorio' }).min(2, 'Mínimo 2 caracteres'),
@@ -38,9 +40,35 @@ const inventarioSchema = z.object({
 });
 type InventarioFormValues = z.infer<typeof inventarioSchema>;
 
+interface Producto {
+  id: string;
+  nombre: string;
+  sku?: string | null;
+  descripcion?: string | null;
+  precioVenta: number | string;
+  estado: string;
+}
+
+interface Sucursal {
+  id: string;
+  nombre: string;
+}
+
+interface Inventario {
+  id: string;
+  productoId: string;
+  sucursalId?: string | null;
+  cantidadActual: number;
+  puntoReorden: number;
+  ubicacionBodega?: string | null;
+  producto?: Producto;
+  sucursal?: Sucursal;
+}
+
 export default function ProductosPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [showDeleted, setShowDeleted] = useState(false);
   const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
@@ -61,7 +89,7 @@ export default function ProductosPage() {
   // Catálogo de productos
   // ==========================================================
   const [productoModalOpen, setProductoModalOpen] = useState(false);
-  const [editingProducto, setEditingProducto] = useState<any | null>(null);
+  const [editingProducto, setEditingProducto] = useState<Producto | null>(null);
 
   const productoForm = useForm<ProductoFormValues>({
     resolver: zodResolver(productoSchema) as any,
@@ -70,8 +98,8 @@ export default function ProductosPage() {
   });
 
   const { data: productos, isLoading: loadingProductos } = useQuery({
-    queryKey: ['productos', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/productos')),
+    queryKey: ['productos', activeTenantId, showDeleted],
+    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/productos?deleted=true' : '/productos')),
     enabled: !!token,
   });
 
@@ -83,7 +111,7 @@ export default function ProductosPage() {
       productoForm.reset();
       toast({ title: 'Éxito', description: 'Producto creado correctamente.', variant: 'success' });
     },
-    onError: (err: any) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
   const updateProductoMutation = useMutation({
@@ -95,10 +123,10 @@ export default function ProductosPage() {
       productoForm.reset();
       toast({ title: 'Éxito', description: 'Producto actualizado correctamente.', variant: 'success' });
     },
-    onError: (err: any) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
-  const { deleteItem: deleteProducto } = useSoftDelete({ queryKey: ['productos'], endpoint: 'productos', itemName: 'El producto' });
+  const { deleteItem: deleteProducto, restoreItem, isRestoring } = useSoftDelete({ queryKey: ['productos', activeTenantId, showDeleted], endpoint: 'productos', modelName: 'producto', itemName: 'El producto' });
 
   const onSubmitProducto = (values: ProductoFormValues) => {
     if (editingProducto) updateProductoMutation.mutate({ id: editingProducto.id, values });
@@ -111,7 +139,7 @@ export default function ProductosPage() {
     setProductoModalOpen(true);
   };
 
-  const handleEditProducto = (producto: any) => {
+  const handleEditProducto = (producto: Producto) => {
     setEditingProducto(producto);
     productoForm.reset({
       nombre: producto.nombre,
@@ -133,21 +161,21 @@ export default function ProductosPage() {
     setConfirmOpen(true);
   };
 
-  const filteredProductos = (productos || []).filter((p: any) => {
+  const filteredProductos = (productos as Producto[] || []).filter((p: Producto) => {
     if (!searchProducto) return true;
     const lower = searchProducto.toLowerCase();
     return p.nombre?.toLowerCase().includes(lower) || p.sku?.toLowerCase().includes(lower);
   });
 
-  const productosActivos = (productos || []).filter((p: any) => p.estado === 'ACTIVO');
+  const productosActivos = (productos as Producto[] || []).filter((p: Producto) => p.estado === 'ACTIVO');
 
   // ==========================================================
   // Inventario por sucursal
   // ==========================================================
   const [inventarioModalOpen, setInventarioModalOpen] = useState(false);
-  const [editingInventario, setEditingInventario] = useState<any | null>(null);
+  const [editingInventario, setEditingInventario] = useState<Inventario | null>(null);
   const [confirmInventarioOpen, setConfirmInventarioOpen] = useState(false);
-  const [inventarioToDelete, setInventarioToDelete] = useState<any>(null);
+  const [inventarioToDelete, setInventarioToDelete] = useState<Inventario | null>(null);
 
   const inventarioForm = useForm<InventarioFormValues>({
     resolver: zodResolver(inventarioSchema) as any,
@@ -169,7 +197,7 @@ export default function ProductosPage() {
 
   const saveInventarioMutation = useMutation({
     mutationFn: async (values: InventarioFormValues) => {
-      const payload: any = { ...values };
+      const payload: Partial<InventarioFormValues> = { ...values };
       // Si el usuario tiene una sucursal vinculada en el token, la forzamos
       // (igual que sucursalBaseId en clientes/page.tsx); el backend también
       // la fuerza vía RLS, esto solo evita mandar un valor inconsistente.
@@ -187,7 +215,7 @@ export default function ProductosPage() {
       inventarioForm.reset();
       toast({ title: 'Éxito', description: 'Inventario guardado correctamente.', variant: 'success' });
     },
-    onError: (err: any) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
   const deleteInventarioMutation = useMutation({
@@ -198,7 +226,7 @@ export default function ProductosPage() {
       setInventarioToDelete(null);
       toast({ title: 'Éxito', description: 'Registro de inventario eliminado.', variant: 'success' });
     },
-    onError: (err: any) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
   const handleAddInventario = () => {
@@ -207,11 +235,11 @@ export default function ProductosPage() {
     setInventarioModalOpen(true);
   };
 
-  const handleEditInventario = (inv: any) => {
+  const handleEditInventario = (inv: Inventario) => {
     setEditingInventario(inv);
     inventarioForm.reset({
       productoId: inv.productoId,
-      sucursalId: inv.sucursalId,
+      sucursalId: inv.sucursalId || undefined,
       cantidadActual: inv.cantidadActual,
       puntoReorden: inv.puntoReorden,
       ubicacionBodega: inv.ubicacionBodega || '',
@@ -219,18 +247,18 @@ export default function ProductosPage() {
     setInventarioModalOpen(true);
   };
 
-  const handleDeleteInventario = (inv: any) => {
+  const handleDeleteInventario = (inv: Inventario) => {
     setInventarioToDelete(inv);
     setConfirmInventarioOpen(true);
   };
 
-  const filteredInventarios = (inventarios || []).filter((inv: any) => {
+  const filteredInventarios = (inventarios as Inventario[] || []).filter((inv: Inventario) => {
     if (!searchInventario) return true;
     const lower = searchInventario.toLowerCase();
     return inv.producto?.nombre?.toLowerCase().includes(lower) || inv.sucursal?.nombre?.toLowerCase().includes(lower);
   });
 
-  const bajoStockCount = (inventarios || []).filter((inv: any) => inv.cantidadActual <= inv.puntoReorden).length;
+  const bajoStockCount = (inventarios as Inventario[] || []).filter((inv: Inventario) => inv.cantidadActual <= inv.puntoReorden).length;
 
   if (!token) return null;
 
@@ -238,8 +266,8 @@ export default function ProductosPage() {
     <Protect permission="productos:leer" fallbackType="redirect">
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Productos e Inventario</h2>
-          <p className="text-sm text-slate-500 mt-1">Gestiona el catálogo de productos y su stock por sucursal.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Productos e Inventario</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona el catálogo de productos y su stock por sucursal.</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -255,36 +283,38 @@ export default function ProductosPage() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
                   <input
                     type="text"
                     placeholder="Buscar producto o SKU..."
                     value={searchProducto}
                     onChange={(e) => setSearchProducto(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                    className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
                   />
                 </div>
-                <Protect permission="productos:crear">
+                
+            <PapeleraToggle showDeleted={showDeleted} setShowDeleted={setShowDeleted} />
+            <Protect permission="productos:crear">
                   <TenantRequiredButton onClick={handleAddProducto} icon={<Plus className="mr-2 h-4 w-4" />} label="Nuevo Producto" />
                 </Protect>
               </div>
 
               {loadingProductos ? (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
                   <div className="animate-pulse flex flex-col items-center gap-4">
-                    <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-                    <div className="h-4 w-32 bg-slate-200 rounded"></div>
+                    <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                    <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
                   </div>
                 </div>
               ) : filteredProductos.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-                  <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+                  <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
                     <Package className="w-6 h-6" />
                   </div>
-                  <p className="text-base font-semibold text-slate-900">
+                  <p className="text-base font-semibold text-slate-900 dark:text-white">
                     {searchProducto ? 'Ningún producto coincide con la búsqueda' : 'No hay productos registrados'}
                   </p>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     {searchProducto ? 'Prueba con otro nombre o SKU.' : 'Crea tu primer producto para empezar a llevar inventario.'}
                   </p>
                 </div>
@@ -299,37 +329,53 @@ export default function ProductosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProductos.map((producto: any) => (
-                      <TableRow key={producto.id}>
+                    {filteredProductos.map((producto: Producto) => (
+                      <TableRow key={producto.id} className={showDeleted ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                            <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                               <Package className="h-4 w-4" />
                             </div>
                             <div>
-                              <p className="font-semibold text-slate-900 text-sm">{producto.nombre}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{producto.sku || 'Sin SKU'}</p>
+                              <p className="font-semibold text-slate-900 dark:text-white text-sm">{producto.nombre}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{producto.sku || 'Sin SKU'}</p>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-bold text-slate-900">${Number(producto.precioVenta).toFixed(2)}</span>
+                          <span className="font-bold text-slate-900 dark:text-white">${Number(producto.precioVenta).toFixed(2)}</span>
                         </TableCell>
                         <TableCell>
                           {producto.estado === 'ACTIVO' ? <Badge variant="success">Activo</Badge> : <Badge variant="default">Inactivo</Badge>}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Protect permission="productos:actualizar">
-                              <Button variant="ghost" size="icon" onClick={() => handleEditProducto(producto)} className="text-slate-500 hover:text-indigo-600">
+                            {showDeleted ? (
+                        <Protect permission="sistema:restaurar">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => restoreItem(producto.id)} 
+                            disabled={isRestoring}
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                          >
+                            <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                          </Button>
+                        </Protect>
+                      ) : (
+                        <>
+                          <Protect permission="productos:actualizar">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditProducto(producto)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                                 <Edit className="h-4 w-4" />
                               </Button>
                             </Protect>
                             <Protect permission="productos:eliminar">
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteProducto(producto.id)} className="text-slate-500 hover:text-rose-600">
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteProducto(producto.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </Protect>
+                        </>
+                      )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -345,13 +391,13 @@ export default function ProductosPage() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
                   <input
                     type="text"
                     placeholder="Buscar por producto o sucursal..."
                     value={searchInventario}
                     onChange={(e) => setSearchInventario(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                    className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
                   />
                 </div>
                 <Protect permission="inventarios:crear">
@@ -360,21 +406,21 @@ export default function ProductosPage() {
               </div>
 
               {loadingInventarios ? (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
                   <div className="animate-pulse flex flex-col items-center gap-4">
-                    <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-                    <div className="h-4 w-32 bg-slate-200 rounded"></div>
+                    <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                    <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
                   </div>
                 </div>
               ) : filteredInventarios.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-                  <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+                  <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
                     <Warehouse className="w-6 h-6" />
                   </div>
-                  <p className="text-base font-semibold text-slate-900">
+                  <p className="text-base font-semibold text-slate-900 dark:text-white">
                     {searchInventario ? 'Ningún registro coincide con la búsqueda' : 'No hay inventario registrado'}
                   </p>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     {searchInventario ? 'Prueba con otro producto o sucursal.' : 'Registra el stock inicial de un producto en una sucursal.'}
                   </p>
                 </div>
@@ -391,41 +437,41 @@ export default function ProductosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInventarios.map((inv: any) => {
+                    {filteredInventarios.map((inv: Inventario) => {
                       const bajoStock = inv.cantidadActual <= inv.puntoReorden;
                       return (
                         <TableRow key={inv.id}>
                           <TableCell>
                             <div>
-                              <p className="font-semibold text-slate-900 text-sm">{inv.producto?.nombre}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{inv.producto?.sku || 'Sin SKU'}</p>
+                              <p className="font-semibold text-slate-900 dark:text-white text-sm">{inv.producto?.nombre}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{inv.producto?.sku || 'Sin SKU'}</p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs text-slate-600">{inv.sucursal?.nombre}</span>
+                            <span className="text-xs text-slate-600 dark:text-slate-400">{inv.sucursal?.nombre}</span>
                           </TableCell>
                           <TableCell>
                             {bajoStock ? (
                               <Badge variant="warning">Bajo stock ({inv.cantidadActual})</Badge>
                             ) : (
-                              <span className="font-bold text-slate-900">{inv.cantidadActual}</span>
+                              <span className="font-bold text-slate-900 dark:text-white">{inv.cantidadActual}</span>
                             )}
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs text-slate-600">{inv.puntoReorden}</span>
+                            <span className="text-xs text-slate-600 dark:text-slate-400">{inv.puntoReorden}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs text-slate-600">{inv.ubicacionBodega || '-'}</span>
+                            <span className="text-xs text-slate-600 dark:text-slate-400">{inv.ubicacionBodega || '-'}</span>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               <Protect permission="inventarios:actualizar">
-                                <Button variant="ghost" size="icon" onClick={() => handleEditInventario(inv)} className="text-slate-500 hover:text-indigo-600">
+                                <Button variant="ghost" size="icon" onClick={() => handleEditInventario(inv)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                                   <Edit className="h-4 w-4" />
                                 </Button>
                               </Protect>
                               <Protect permission="inventarios:eliminar">
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteInventario(inv)} className="text-slate-500 hover:text-rose-600">
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteInventario(inv)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </Protect>
@@ -447,7 +493,7 @@ export default function ProductosPage() {
           onOpenChange={setProductoModalOpen}
           title={editingProducto ? 'Editar Producto' : 'Nuevo Producto'}
           description={editingProducto ? 'Modifica los datos del producto.' : 'Agrega un nuevo producto al catálogo.'}
-          form={productoForm}
+          form={productoForm as any}
           sections={[
             {
               fields: [
@@ -459,7 +505,7 @@ export default function ProductosPage() {
               ],
             },
           ]}
-          onSubmit={onSubmitProducto}
+          onSubmit={onSubmitProducto as any}
           isPending={createProductoMutation.isPending || updateProductoMutation.isPending}
           submitLabel="Guardar Producto"
         />
@@ -469,7 +515,7 @@ export default function ProductosPage() {
           onOpenChange={setInventarioModalOpen}
           title={editingInventario ? 'Editar Inventario' : 'Registrar Stock'}
           description={editingInventario ? 'Modifica el stock de este producto en la sucursal.' : 'Registra la cantidad inicial de un producto en una sucursal.'}
-          form={inventarioForm}
+          form={inventarioForm as any}
           sections={[
             {
               fields: [
@@ -479,7 +525,7 @@ export default function ProductosPage() {
                   type: 'select',
                   placeholder: 'Selecciona un producto',
                   disabled: !!editingInventario,
-                  options: productosActivos.map((p: any) => ({ label: `${p.nombre}${p.sku ? ` (${p.sku})` : ''}`, value: p.id })),
+                  options: productosActivos.map((p: Producto) => ({ label: `${p.nombre}${p.sku ? ` (${p.sku})` : ''}`, value: p.id })),
                   colSpan: 2,
                 },
                 ...(!userSucursalId
@@ -489,7 +535,7 @@ export default function ProductosPage() {
                       type: 'select' as const,
                       placeholder: 'Selecciona una sucursal',
                       disabled: !!editingInventario,
-                      options: (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id })),
+                      options: (sucursales as Sucursal[] || []).map((s: Sucursal) => ({ label: s.nombre, value: s.id })),
                       colSpan: 2 as const,
                     }]
                   : []),
@@ -499,7 +545,7 @@ export default function ProductosPage() {
               ],
             },
           ]}
-          onSubmit={saveInventarioMutation.mutateAsync}
+          onSubmit={saveInventarioMutation.mutateAsync as any}
           isPending={saveInventarioMutation.isPending}
           submitLabel="Guardar Inventario"
         />

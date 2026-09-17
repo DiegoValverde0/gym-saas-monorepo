@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm, UseFormReturn, Controller } from 'react-hook-form';
+import { useForm, UseFormReturn, Controller, FieldValues, DefaultValues } from 'react-hook-form';
 import { ReactNode, useEffect } from 'react';
 import {
   Dialog,
@@ -37,7 +37,7 @@ export interface FieldConfig {
   disabled?: boolean;
   colSpan?: 1 | 2;
   allowDecimals?: boolean; // solo aplica a type: 'number' (ver NumberInput)
-  renderCustom?: (form: UseFormReturn<any>) => ReactNode;
+  renderCustom?: (form: UseFormReturn<FieldValues>) => ReactNode;
 }
 
 export interface FormSection {
@@ -51,18 +51,18 @@ export interface GlobalFormModalProps {
   // New API
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  form?: UseFormReturn<any>;
+  form?: UseFormReturn<FieldValues>;
   sections?: FormSection[];
   
   // Old API (Backward compatibility)
   isOpen?: boolean;
   onClose?: () => void;
   fields?: FieldConfig[];
-  defaultValues?: any;
+  defaultValues?: DefaultValues<FieldValues>;
   
   title: string;
   description?: ReactNode;
-  onSubmit: (values: any) => void;
+  onSubmit: (values: FieldValues) => void;
   isPending?: boolean;
   submitLabel?: string;
   submitLabelPending?: string;
@@ -103,7 +103,7 @@ function GlobalFormModalInner({
   submitLabel = 'Guardar',
   submitLabelPending = 'Guardando...',
   maxWidthClass = 'sm:max-w-[500px]',
-}: GlobalFormModalProps & { form: UseFormReturn<any> }) {
+}: GlobalFormModalProps & { form: UseFormReturn<FieldValues> }) {
   
   const actualOpen = open !== undefined ? open : (isOpen || false);
   const actualOnOpenChange = onOpenChange || ((val) => {
@@ -160,7 +160,25 @@ function GlobalFormModalInner({
             control={form.control}
             name={field.name}
             render={({ field: controllerField }) => (
-              <Select onValueChange={controllerField.onChange} value={controllerField.value || undefined} disabled={field.disabled}>
+              <Select
+                // @base-ui/react's Select decide si es controlado o no en el
+                // PRIMER render según si `value` es `undefined` -- pasar
+                // `controllerField.value || undefined` con un valor inicial
+                // '' lo deja no-controlado al montar, y en cuanto el usuario
+                // elige algo (value deja de ser '') "salta" a controlado a
+                // mitad de vida, algo que React no soporta (warning:
+                // "changing the uncontrolled value state ... to be
+                // controlled"). Con '' en vez de undefined queda controlado
+                // desde el primer render siempre. También se ignora el
+                // `null` que el Select puede emitir en onValueChange al
+                // perder el foco sin una selección real (ver su tipo:
+                // Value | null), para no pisar la selección ya hecha.
+                onValueChange={(value) => {
+                  if (value !== null) controllerField.onChange(value);
+                }}
+                value={controllerField.value ?? ''}
+                disabled={field.disabled}
+              >
                 <SelectTrigger className={`w-full ${inputClass}`}>
                   <SelectValue placeholder={field.placeholder || "Selecciona una opción"}>
                     {controllerField.value
@@ -224,9 +242,9 @@ function GlobalFormModalInner({
         </DialogHeader>
         <Separator className="my-2 shrink-0" />
         
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 flex-1 overflow-y-auto pr-1">
+        <form onSubmit={form.handleSubmit((v) => !isPending && onSubmit(v))} className="space-y-6 flex-1 overflow-y-auto pr-1">
           {actualSections.map((section, idx) => (
-            <div key={idx} className="space-y-4">
+            <div key={section.title || idx} className="space-y-4">
               {(section.title || section.icon) && (
                 <div className={idx > 0 ? "pt-2" : ""}>
                     <h4 className="text-sm font-semibold text-zinc-900 flex items-center gap-2 border-b pb-2">

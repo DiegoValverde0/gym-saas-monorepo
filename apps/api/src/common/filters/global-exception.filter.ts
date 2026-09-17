@@ -16,10 +16,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const responseBody = exception.getResponse() as any;
+      const responseBody = exception.getResponse() as string | { message?: string | string[], error?: string };
       
-      message = typeof responseBody === 'string' ? responseBody : responseBody.message || message;
-      errors = responseBody.error || null;
+      if (typeof responseBody === 'string') {
+        message = responseBody;
+      } else if (Array.isArray(responseBody.message)) {
+        errors = responseBody.message;
+        message = 'Error de validación';
+      } else {
+        message = responseBody.message || message;
+        errors = responseBody.error || null;
+      }
     } else if (exception instanceof Error) {
       // Manejar el error estricto de RLS
       if (exception.message.includes('[Seguridad RLS]')) {

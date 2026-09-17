@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisClientType } from 'redis';
+import { promisify } from 'util';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
@@ -11,10 +13,10 @@ export class UsuarioService {
   constructor(
       private prisma: PrismaService, 
       private cls: ClsService,
-      @Inject('REDIS_CLIENT') private readonly redisClient: any
+      @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType
   ) {}
 
-  async listarUsuarios(): Promise<any> {
+  async listarUsuarios() {
     return this.prisma.extendedClient.asignacionAcceso.findMany({
       include: {
         usuario: {
@@ -33,10 +35,12 @@ export class UsuarioService {
     });
   }
 
-  async registrarEmpleado(data: CreateEmpleadoDto): Promise<any> {
+  async registrarEmpleado(data: CreateEmpleadoDto) {
     // 1. Hashear contraseña
     const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.scryptSync(data.contrasena, salt, 64).toString('hex');
+    const scrypt = promisify(crypto.scrypt);
+    const hashBuffer = (await scrypt(data.contrasena, salt, 64)) as Buffer;
+    const hash = hashBuffer.toString('hex');
     const contrasenaHash = `${salt}:${hash}`;
 
     // 2. Crear usuario (Global) y su AsignacionAcceso (Tenant) en una transacción
@@ -132,9 +136,11 @@ export class UsuarioService {
       where: { id: asignacionId },
     });
 
-    // Invalidar caché de Redis
+    // Invalidar caché de Redis y revocar sesión activa
     const cacheKey = `rbac:${asignacion.usuarioId}:${asignacion.organizacionId}`;
     await this.redisClient.del(cacheKey);
+    // Revocar sesión activa por 7 días (TTL del JWT)
+    await this.redisClient.setEx(`user:revoked:${asignacion.usuarioId}`, 604800, 'true');
 
     return asignacion;
   }

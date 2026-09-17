@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { MembresiaService } from './membresia.service';
 import { CreateMembresiaDto } from './dto/create-membresia.dto';
 import { UpdateMembresiaDto } from './dto/update-membresia.dto';
@@ -7,6 +8,10 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
+interface RequestWithUser extends ExpressRequest {
+  user: { sub: string };
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('membresias')
 export class MembresiaController {
@@ -14,7 +19,7 @@ export class MembresiaController {
 
   @Post()
   @RequirePermissions({ accion: 'crear', modulo: 'membresias' })
-  create(@Body() createMembresiaDto: CreateMembresiaDto, @Req() req: any) {
+  create(@Body() createMembresiaDto: CreateMembresiaDto, @Req() req: RequestWithUser) {
     const userId = req.user.sub;
     return this.membresiaService.create(createMembresiaDto, userId);
   }

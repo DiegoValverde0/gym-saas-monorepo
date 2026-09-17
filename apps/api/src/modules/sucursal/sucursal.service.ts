@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateSucursalDto } from './dto/create-sucursal.dto';
 import { UpdateSucursalDto } from './dto/update-sucursal.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -12,7 +13,7 @@ export class SucursalService {
   async create(createSucursalDto: CreateSucursalDto) {
     return this.prisma.extendedClient.sucursal.create({
       // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-      data: createSucursalDto as any,
+      data: createSucursalDto as unknown as Prisma.SucursalUncheckedCreateInput,
     });
   }
 

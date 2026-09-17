@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductoDto } from './dto/create-producto.dto';
@@ -11,17 +11,10 @@ export class ProductoService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createProductoDto: CreateProductoDto) {
-    try {
-      return await this.prisma.extendedClient.producto.create({
-        // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-        data: createProductoDto as any,
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Ya existe un producto con ese SKU en esta organización.');
-      }
-      throw error;
-    }
+    return await this.prisma.extendedClient.producto.create({
+      // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+      data: createProductoDto as unknown as Prisma.ProductoUncheckedCreateInput,
+    });
   }
 
   async findAll(query?: PaginationQueryDto) {
@@ -49,17 +42,10 @@ export class ProductoService {
 
   async update(id: string, updateProductoDto: UpdateProductoDto) {
     await this.findOne(id);
-    try {
-      return await this.prisma.extendedClient.producto.update({
-        where: { id },
-        data: updateProductoDto,
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Ya existe un producto con ese SKU en esta organización.');
-      }
-      throw error;
-    }
+    return await this.prisma.extendedClient.producto.update({
+      where: { id },
+      data: updateProductoDto,
+    });
   }
 
   async remove(id: string) {

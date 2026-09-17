@@ -13,25 +13,25 @@ export class UsuarioController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'usuarios' })
-  async listarUsuarios(): Promise<any> {
+  async listarUsuarios() {
     return this.usuarioService.listarUsuarios();
   }
 
   @Post('empleado')
   @RequirePermissions({ accion: 'crear', modulo: 'usuarios' })
-  async registrarEmpleado(@Body() data: CreateEmpleadoDto): Promise<any> {
+  async registrarEmpleado(@Body() data: CreateEmpleadoDto) {
     return this.usuarioService.registrarEmpleado(data);
   }
 
   @Put('asignacion/:id')
   @RequirePermissions({ accion: 'actualizar', modulo: 'usuarios' })
-  async updateAsignacion(@Param('id') id: string, @Body() body: UpdateAsignacionDto): Promise<any> {
+  async updateAsignacion(@Param('id') id: string, @Body() body: UpdateAsignacionDto) {
     return this.usuarioService.updateAsignacion(id, body.rolId, body.sucursalId);
   }
 
   @Delete('asignacion/:id')
   @RequirePermissions({ accion: 'eliminar', modulo: 'usuarios' })
-  async removerEmpleado(@Param('id') id: string): Promise<any> {
+  async removerEmpleado(@Param('id') id: string) {
     return this.usuarioService.removerEmpleado(id);
   }
 }

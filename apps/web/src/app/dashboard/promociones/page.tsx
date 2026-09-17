@@ -13,10 +13,11 @@ import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { Protect } from '@/components/ui/protect';
+import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Tag, Plus, Edit, Trash2, Calendar, Search } from 'lucide-react';
+import { Tag, Plus, Edit, Trash2, Calendar, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const promocionSchema = z.object({
@@ -51,6 +52,8 @@ export default function PromocionesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
 
+  const [showDeleted, setShowDeleted] = useState(false);
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -76,8 +79,8 @@ export default function PromocionesPage() {
   const watchTipoDescuento = form.watch('tipoDescuento');
 
   const { data: promociones, isLoading } = useQuery({
-    queryKey: ['promociones', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/promociones')),
+    queryKey: ['promociones', activeTenantId, showDeleted],
+    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/promociones?deleted=true' : '/promociones')),
     enabled: !!token,
   });
 
@@ -137,9 +140,10 @@ export default function PromocionesPage() {
     }
   });
 
-  const { deleteItem } = useSoftDelete({
-    queryKey: ['promociones'],
+  const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
+    queryKey: ['promociones', activeTenantId, showDeleted],
     endpoint: 'promociones',
+    modelName: 'promocion',
     itemName: 'La promoción'
   });
 
@@ -242,21 +246,24 @@ export default function PromocionesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Promociones y Ofertas</h2>
-            <p className="text-sm text-slate-500 mt-1">Administra los descuentos temporales para atraer más clientes.</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Promociones y Ofertas</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Administra los descuentos temporales para atraer más clientes.</p>
           </div>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Buscar promoción..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
               />
             </div>
+            
+            <PapeleraToggle showDeleted={showDeleted} setShowDeleted={setShowDeleted} />
+
             <Protect permission="promociones:crear">
               <TenantRequiredButton 
                 onClick={handleAddNew} 
@@ -272,30 +279,30 @@ export default function PromocionesPage() {
           onOpenChange={setIsDialogOpen}
           title={editingPromocion ? 'Editar Promoción' : 'Nueva Promoción'}
           description={editingPromocion ? 'Ajusta los detalles de la oferta.' : 'Crea una nueva campaña de descuentos.'}
-          form={form}
+          form={form as any}
           sections={formSections}
-          onSubmit={onSubmit}
+          onSubmit={onSubmit as any}
           isPending={createMutation.isPending || updateMutation.isPending}
           submitLabel="Guardar Promoción"
           maxWidthClass="sm:max-w-[500px]"
         />
 
         {isLoading ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
             <div className="animate-pulse flex flex-col items-center gap-4">
-              <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-              <div className="h-4 w-32 bg-slate-200 rounded"></div>
+              <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
             </div>
           </div>
         ) : filteredPromociones.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
               <Tag className="w-6 h-6" />
             </div>
-            <p className="text-base font-semibold text-slate-900">
+            <p className="text-base font-semibold text-slate-900 dark:text-white">
               {searchTerm ? 'Ninguna promoción coincide con la búsqueda' : 'No hay promociones registradas'}
             </p>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primera promoción para atraer clientes.'}
             </p>
           </div>
@@ -315,24 +322,24 @@ export default function PromocionesPage() {
                 const isActive = promocion.estado === 'ACTIVO' && new Date(promocion.fechaFin) >= new Date();
                 
                 return (
-                  <TableRow key={promocion.id} className={!isActive ? 'opacity-70' : ''}>
+                  <TableRow key={promocion.id} className={showDeleted ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : (!isActive ? 'opacity-70' : '')}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                        <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                           <Tag className="h-4 w-4" />
                         </div>
-                        <p className="font-semibold text-slate-900 text-sm">{promocion.nombre}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{promocion.nombre}</p>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-bold text-slate-900 text-lg">
+                      <span className="font-bold text-slate-900 dark:text-white text-lg">
                         {promocion.porcentajeDescuento ? `-${Number(promocion.porcentajeDescuento)}%` : `-$${Number(promocion.montoDescuentoFijo).toFixed(2)}`}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1 text-xs text-slate-600">
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400"/> Del: {formatDateDisplay(promocion.fechaInicio)}</span>
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400"/> Al: {formatDateDisplay(promocion.fechaFin)}</span>
+                      <div className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500"/> Del: {formatDateDisplay(promocion.fechaInicio)}</span>
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500"/> Al: {formatDateDisplay(promocion.fechaFin)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -340,16 +347,32 @@ export default function PromocionesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Protect permission="promociones:actualizar">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(promocion)} className="text-slate-500 hover:text-indigo-600">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </Protect>
-                        <Protect permission="promociones:eliminar">
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(promocion.id)} className="text-slate-500 hover:text-rose-600">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </Protect>
+                        {showDeleted ? (
+                          <Protect permission="sistema:restaurar">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => restoreItem(promocion.id)} 
+                              disabled={isRestoring}
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                            </Button>
+                          </Protect>
+                        ) : (
+                          <>
+                            <Protect permission="promociones:actualizar">
+                              <Button variant="ghost" size="icon" onClick={() => handleEdit(promocion)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                            <Protect permission="promociones:eliminar">
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(promocion.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

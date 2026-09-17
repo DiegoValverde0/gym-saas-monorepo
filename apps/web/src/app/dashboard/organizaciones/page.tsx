@@ -28,6 +28,13 @@ const createSchema = z.object({
 
 type CreateFormValues = z.infer<typeof createSchema>;
 
+interface Organizacion {
+  id: string;
+  nombre: string;
+  estado: string;
+  createdAt: string;
+}
+
 // El superadmin ya no puede editar los datos de una organización (ver
 // Auditoria_Claude.md): solo puede crearla con su admin, o suspenderla /
 // reactivarla. No existe más un formulario de "editar organización".
@@ -78,7 +85,7 @@ export default function OrganizacionesPage() {
       createForm.reset();
       toast({ title: 'Éxito', description: 'Organización registrada correctamente.', variant: 'success' });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   });
@@ -89,7 +96,7 @@ export default function OrganizacionesPage() {
       queryClient.invalidateQueries({ queryKey: ['organizaciones'] });
       toast({ title: 'Reactivada', description: 'La organización ha sido reactivada.', variant: 'success' });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   });
@@ -110,7 +117,7 @@ export default function OrganizacionesPage() {
           <Button
             variant="outline"
             size="sm"
-            className="border-white text-zinc-900 bg-white hover:bg-zinc-100"
+            className="border-white text-zinc-900 dark:text-white bg-white dark:bg-slate-900 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => restoreMutation.mutate(data.id)}
           >
             Deshacer
@@ -118,7 +125,7 @@ export default function OrganizacionesPage() {
         )
       });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   });
@@ -144,7 +151,7 @@ export default function OrganizacionesPage() {
 
   if (!token) return null;
 
-  const filteredOrganizaciones = (organizaciones || []).filter((org: any) => {
+  const filteredOrganizaciones = (organizaciones as Organizacion[] || []).filter((org: Organizacion) => {
     if (!searchTerm) return true;
     return org.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -153,19 +160,19 @@ export default function OrganizacionesPage() {
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Registro de Organizaciones</h2>
-          <p className="text-sm text-slate-500 mt-1">Panel de SuperAdmin: Administra a todos los clientes del sistema SaaS.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Registro de Organizaciones</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Panel de SuperAdmin: Administra a todos los clientes del sistema SaaS.</p>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
               placeholder="Buscar organización..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
             />
           </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -183,53 +190,53 @@ export default function OrganizacionesPage() {
 
             <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-5 py-2">
                 <div className="space-y-2">
-                  <Label htmlFor="nombreOrg" className="text-zinc-700">Nombre del Gimnasio</Label>
+                  <Label htmlFor="nombreOrg" className="text-zinc-700 dark:text-zinc-300">Nombre del Gimnasio</Label>
                   <Input 
                     id="nombreOrg" 
                     {...createForm.register('nombreOrg')} 
                     placeholder="Ej. Titan Gym" 
-                    className="border-zinc-300 focus-visible:ring-indigo-500"
+                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
                     aria-invalid={!!createForm.formState.errors.nombreOrg}
                   />
-                  {createForm.formState.errors.nombreOrg && <p className="text-sm text-red-500">{createForm.formState.errors.nombreOrg.message}</p>}
+                  {createForm.formState.errors.nombreOrg && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.nombreOrg.message}</p>}
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="nombreAdmin" className="text-zinc-700">Nombre del Dueño/Admin</Label>
+                  <Label htmlFor="nombreAdmin" className="text-zinc-700 dark:text-zinc-300">Nombre del Dueño/Admin</Label>
                   <Input 
                     id="nombreAdmin" 
                     {...createForm.register('nombreAdmin')} 
                     placeholder="Ej. Juan Pérez" 
-                    className="border-zinc-300 focus-visible:ring-indigo-500"
+                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
                     aria-invalid={!!createForm.formState.errors.nombreAdmin}
                   />
-                  {createForm.formState.errors.nombreAdmin && <p className="text-sm text-red-500">{createForm.formState.errors.nombreAdmin.message}</p>}
+                  {createForm.formState.errors.nombreAdmin && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.nombreAdmin.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="correo" className="text-zinc-700">Correo Electrónico (Admin)</Label>
+                  <Label htmlFor="correo" className="text-zinc-700 dark:text-zinc-300">Correo Electrónico (Admin)</Label>
                   <Input 
                     id="correo" 
                     type="email"
                     {...createForm.register('correo')} 
                     placeholder="ejemplo@gym.com" 
-                    className="border-zinc-300 focus-visible:ring-indigo-500"
+                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
                     aria-invalid={!!createForm.formState.errors.correo}
                   />
-                  {createForm.formState.errors.correo && <p className="text-sm text-red-500">{createForm.formState.errors.correo.message}</p>}
+                  {createForm.formState.errors.correo && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.correo.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="contrasena" className="text-zinc-700">Contraseña (Admin)</Label>
+                  <Label htmlFor="contrasena" className="text-zinc-700 dark:text-zinc-300">Contraseña (Admin)</Label>
                   <Input 
                     id="contrasena" 
                     type="password"
                     {...createForm.register('contrasena')} 
                     placeholder="******" 
-                    className="border-zinc-300 focus-visible:ring-indigo-500"
+                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
                     aria-invalid={!!createForm.formState.errors.contrasena}
                   />
-                  {createForm.formState.errors.contrasena && <p className="text-sm text-red-500">{createForm.formState.errors.contrasena.message}</p>}
+                  {createForm.formState.errors.contrasena && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.contrasena.message}</p>}
                 </div>
 
                 <DialogFooter className="mt-6 pt-4 border-t">
@@ -248,21 +255,21 @@ export default function OrganizacionesPage() {
       </div>
 
       {isLoading ? (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
           <div className="animate-pulse flex flex-col items-center gap-4">
-            <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-            <div className="h-4 w-32 bg-slate-200 rounded"></div>
+            <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+            <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
           </div>
         </div>
       ) : filteredOrganizaciones.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-          <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+          <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
             <Globe className="w-6 h-6" />
           </div>
-          <p className="text-base font-semibold text-slate-900">
+          <p className="text-base font-semibold text-slate-900 dark:text-white">
             {searchTerm ? 'Ninguna organización coincide con la búsqueda' : 'No hay organizaciones registradas'}
           </p>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {searchTerm ? 'Prueba con otro nombre.' : 'Registra el primer cliente del sistema.'}
           </p>
         </div>
@@ -277,16 +284,16 @@ export default function OrganizacionesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredOrganizaciones.map((org: any) => (
+            {filteredOrganizaciones.map((org: Organizacion) => (
               <TableRow key={org.id} className={org.estado === 'SUSPENDIDO' ? 'opacity-60' : ''}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                    <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                       <Globe className="h-4 w-4" />
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 text-sm">{org.nombre}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">ID: {org.id.substring(0, 8)}...</p>
+                      <p className="font-semibold text-slate-900 dark:text-white text-sm">{org.nombre}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ID: {org.id.substring(0, 8)}...</p>
                     </div>
                   </div>
                 </TableCell>
@@ -296,15 +303,15 @@ export default function OrganizacionesPage() {
                   {org.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
                 </TableCell>
                 <TableCell>
-                  <span className="text-xs text-slate-600">{new Date(org.createdAt).toLocaleDateString()}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{new Date(org.createdAt).toLocaleDateString()}</span>
                 </TableCell>
                 <TableCell className="text-right">
                   {org.estado === 'SUSPENDIDO' ? (
-                    <Button variant="ghost" size="icon" onClick={() => restoreMutation.mutate(org.id)} title="Reactivar" className="text-slate-500 hover:text-emerald-600">
+                    <Button variant="ghost" size="icon" onClick={() => restoreMutation.mutate(org.id)} title="Reactivar" className="text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400">
                       <RotateCcw className="h-4 w-4" />
                     </Button>
                   ) : (
-                    <Button variant="ghost" size="icon" onClick={() => handleSuspender(org.id)} title="Suspender" className="text-slate-500 hover:text-rose-600">
+                    <Button variant="ghost" size="icon" onClick={() => handleSuspender(org.id)} title="Suspender" className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
                       <Ban className="h-4 w-4" />
                     </Button>
                   )}

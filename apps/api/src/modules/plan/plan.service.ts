@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -45,14 +46,16 @@ export class PlanService {
   async create(createPlanDto: CreatePlanDto) {
     this.validarReglasDeNegocio(createPlanDto);
 
-    const data: any = { ...createPlanDto };
+    const data: Prisma.PlanUncheckedCreateInput = { 
+      ...(createPlanDto as unknown as Prisma.PlanUncheckedCreateInput)
+    };
 
     // Convertir horas a objetos Date falsos solo para la hora, Prisma espera ISO string si es DateTime? @db.Time
-    if (data.horaInicioAcceso) {
-      data.horaInicioAcceso = new Date(`1970-01-01T${data.horaInicioAcceso}:00Z`);
+    if (createPlanDto.horaInicioAcceso) {
+      data.horaInicioAcceso = new Date(`1970-01-01T${createPlanDto.horaInicioAcceso}:00Z`);
     }
-    if (data.horaFinAcceso) {
-      data.horaFinAcceso = new Date(`1970-01-01T${data.horaFinAcceso}:00Z`);
+    if (createPlanDto.horaFinAcceso) {
+      data.horaFinAcceso = new Date(`1970-01-01T${createPlanDto.horaFinAcceso}:00Z`);
     }
 
     return this.prisma.extendedClient.plan.create({
@@ -94,13 +97,15 @@ export class PlanService {
       diasPermitidos: updatePlanDto.diasPermitidos ?? planActual.diasPermitidos,
     });
 
-    const data: any = { ...updatePlanDto };
+    const data: Prisma.PlanUncheckedUpdateInput = { 
+      ...(updatePlanDto as unknown as Prisma.PlanUncheckedUpdateInput)
+    };
 
-    if (data.horaInicioAcceso) {
-      data.horaInicioAcceso = new Date(`1970-01-01T${data.horaInicioAcceso}:00Z`);
+    if (updatePlanDto.horaInicioAcceso) {
+      data.horaInicioAcceso = new Date(`1970-01-01T${updatePlanDto.horaInicioAcceso}:00Z`);
     }
-    if (data.horaFinAcceso) {
-      data.horaFinAcceso = new Date(`1970-01-01T${data.horaFinAcceso}:00Z`);
+    if (updatePlanDto.horaFinAcceso) {
+      data.horaFinAcceso = new Date(`1970-01-01T${updatePlanDto.horaFinAcceso}:00Z`);
     }
 
     return this.prisma.extendedClient.plan.update({

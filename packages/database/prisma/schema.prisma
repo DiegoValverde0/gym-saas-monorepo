@@ -185,6 +185,8 @@ model Organizacion {
   nombre               String             @db.VarChar(150) // nombre comercial / marca
   razonSocial          String?            @map("razon_social") @db.VarChar(200) // razon social legal, si aplica
   identificacionFiscal String?            @unique @map("identificacion_fiscal") @db.VarChar(50) // NIT (opcional: gyms informales pueden no tenerlo)
+  telefono             String?            @db.VarChar(30)
+  emailContacto        String?            @map("email_contacto") @db.VarChar(150)
   moneda               String             @default("BOB") @db.Char(3)
   zonaHoraria          String             @default("America/La_Paz") @map("zona_horaria") @db.VarChar(50)
   configuracion        Json?              @db.JsonB // reglas de negocio especificas del tenant
@@ -489,8 +491,12 @@ model ClaseProgramada {
 
   organizacion Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   sucursal     Sucursal       @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
-  disciplina   Disciplina?    @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
-  entrenador   PerfilStaff?   @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // SetNull es inválido aquí: es una FK compuesta y organizacionId es NOT NULL
+  // en este modelo, así que Postgres no puede poner solo disciplinaId/entrenadorId
+  // en null al borrar la fila referenciada (violaría el NOT NULL de organizacionId).
+  // Restrict obliga a desasignar la disciplina/entrenador antes de poder borrarla.
+  disciplina   Disciplina?    @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  entrenador   PerfilStaff?   @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   reservas     ReservaClase[]
 
   @@unique([id, organizacionId])
@@ -549,7 +555,8 @@ model Cliente {
   creadoPorId String?   @map("creado_por_id") @db.Uuid
 
   organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
-  sucursalBase        Sucursal?            @relation(fields: [sucursalBaseId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  sucursalBase        Sucursal?            @relation(fields: [sucursalBaseId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   creadoPor           Usuario?             @relation("ClientesCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
   reservasClase       ReservaClase[]
   membresias          Membresia[]
@@ -637,10 +644,11 @@ model Membresia {
   creadoPorId String?   @map("creado_por_id") @db.Uuid
 
   organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
-  sucursal            Sucursal?            @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  sucursal            Sucursal?            @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   cliente             Cliente              @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
   plan                Plan                 @relation(fields: [planId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  promocion           Promocion?           @relation(fields: [promocionId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  promocion           Promocion?           @relation(fields: [promocionId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   creadoPor           Usuario?             @relation("MembresiasCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
   registrosAsistencia RegistroAsistencia[]
   detallesTransaccion DetalleTransaccion[]
@@ -692,8 +700,9 @@ model RegistroAsistencia {
 
   organizacion  Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   sucursal      Sucursal     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
-  cliente       Cliente?     @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
-  membresia     Membresia?   @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  cliente       Cliente?     @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  membresia     Membresia?   @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   registradoPor Usuario?     @relation("AsistenciasRegistradas", fields: [registradoPorId], references: [id], onDelete: SetNull)
 
   @@index([organizacionId, sucursalId, fechaHoraIngreso])
@@ -771,7 +780,8 @@ model Transaccion {
   organizacion Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   sucursal     Sucursal             @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   aperturaCaja AperturaCaja?        @relation(fields: [aperturaCajaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  cliente      Cliente?             @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  cliente      Cliente?             @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   creadoPor    Usuario?             @relation("TransaccionesCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
   pagos        Pago[]
   detalles     DetalleTransaccion[]
@@ -800,7 +810,8 @@ model Pago {
 
   organizacion   Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   transaccion    Transaccion     @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
-  cuentaBancaria CuentaBancaria? @relation(fields: [cuentaBancariaId, organizacionId], references: [id, organizacionId], onDelete: SetNull)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  cuentaBancaria CuentaBancaria? @relation(fields: [cuentaBancariaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
 
   @@index([organizacionId, transaccionId])
   @@index([metodoPago])

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsUUID, IsDateString } from 'class-validator';
 
 export class CreateMembresiaDto {
   @IsUUID()

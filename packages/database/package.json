@@ -9,7 +9,7 @@
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@prisma/client": "^5.0.0"
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
     "prisma": "^5.0.0",

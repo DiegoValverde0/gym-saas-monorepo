@@ -35,7 +35,7 @@ export class ClientesController {
   @Patch(':id')
   @RequirePermissions({ accion: 'actualizar', modulo: 'clientes' })
   async update(@Param('id') id: string, @Body() updateClienteDto: UpdateClienteDto) {
-    return this.clientesService.update(id, updateClienteDto as any);
+    return this.clientesService.update(id, updateClienteDto);
   }
 
   @Delete(':id')

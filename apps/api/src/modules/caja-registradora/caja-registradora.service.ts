@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateCajaRegistradoraDto } from './dto/create-caja-registradora.dto';
 import { UpdateCajaRegistradoraDto } from './dto/update-caja-registradora.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -16,7 +17,7 @@ export class CajaRegistradoraService {
       data: {
         ...createCajaRegistradoraDto,
         creadoPorId: usuarioId, // Firma de auditoría
-      } as any,
+      } as unknown as Prisma.CajaRegistradoraUncheckedCreateInput,
     });
   }
 

@@ -11,7 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
-import { GlobalFormModal } from '@/components/ui/global-form-modal';
+import { PlanWizardModal } from '@/components/ui/plan-wizard-modal';
 import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Input } from '@/components/ui/input';
@@ -19,34 +19,9 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, Plus, Edit, Trash2, Clock, CalendarDays, Search } from 'lucide-react';
+import { Briefcase, Plus, Edit, Trash2, Clock, CalendarDays, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-const planSchema = z.object({
-  nombre: z.string({ message: "El nombre es obligatorio" }).min(3, "Mínimo 3 caracteres"),
-  tipoPlan: z.enum(['TIEMPO', 'SESIONES', 'VISITA']),
-  duracionDias: z.coerce.number().min(1).optional().or(z.literal('')),
-  limiteDiasSemana: z.coerce.number().optional().or(z.literal('')),
-  diasPermitidos: z.array(z.number()).default([]),
-  cantidadSesiones: z.coerce.number().optional().or(z.literal('')),
-  horaInicioAcceso: z.string().optional(),
-  horaFinAcceso: z.string().optional(),
-  esRenovableAutomaticamente: z.boolean().default(false),
-  precio: z.coerce.number().min(0, "El precio no puede ser negativo"),
-  estado: z.string().default('ACTIVO'),
-});
-
-type PlanFormValues = z.infer<typeof planSchema>;
-
-const DAYS_OF_WEEK = [
-  { label: 'Lunes', value: 1 },
-  { label: 'Martes', value: 2 },
-  { label: 'Miércoles', value: 3 },
-  { label: 'Jueves', value: 4 },
-  { label: 'Viernes', value: 5 },
-  { label: 'Sábado', value: 6 },
-  { label: 'Domingo', value: 0 },
-];
+import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 
 export default function PlanesPage() {
   const queryClient = useQueryClient();
@@ -55,6 +30,7 @@ export default function PlanesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   const { activeTenantId } = useTenantStore();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -65,34 +41,14 @@ export default function PlanesPage() {
     isDestructive: false
   });
 
-  const form = useForm<PlanFormValues>({
-    resolver: zodResolver(planSchema) as any,
-    mode: 'onChange',
-    defaultValues: {
-      nombre: '',
-      tipoPlan: 'TIEMPO',
-      duracionDias: 30,
-      cantidadSesiones: '',
-      limiteDiasSemana: '',
-      diasPermitidos: [],
-      horaInicioAcceso: '',
-      horaFinAcceso: '',
-      esRenovableAutomaticamente: false,
-      precio: 0,
-      estado: 'ACTIVO',
-    },
-  });
-
-  const watchTipoPlan = form.watch('tipoPlan');
-
   const { data: planes, isLoading } = useQuery({
-    queryKey: ['planes', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/planes')),
+    queryKey: ['planes', activeTenantId, showDeleted],
+    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/planes?deleted=true' : '/planes')),
     enabled: !!token,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: PlanFormValues) => {
+    mutationFn: async (values: any) => {
       const payload: any = { ...values };
       if (!payload.duracionDias) delete payload.duracionDias;
       if (!payload.cantidadSesiones) delete payload.cantidadSesiones;
@@ -105,7 +61,6 @@ export default function PlanesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planes'] });
       setIsDialogOpen(false);
-      form.reset();
       toast({ title: 'Éxito', description: 'Plan creado correctamente.', variant: 'success' });
     },
     onError: (err: any) => {
@@ -114,7 +69,7 @@ export default function PlanesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { id: string, values: PlanFormValues }) => {
+    mutationFn: async (data: { id: string, values: any }) => {
       const payload: any = { ...data.values };
       if (!payload.duracionDias) payload.duracionDias = null;
       if (!payload.cantidadSesiones) payload.cantidadSesiones = null;
@@ -128,7 +83,6 @@ export default function PlanesPage() {
       queryClient.invalidateQueries({ queryKey: ['planes'] });
       setIsDialogOpen(false);
       setEditingPlan(null);
-      form.reset();
       toast({ title: 'Éxito', description: 'Plan actualizado correctamente.', variant: 'success' });
     },
     onError: (err: any) => {
@@ -136,13 +90,14 @@ export default function PlanesPage() {
     }
   });
 
-  const { deleteItem } = useSoftDelete({
-    queryKey: ['planes'],
+  const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
+    queryKey: ['planes', activeTenantId, showDeleted],
     endpoint: 'planes',
+    modelName: 'plan',
     itemName: 'El plan'
   });
 
-  const onSubmit = (values: PlanFormValues) => {
+  const onSubmit = (values: any) => {
     if (editingPlan) {
       updateMutation.mutate({ id: editingPlan.id, values });
     } else {
@@ -153,42 +108,17 @@ export default function PlanesPage() {
   const parseTime = (isoString: string) => {
     if (!isoString) return '';
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
     return date.toISOString().substring(11, 16);
   };
 
   const handleEdit = (plan: any) => {
     setEditingPlan(plan);
-    form.reset({
-      nombre: plan.nombre,
-      tipoPlan: plan.tipoPlan,
-      duracionDias: plan.duracionDias || '',
-      cantidadSesiones: plan.cantidadSesiones || '',
-      limiteDiasSemana: plan.limiteDiasSemana || '',
-      diasPermitidos: plan.diasPermitidos || [],
-      horaInicioAcceso: parseTime(plan.horaInicioAcceso),
-      horaFinAcceso: parseTime(plan.horaFinAcceso),
-      esRenovableAutomaticamente: plan.esRenovableAutomaticamente || false,
-      precio: Number(plan.precio),
-      estado: plan.estado || 'ACTIVO',
-    });
     setIsDialogOpen(true);
   };
 
   const handleAddNew = () => {
     setEditingPlan(null);
-    form.reset({
-      nombre: '',
-      tipoPlan: 'TIEMPO',
-      duracionDias: 30,
-      cantidadSesiones: '',
-      limiteDiasSemana: '',
-      diasPermitidos: [],
-      horaInicioAcceso: '',
-      horaFinAcceso: '',
-      esRenovableAutomaticamente: false,
-      precio: 0,
-      estado: 'ACTIVO',
-    });
     setIsDialogOpen(true);
   };
 
@@ -209,111 +139,27 @@ export default function PlanesPage() {
     return plan.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const formSections: any[] = [
-    {
-      title: 'Datos Generales',
-      fields: [
-        { name: 'nombre', label: 'Nombre del Plan', type: 'text', placeholder: 'Ej. Plan Mensual Ilimitado', colSpan: 2 },
-        { name: 'tipoPlan', label: 'Tipo de Plan', type: 'select', options: [{ label: 'Por Tiempo', value: 'TIEMPO' }, { label: 'Por Sesiones', value: 'SESIONES' }, { label: 'Pase de Visita', value: 'VISITA' }] },
-        { name: 'precio', label: 'Precio Total', type: 'number', placeholder: '0.00' },
-        { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }] },
-        { name: 'esRenovableAutomaticamente', label: 'Renovación Automática', type: 'switch', description: 'El plan se renovará automáticamente al vencer.' },
-      ]
-    },
-    {
-      title: 'Reglas y Restricciones',
-      fields: []
-    }
-  ];
-
-  if (watchTipoPlan === 'TIEMPO') {
-    formSections[1].fields.push({ name: 'duracionDias', label: 'Duración (Días)', type: 'number', placeholder: 'Ej. 30' });
-  } else if (watchTipoPlan === 'SESIONES') {
-    formSections[1].fields.push({ name: 'cantidadSesiones', label: 'Cantidad de Sesiones', type: 'number', placeholder: 'Ej. 12' });
-  }
-
-  formSections[1].fields.push(
-    { name: 'limiteDiasSemana', label: 'Límite días por semana (Opcional)', type: 'number', placeholder: 'Ej. 3' },
-    {
-      name: 'horasAcceso',
-      label: 'Horario Restringido',
-      type: 'custom',
-      colSpan: 2,
-      renderCustom: (f: any) => (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Hora Inicio (Opcional)</Label>
-            <Input type="time" {...f.register('horaInicioAcceso')} className="bg-white" />
-          </div>
-          <div className="space-y-2">
-            <Label>Hora Fin (Opcional)</Label>
-            <Input type="time" {...f.register('horaFinAcceso')} className="bg-white" />
-          </div>
-        </div>
-      )
-    },
-    {
-      name: 'diasPermitidos',
-      label: 'Días Permitidos (Opcional, vacío = Todos)',
-      type: 'custom',
-      colSpan: 2,
-      renderCustom: (f: any) => (
-        <div className="space-y-3">
-          <Label className="text-zinc-700">Días de acceso permitido</Label>
-          <div className="flex flex-wrap gap-4">
-            <Controller
-              control={f.control}
-              name="diasPermitidos"
-              render={({ field }) => (
-                <>
-                  {DAYS_OF_WEEK.map((day) => {
-                    const isChecked = Array.isArray(field.value) && field.value.includes(day.value);
-                    return (
-                      <div key={day.value} className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={`day-${day.value}`} 
-                          checked={isChecked}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              field.onChange([...(field.value || []), day.value]);
-                            } else {
-                              field.onChange((field.value || []).filter((v: number) => v !== day.value));
-                            }
-                          }}
-                        />
-                        <Label htmlFor={`day-${day.value}`} className="cursor-pointer font-normal">{day.label}</Label>
-                      </div>
-                    )
-                  })}
-                </>
-              )}
-            />
-          </div>
-        </div>
-      )
-    }
-  );
-
   return (
     <Protect permission="planes:leer" fallbackType="redirect">
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Planes de Gimnasio</h2>
-            <p className="text-sm text-slate-500 mt-1">Configura las membresías y reglas de acceso.</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Planes de Gimnasio</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configura las membresías y reglas de acceso.</p>
           </div>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Buscar plan..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
               />
             </div>
+            <PapeleraToggle showDeleted={showDeleted} setShowDeleted={setShowDeleted} />
             <Protect permission="planes:crear">
               <TenantRequiredButton 
                 onClick={handleAddNew} 
@@ -324,35 +170,30 @@ export default function PlanesPage() {
           </div>
         </div>
 
-        <GlobalFormModal
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          title={editingPlan ? 'Editar Plan' : 'Nuevo Plan'}
-          description={editingPlan ? 'Modifica las reglas comerciales del plan.' : 'Agrega una nueva oferta comercial para tus clientes.'}
-          form={form}
-          sections={formSections}
-          onSubmit={onSubmit}
+        <PlanWizardModal
+          isOpen={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          onSubmit={onSubmit as any}
+          initialData={editingPlan}
           isPending={createMutation.isPending || updateMutation.isPending}
-          submitLabel="Guardar Plan"
-          maxWidthClass="sm:max-w-[700px]"
         />
 
         {isLoading ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
             <div className="animate-pulse flex flex-col items-center gap-4">
-              <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-              <div className="h-4 w-32 bg-slate-200 rounded"></div>
+              <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+              <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
             </div>
           </div>
         ) : filteredPlanes.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
               <Briefcase className="w-6 h-6" />
             </div>
-            <p className="text-base font-semibold text-slate-900">
+            <p className="text-base font-semibold text-slate-900 dark:text-white">
               {searchTerm ? 'Ningún plan coincide con la búsqueda' : 'No hay planes registrados'}
             </p>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primer plan para comenzar a vender membresías.'}
             </p>
           </div>
@@ -370,29 +211,29 @@ export default function PlanesPage() {
             </TableHeader>
             <TableBody>
               {filteredPlanes.map((plan: any) => (
-                <TableRow key={plan.id}>
+                <TableRow key={plan.id} className={showDeleted ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                         <Briefcase className="h-4 w-4" />
                       </div>
-                      <p className="font-semibold text-slate-900 text-sm">{plan.nombre}</p>
+                      <p className="font-semibold text-slate-900 dark:text-white text-sm">{plan.nombre}</p>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-bold text-slate-900">${Number(plan.precio).toFixed(2)}</span>
+                    <span className="font-bold text-slate-900 dark:text-white">${Number(plan.precio).toFixed(2)}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
-                      <Badge variant="primary" className="font-medium bg-indigo-50">{plan.tipoPlan}</Badge>
-                      <span className="text-xs text-slate-500">
+                      <Badge variant="primary" className="font-medium bg-indigo-50 dark:bg-indigo-500/20">{plan.tipoPlan}</Badge>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
                         {plan.tipoPlan === 'TIEMPO' && `${plan.duracionDias} días`}
                         {plan.tipoPlan === 'SESIONES' && `${plan.cantidadSesiones} sesiones`}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col gap-1 text-xs text-slate-500">
+                    <div className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
                       {(plan.horaInicioAcceso || plan.horaFinAcceso) ? (
                         <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {plan.horaInicioAcceso ? parseTime(plan.horaInicioAcceso) : '00:00'} - {plan.horaFinAcceso ? parseTime(plan.horaFinAcceso) : '23:59'}</span>
                       ) : (
@@ -410,16 +251,32 @@ export default function PlanesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Protect permission="planes:actualizar">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(plan)} className="text-slate-500 hover:text-indigo-600">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Protect>
-                      <Protect permission="planes:eliminar">
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(plan.id)} className="text-slate-500 hover:text-rose-600">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </Protect>
+                      {showDeleted ? (
+                        <Protect permission="sistema:restaurar">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => restoreItem(plan.id)} 
+                            disabled={isRestoring}
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                          >
+                            <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                          </Button>
+                        </Protect>
+                      ) : (
+                        <>
+                          <Protect permission="planes:actualizar">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(plan)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Protect>
+                          <Protect permission="planes:eliminar">
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(plan.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Protect>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

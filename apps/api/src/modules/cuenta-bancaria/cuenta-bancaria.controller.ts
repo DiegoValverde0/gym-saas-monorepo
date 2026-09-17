@@ -41,4 +41,10 @@ export class CuentaBancariaController {
   remove(@Param('id') id: string) {
     return this.cuentaBancariaService.remove(id);
   }
+
+  @Post(':id/restore')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'cuentas_bancarias' })
+  restore(@Param('id') id: string) {
+    return this.cuentaBancariaService.restore(id);
+  }
 }

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import { CreateRolDto } from './dto/create-rol.dto';
@@ -12,7 +13,7 @@ export class RolService {
   constructor(
     private prisma: PrismaService,
     private cls: ClsService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: any
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType
   ) {}
 
   // El módulo 'organizaciones' (leer/crear/actualizar/eliminar/suspender el

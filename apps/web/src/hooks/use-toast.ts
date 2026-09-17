@@ -18,7 +18,7 @@ export const useToast = () => {
     if (variant === 'warning') type = 'warning';
     if (variant === 'info') type = 'info';
 
-    (baseToast as any).add({
+    (baseToast as { add: (options: Record<string, unknown>) => void }).add({
       title,
       description,
       type,

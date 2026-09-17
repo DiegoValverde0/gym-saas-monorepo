@@ -4,10 +4,13 @@ import { CreateInventarioDto } from './dto/create-inventario.dto';
 import { UpdateInventarioDto } from './dto/update-inventario.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
+@RequiereModulo('puntoVenta')
 @Controller('inventarios')
 export class InventarioController {
   constructor(private readonly inventarioService: InventarioService) {}

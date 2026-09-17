@@ -1,12 +1,13 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useMemo } from 'react';
+import { ReactNode, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
 import {
   LayoutDashboard,
@@ -25,14 +26,19 @@ import {
   ScanFace,
   Landmark,
   ChevronDown,
-  UserCircle,
   Banknote,
   FileText,
   Activity,
-  Package
+  Package,
+  ClipboardList,
+  UserCog,
+  Clock,
+  CalendarDays
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { CommandPalette } from '@/components/ui/command-palette';
 
 interface NavItem {
   name: string;
@@ -67,6 +73,17 @@ const navigationGroups: NavGroup[] = [
       { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer' },
       { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
       { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
+    ]
+  },
+  {
+    title: 'Personal',
+    icon: Dumbbell,
+    baseHref: '/dashboard/disciplinas',
+    items: [
+      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
+      { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
+      { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer' },
+      { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
   },
   {
@@ -117,23 +134,41 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  // Active Group logic
-  const activeGroup: ActiveGroup = useMemo(() => {
-    if (pathname === '/dashboard/organizaciones') return SUPERADMIN_GROUP;
-    if (pathname === '/dashboard') return DASHBOARD_GROUP;
-    for (const group of navigationGroups) {
-      if (group.items.some(item => isNavItemActive(pathname, item))) {
-        return group;
-      }
-    }
-    return navigationGroups[0];
-  }, [pathname]);
-
   const { data: organizaciones } = useQuery({
     queryKey: ['organizaciones'],
     queryFn: async () => unwrapList(await apiGet('/organizaciones')),
     enabled: isSuperAdmin && !!token,
   });
+
+  const modulos = useModulosActivos();
+
+  // Filter groups based on tenant configuration
+  const filteredNavigationGroups = useMemo(() => {
+    return navigationGroups.map(group => {
+      return {
+        ...group,
+        items: group.items.filter(item => {
+          if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
+          if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
+          if (['Personal', 'Turnos', 'Asistencias'].includes(item.name)) return modulos.controlPersonal;
+          if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
+          return true;
+        })
+      };
+    }).filter(group => group.items.length > 0);
+  }, [modulos]);
+
+  // Active Group logic
+  const activeGroup: ActiveGroup = useMemo(() => {
+    if (pathname === '/dashboard/organizaciones') return SUPERADMIN_GROUP;
+    if (pathname === '/dashboard') return DASHBOARD_GROUP;
+    for (const group of filteredNavigationGroups) {
+      if (group.items.some(item => isNavItemActive(pathname, item))) {
+        return group;
+      }
+    }
+    return filteredNavigationGroups.length > 0 ? filteredNavigationGroups[0] : navigationGroups[0];
+  }, [pathname, filteredNavigationGroups]);
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -143,14 +178,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   const SidebarContent = () => (
-    <div className="flex h-full flex-col bg-slate-50 border-r border-slate-200">
+    <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
       <div className="flex h-16 shrink-0 items-center px-6">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-1.5 rounded-lg shadow-sm">
             <Dumbbell className="h-5 w-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-slate-900 tracking-tight">
-            Gym<span className="text-indigo-600 font-normal">Manager</span>
+          <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+            Gym<span className="text-indigo-600 dark:text-indigo-400 font-normal">Manager</span>
           </span>
         </div>
       </div>
@@ -160,34 +195,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           href="/dashboard"
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-4 ${
             activeGroup === DASHBOARD_GROUP
-              ? 'bg-indigo-50 text-indigo-700'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <LayoutDashboard className={`h-4 w-4 ${activeGroup === DASHBOARD_GROUP ? 'text-indigo-600' : 'text-slate-400'}`} />
+          <LayoutDashboard className={`h-4 w-4 ${activeGroup === DASHBOARD_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
           Dashboard
         </Link>
 
         {isSuperAdmin && (
           <div className="mb-4">
-            <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sistema</p>
+            <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Sistema</p>
             <Link
               href="/dashboard/organizaciones"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeGroup === SUPERADMIN_GROUP
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Globe className={`h-4 w-4 ${activeGroup === SUPERADMIN_GROUP ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <Globe className={`h-4 w-4 ${activeGroup === SUPERADMIN_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
               Organizaciones
             </Link>
           </div>
         )}
 
-        <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 mt-4">Módulos</p>
+        <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
         
-        {navigationGroups.map((group) => {
+        {filteredNavigationGroups.map((group) => {
           const hasAccess = group.items.some(item => !item.permission || hasPermission(item.permission));
           if (!hasAccess) return null;
 
@@ -199,11 +234,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 href={group.baseHref}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <group.icon className={`h-4 w-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <group.icon className={`h-4 w-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
                 {group.title}
               </Link>
 
@@ -211,7 +246,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   (hidden md:flex más abajo), pero el topbar no existe en móvil,
                   así que lo repetimos aquí para no dejar ese menú sin salida. */}
               {isActive && (
-                <div className="md:hidden mt-1 ml-4 pl-3 border-l border-slate-200 space-y-0.5">
+                <div className="md:hidden mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-800 space-y-0.5">
                   {group.items.map((item) => {
                     if (item.permission && !hasPermission(item.permission)) return null;
                     const isItemActive = isNavItemActive(pathname, item);
@@ -221,8 +256,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                         href={item.href}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                           isItemActive
-                            ? 'text-indigo-700 font-semibold'
-                            : 'text-slate-500 hover:text-slate-900'
+                            ? 'text-indigo-700 dark:text-indigo-300 font-semibold'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <item.icon className="h-3.5 w-3.5" />
@@ -240,7 +275,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="flex h-screen w-full bg-slate-50">
+    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900">
       {/* Sidebar Desktop */}
       <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40">
         <SidebarContent />
@@ -248,11 +283,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden">
         {/* Top App Bar */}
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 shadow-xs">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs">
           <div className="flex items-center gap-4 flex-1">
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden text-slate-500">
+                <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -273,8 +308,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     href={item.href}
                     className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
                       isActive
-                        ? 'text-slate-900 bg-slate-100'
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                        ? 'text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
                     }`}
                   >
                     {item.name}
@@ -282,12 +317,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 );
               })}
               {activeGroup === SUPERADMIN_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900">
+                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
                   SuperAdmin / Organizaciones
                 </span>
               )}
               {activeGroup === DASHBOARD_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900">
+                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
                   Dashboard
                 </span>
               )}
@@ -298,17 +333,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-4">
             {/* Global Context Selector (Tenant) */}
             {isSuperAdmin && organizaciones ? (
-              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-1 pr-2">
-                <div className="bg-white p-1 rounded border border-slate-200 shadow-xs text-slate-500">
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-1 pr-2">
+                <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-200 dark:border-slate-800 shadow-xs text-slate-500 dark:text-slate-400">
                   <Globe className="w-4 h-4" />
                 </div>
                 <select
                   value={activeTenantId || 'all'}
                   onChange={handleTenantChange}
-                  className="bg-transparent border-none text-xs font-semibold text-slate-700 focus:ring-0 cursor-pointer py-1 max-w-[150px] truncate outline-none"
+                  className="bg-transparent border-none text-xs font-semibold text-slate-700 dark:text-slate-300 focus:ring-0 cursor-pointer py-1 max-w-[150px] truncate outline-none"
                 >
                   <option value="all">Ver todo el sistema</option>
-                  {organizaciones.map((org: any) => (
+                  {(organizaciones as any[]).map((org: { id: string; nombre: string }) => (
                     <option key={org.id} value={org.id}>{org.nombre}</option>
                   ))}
                 </select>
@@ -317,13 +352,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               userData && !isSuperAdmin && (
                 <div className="hidden md:flex items-center gap-2">
                   {userData.organizacionNombre && (
-                    <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-md px-2.5 py-1 text-xs font-semibold">
-                      <Globe className="w-3.5 h-3.5 text-slate-400" />
+                    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-md px-2.5 py-1 text-xs font-semibold">
+                      <Globe className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                       <span className="truncate max-w-[120px]">{userData.organizacionNombre}</span>
                     </div>
                   )}
                   {userData.sucursalNombre && (
-                    <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-md px-2.5 py-1 text-xs font-bold">
+                    <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-500/20 border border-indigo-100 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-md px-2.5 py-1 text-xs font-bold">
                       <Building2 className="w-3.5 h-3.5" />
                       <span className="truncate max-w-[120px]">{userData.sucursalNombre}</span>
                     </div>
@@ -332,38 +367,40 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               )
             )}
 
+            <ThemeToggle />
+
             {/* Profile Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                className="flex items-center gap-2 p-1 pr-2 rounded-full border border-transparent hover:bg-slate-50 hover:border-slate-200 transition-colors"
+                className="flex items-center gap-2 p-1 pr-2 rounded-full border border-transparent hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-slate-200 dark:hover:border-slate-800 transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-sm">
                   {userData?.nombre?.charAt(0).toUpperCase() || userData?.email?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="hidden md:block text-left">
-                  <p className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[100px]">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[100px]">
                     {userData?.nombre || userData?.email?.split('@')[0] || 'Usuario'}
                   </p>
-                  <p className="text-[10px] text-slate-500 font-medium">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                     {isSuperAdmin ? 'SuperAdmin' : userData?.rolNombre || 'Staff'}
                   </p>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-1" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 ml-1" />
               </button>
 
               {profileMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)}></div>
-                  <div className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-slate-200 shadow-lg z-50 py-1">
-                    <div className="px-4 py-3 border-b border-slate-100">
-                      <p className="text-sm font-bold text-slate-900 truncate">{userData?.nombre}</p>
-                      <p className="text-xs text-slate-500 truncate">{userData?.email}</p>
+                  <div className="absolute right-0 mt-2 w-56 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg z-50 py-1">
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{userData?.nombre}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{userData?.email}</p>
                     </div>
                     <div className="py-1">
                       <button
                         onClick={logout}
-                        className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors font-medium"
+                        className="w-full text-left px-4 py-2 text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 flex items-center gap-2 transition-colors font-medium"
                       >
                         <LogOut className="w-4 h-4" />
                         Cerrar Sesión
@@ -377,10 +414,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto max-w-7xl h-full">
             {children}
           </div>
+          <CommandPalette />
         </main>
       </div>
     </div>

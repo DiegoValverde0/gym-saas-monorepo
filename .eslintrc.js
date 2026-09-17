@@ -1,10 +1,11 @@
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
-  plugins: ['@typescript-eslint'],
+  plugins: ['@typescript-eslint', 'react-hooks'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
+    'plugin:react-hooks/recommended',
     'turbo'
   ],
   env: {
@@ -16,6 +17,11 @@ module.exports = {
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
+    'react-hooks/exhaustive-deps': 'off',
+    'react-hooks/set-state-in-effect': 'off',
+    'react-hooks/incompatible-library': 'off',
+    'react-hooks/static-components': 'off',
+    'react-hooks/purity': 'off'
   },
   overrides: [
     {
@@ -43,6 +49,15 @@ module.exports = {
         // que sí atienden peticiones HTTP de un tenant) siguen usando
         // extendedClient con normalidad; revisar ese uso en review de código.
         'apps/api/src/modules/membresia/membresia.service.ts',
+        // handleAutoCheckout (cron diario) recorre TODAS las organizaciones
+        // igual que los crons de membresia.service.ts de arriba -- mismo motivo.
+        'apps/api/src/modules/asistencia/asistencia.service.ts',
+        // signIn() lee el Usuario y sus AsignacionAcceso (tenant-scoped) ANTES
+        // de que exista un organizacionId en el contexto (CLS) -- login es la
+        // operación que determina a qué tenant(s) pertenece el usuario, así
+        // que no puede depender de un tenant ya resuelto. Ver comentario en
+        // el propio método.
+        'apps/api/src/modules/auth/auth.service.ts',
       ],
       rules: {
         'no-restricted-syntax': [

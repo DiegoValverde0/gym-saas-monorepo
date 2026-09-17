@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { promisify } from 'util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
@@ -6,9 +7,10 @@ import * as crypto from 'crypto';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
 
-function hashPassword(password: string): string {
+async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(password, salt, 64);
+  const scryptAsync = promisify(crypto.scrypt);
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${salt}:${derivedKey.toString('hex')}`;
 }
 
@@ -33,8 +35,8 @@ export class OrganizacionService {
     });
   }
 
-  async crearOrganizacionConAdmin(datos: CrearOrganizacionDto): Promise<any> {
-    const contrasenaHash = hashPassword(datos.contrasena);
+  async crearOrganizacionConAdmin(datos: CrearOrganizacionDto) {
+    const contrasenaHash = await hashPassword(datos.contrasena);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -84,6 +86,7 @@ export class OrganizacionService {
           },
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { contrasenaHash: _, ...usuarioSinContrasena } = usuario;
         return { organizacion: org, sucursal: sucursalCentral, admin: usuarioSinContrasena };
       });
@@ -136,9 +139,13 @@ export class OrganizacionService {
   async updateMiOrganizacion(data: UpdateMiOrganizacionDto) {
     const id = this.cls.get('organizacionId');
     if (!id) throw new BadRequestException('Contexto de organización no encontrado');
+    const { configuracion, ...rest } = data;
     return this.prisma.organizacion.update({
       where: { id },
-      data,
+      data: {
+        ...rest,
+        ...(configuracion !== undefined && { configuracion: configuracion as Prisma.InputJsonValue }),
+      },
     });
   }
 }

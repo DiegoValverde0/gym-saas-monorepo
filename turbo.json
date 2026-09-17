@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["FRONTEND_URL", "JWT_SECRET", "REDIS_URL", "NODE_ENV", "PORT"],
   "globalDependencies": ["**/.env.*local"],
   "tasks": {
     "build": {

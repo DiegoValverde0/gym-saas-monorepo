@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, IsBoolean, IsDecimal, IsEnum, IsNumber, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, IsBoolean, IsEnum, IsNumber, Min } from 'class-validator';
 import { TipoPlan, EstadoGeneral } from '@prisma/client';
 
 export class CreatePlanDto {

@@ -4,10 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-body {
-  background-color: #f8fafc;
-  color: #0f172a;
-}
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {

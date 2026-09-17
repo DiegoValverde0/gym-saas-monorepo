@@ -3,6 +3,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAsistenciaDto } from './dto/create-asistencia.dto';
 import { formatPermiso } from '../../common/utils/permiso.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
+
+export interface TokenPayload {
+  sub: string;
+  organizacionId?: string;
+  is_superadmin?: boolean;
+}
 
 @Injectable()
 export class AsistenciaService {
@@ -13,7 +20,7 @@ export class AsistenciaService {
   // Chequeo de permiso puntual (no vía @RequirePermissions, porque depende de
   // contenido de la request, no solo de la ruta) -- reemplaza lo que antes
   // era `user.rolNombre === 'RECEPCIONISTA'` hardcodeado.
-  private async tienePermiso(user: any, modulo: string, accion: string): Promise<boolean> {
+  private async tienePermiso(user: TokenPayload, modulo: string, accion: string): Promise<boolean> {
     if (user.is_superadmin) return false; // el superadmin no escribe asistencias (ver PrismaService)
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.findFirst({
       where: { usuarioId: user.sub, organizacionId: user.organizacionId },
@@ -23,7 +30,7 @@ export class AsistenciaService {
     return permisos.includes(formatPermiso(modulo, accion));
   }
 
-  async validateAccess(clienteId: string, user: any) {
+  async validateAccess(clienteId: string, user: TokenPayload) {
     const membresia = await this.prisma.extendedClient.membresia.findFirst({
       where: {
         clienteId,
@@ -106,7 +113,7 @@ export class AsistenciaService {
     };
   }
 
-  async checkIn(dto: CreateAsistenciaDto, user: any) {
+  async checkIn(dto: CreateAsistenciaDto, user: TokenPayload) {
     let membresiaId = null;
     let descontarSesion = false;
     const userId = user.sub;
@@ -142,7 +149,7 @@ export class AsistenciaService {
                 metodoValidacion: 'MANUAL',
                 registradoPorId: userId,
                 motivoAnulacion: dto.forzarIngreso ? (dto.motivoForzado || 'Ingreso Forzado Manualmente') : null
-            } as any,
+            } as unknown as Prisma.RegistroAsistenciaUncheckedCreateInput,
             include: {
                 cliente: { select: { nombre: true } }
             }
@@ -234,6 +241,10 @@ export class AsistenciaService {
   // CRON: AUTO CHECKOUT
   // =========================================================================
 
+  // Corre todos los días a las 2 AM, sin contexto CLS (los crons no pasan por
+  // ClsMiddleware) y recorre TODAS las organizaciones por diseño, así que usa
+  // el cliente crudo de Prisma a propósito -- ver excludedFiles en
+  // .eslintrc.js. Nunca se fuerza un organizacionId falso sobre extendedClient.
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleAutoCheckout() {
     this.logger.log('Iniciando proceso de Auto-Checkout para registros huérfanos...');
@@ -242,7 +253,7 @@ export class AsistenciaService {
     hoy.setHours(0,0,0,0);
 
     // Buscar a todos los que entraron ANTES de hoy y no salieron
-    const resultado = await this.prisma.extendedClient.registroAsistencia.updateMany({
+    const resultado = await this.prisma.registroAsistencia.updateMany({
         where: {
             fechaHoraSalida: null,
             fechaHoraIngreso: {

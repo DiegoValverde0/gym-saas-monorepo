@@ -7,6 +7,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
+// Nota: NO se gatea con @RequiereModulo('puntoVenta') aunque el sidebar oculte
+// "Cajas" bajo ese toggle -- el checkout de membresías (POSModal) depende de
+// /apertura-caja/me para saber si hay una caja abierta, independientemente de
+// si el gimnasio vende "artículos sueltos" o no. Ver mismo comentario en
+// apertura-caja.controller.ts y transaccion.controller.ts.
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('cajas-registradoras')
 export class CajaRegistradoraController {

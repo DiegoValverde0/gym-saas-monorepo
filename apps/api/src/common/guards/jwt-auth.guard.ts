@@ -1,15 +1,21 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService, private cls: ClsService) {}
+  constructor(
+    private jwtService: JwtService, 
+    private cls: ClsService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
+    // Leer token de la cookie (nuevo estándar) o fallback al header (para Swagger/Postman temporalmente)
+    const token = request.cookies?.['gym_token'] || this.extractTokenFromHeader(request);
     
     if (!token) {
       throw new UnauthorizedException('Token no proporcionado');
@@ -20,6 +26,22 @@ export class JwtAuthGuard implements CanActivate {
       // que ya falla al arrancar la app si no está definido.
       const payload = await this.jwtService.verifyAsync(token);
       
+      let isRevokedToken = false;
+      let isRevokedUser = false;
+      try {
+        isRevokedToken = !!(await this.redisClient.get(`token:revoked:${token}`));
+        isRevokedUser = !!(await this.redisClient.get(`user:revoked:${payload.sub}`));
+      } catch (err: unknown) {
+        console.error('[JwtAuthGuard] Fallo al verificar Redis (Fail-Open):', (err as Error).message);
+      }
+
+      if (isRevokedToken) {
+         throw new UnauthorizedException('La sesión ha sido cerrada. Por favor, inicie sesión nuevamente.');
+      }
+      if (isRevokedUser) {
+         throw new UnauthorizedException('La sesión ha sido revocada por el administrador.');
+      }
+
       // Inyectar el payload en la request
       request['user'] = payload;
 
@@ -48,7 +70,7 @@ export class JwtAuthGuard implements CanActivate {
           this.cls.set('is_superadmin', false);
       }
 
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Token inválido o expirado');
     }
     return true;

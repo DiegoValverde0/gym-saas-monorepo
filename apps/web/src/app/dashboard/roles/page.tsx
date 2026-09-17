@@ -14,9 +14,13 @@ import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Protect } from '@/components/ui/protect';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ShieldCheck, Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Shield, Plus, Edit, Trash2, ShieldCheck, CheckCircle2, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PapeleraToggle } from '@/components/ui/papelera-toggle';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 
@@ -35,6 +39,7 @@ export default function RolesPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingRol, setEditingRol] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   const { activeTenantId } = useTenantStore();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -56,8 +61,8 @@ export default function RolesPage() {
   });
 
   const { data: roles, isLoading: loadingRoles } = useQuery({
-    queryKey: ['roles', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/roles')),
+    queryKey: ['roles', activeTenantId, showDeleted],
+    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/roles?deleted=true' : '/roles')),
     enabled: !!token,
   });
 
@@ -100,9 +105,10 @@ export default function RolesPage() {
     }
   });
 
-  const { deleteItem } = useSoftDelete({
-    queryKey: ['roles'],
+  const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
+    queryKey: ['roles', showDeleted],
     endpoint: 'roles',
+    modelName: 'rol',
     itemName: 'El rol'
   });
 
@@ -162,21 +168,24 @@ export default function RolesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Roles y Permisos</h2>
-            <p className="text-sm text-slate-500 mt-1">Configura el nivel de acceso de tu personal (RBAC).</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roles y Permisos</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configura el nivel de acceso de tu personal (RBAC).</p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder="Buscar rol..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-xs"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
               />
             </div>
+            
+            <PapeleraToggle showDeleted={showDeleted} setShowDeleted={setShowDeleted} />
+
             <Protect permission="roles:crear">
               <TenantRequiredButton
                 onClick={handleAddNew}
@@ -190,7 +199,7 @@ export default function RolesPage() {
             onOpenChange={setIsSheetOpen}
             title={editingRol ? 'Editar Rol' : 'Nuevo Rol'}
             description="Asigna un nombre al rol y selecciona los permisos exactos que tendrá en el sistema."
-            form={form}
+            form={form as any}
             maxWidthClass="sm:max-w-xl"
             sections={[
               {
@@ -210,43 +219,81 @@ export default function RolesPage() {
                     colSpan: 2,
                     renderCustom: (formContext) => (
                       <div>
-                        {formContext.formState.errors.permisosIds && <p className="text-sm text-red-500 mb-2">{formContext.formState.errors.permisosIds.message as string}</p>}
+                        {formContext.formState.errors.permisosIds && <p className="text-sm text-red-500 dark:text-red-400 mb-2">{formContext.formState.errors.permisosIds.message as string}</p>}
                         {loadingPermisos ? (
-                          <p className="text-sm text-zinc-500">Cargando catálogo de permisos...</p>
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando catálogo de permisos...</p>
                         ) : (
                           <div className="space-y-4">
-                            {permisosAgrupados && Object.keys(permisosAgrupados).map((modulo) => (
-                              <div key={modulo} className="bg-white p-4 rounded-lg border border-zinc-200 shadow-sm transition-all hover:border-indigo-100">
-                                <h4 className="font-semibold text-zinc-900 capitalize mb-3 pb-2 border-b border-zinc-100">{modulo}</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
-                                  <Controller
-                                    name="permisosIds"
-                                    control={formContext.control}
-                                    render={({ field }) => (
-                                      <>
-                                        {permisosAgrupados[modulo].map((permiso: any) => (
-                                          <label key={permiso.id} className="flex items-start space-x-3 cursor-pointer group">
-                                            <Checkbox
-                                              checked={field.value?.includes(permiso.id)}
-                                              onCheckedChange={(checked) => {
-                                                const newValue = checked
-                                                  ? [...field.value, permiso.id]
-                                                  : field.value.filter((val: string) => val !== permiso.id);
-                                                field.onChange(newValue);
-                                              }}
-                                              className="mt-0.5 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
-                                            />
-                                            <span className="text-sm text-zinc-700 capitalize font-medium group-hover:text-indigo-900 transition-colors">
-                                              {permiso.accion}
-                                            </span>
-                                          </label>
-                                        ))}
-                                      </>
-                                    )}
-                                  />
-                                </div>
-                              </div>
-                            ))}
+                            <Controller
+                              name="permisosIds"
+                              control={formContext.control}
+                              render={({ field }) => (
+                                <>
+                                  <div className="flex justify-end">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const allIds = (permisosCatalogo || []).map((p: any) => p.id);
+                                        const areAllSelected = allIds.every((id: string) => field.value?.includes(id));
+                                        if (areAllSelected) {
+                                          field.onChange([]);
+                                        } else {
+                                          field.onChange(allIds);
+                                        }
+                                      }}
+                                    >
+                                      {(permisosCatalogo || []).every((p: any) => field.value?.includes(p.id)) ? 'Desmarcar Todos' : 'Seleccionar Todos'}
+                                    </Button>
+                                  </div>
+                                  {permisosAgrupados && Object.keys(permisosAgrupados).map((modulo) => (
+                                  <div key={modulo} className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm transition-all hover:border-indigo-100 dark:hover:border-indigo-900/50">
+                                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                                      <h4 className="font-semibold text-zinc-900 dark:text-white capitalize">{modulo}</h4>
+                                      <button
+                                        type="button"
+                                        className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors"
+                                        onClick={() => {
+                                          const moduleIds = permisosAgrupados[modulo].map((p: any) => p.id);
+                                          const areAllSelected = moduleIds.every((id: string) => field.value?.includes(id));
+                                          
+                                          if (areAllSelected) {
+                                            const newValue = field.value?.filter((id: string) => !moduleIds.includes(id)) || [];
+                                            field.onChange(newValue);
+                                          } else {
+                                            const newValue = Array.from(new Set([...(field.value || []), ...moduleIds]));
+                                            field.onChange(newValue);
+                                          }
+                                        }}
+                                      >
+                                        {permisosAgrupados[modulo].every((p: any) => field.value?.includes(p.id)) ? 'Desmarcar sección' : 'Seleccionar sección'}
+                                      </button>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
+                                      {permisosAgrupados[modulo].map((permiso: any) => (
+                                        <label key={permiso.id} className="flex items-start space-x-3 cursor-pointer group">
+                                          <Checkbox
+                                            checked={field.value?.includes(permiso.id)}
+                                            onCheckedChange={(checked) => {
+                                              const newValue = checked
+                                                ? [...(field.value || []), permiso.id]
+                                                : field.value?.filter((val: string) => val !== permiso.id) || [];
+                                              field.onChange(newValue);
+                                            }}
+                                            className="mt-0.5 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                                          />
+                                          <span className="text-sm text-zinc-700 dark:text-zinc-300 capitalize font-medium group-hover:text-indigo-900 dark:group-hover:text-indigo-100 transition-colors">
+                                            {permiso.accion}
+                                          </span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                </>
+                              )}
+                            />
                           </div>
                         )}
                       </div>
@@ -255,31 +302,25 @@ export default function RolesPage() {
                 ]
               }
             ]}
-            onSubmit={onSubmit}
+            onSubmit={onSubmit as any}
             isPending={createMutation.isPending || updateMutation.isPending}
             submitLabel="Guardar Rol"
           />
         </div>
 
         {loadingRoles ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-8 flex justify-center">
-            <div className="animate-pulse flex flex-col items-center gap-4">
-              <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
-              <div className="h-4 w-32 bg-slate-200 rounded"></div>
-            </div>
-          </div>
+          <TableSkeleton columns={4} />
         ) : filteredRoles.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900">
-              {searchTerm ? 'Ningún rol coincide con la búsqueda' : 'No hay roles configurados'}
-            </p>
-            <p className="text-sm text-slate-500 mt-1">
-              {searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primer rol personalizado.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={ShieldCheck}
+            title={searchTerm ? 'Ningún rol encontrado' : 'No hay roles configurados'}
+            description={searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primer rol personalizado. Podrás asignar permisos específicos a tu personal.'}
+            actionLabel="Nuevo Rol"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={handleAddNew}
+            permission="roles:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -292,53 +333,66 @@ export default function RolesPage() {
             </TableHeader>
             <TableBody>
               {filteredRoles.map((rol: any) => (
-                <TableRow key={rol.id}>
+                <TableRow key={rol.id} className={showDeleted ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                         <ShieldCheck className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 text-sm">{rol.nombre}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{rol.nombre}</p>
                         {!rol.organizacionId && (
-                          <p className="text-xs text-indigo-600 font-medium mt-0.5">Global · todas las organizaciones</p>
+                          <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Global · todas las organizaciones</p>
                         )}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-slate-500">{rol.descripcion || '-'}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{rol.descripcion || '-'}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="default">{rol.rolPermisos?.length || 0} permisos</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Protect permission="roles:actualizar">
-                        {(() => {
-                          const isGlobalRole = !rol.organizacionId;
-                          // Un rol global (compartido por todas las organizaciones) solo lo
-                          // edita el superadmin; un rol propio de una organización solo lo
-                          // edita esa organización -- nunca el superadmin (ver rol.service.ts).
-                          const canEditRow = isSuperAdmin ? isGlobalRole : !isGlobalRole;
-                          const reason = !canEditRow
-                            ? (isGlobalRole
-                                ? 'Los roles globales del sistema solo los edita el superadmin'
-                                : 'El superadmin no puede editar roles de una organización específica')
-                            : undefined;
-                          return (
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(rol)} disabled={!canEditRow} title={reason} className="text-slate-500 hover:text-indigo-600">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          );
-                        })()}
-                      </Protect>
                       {!rol.esSistema && (
-                        <Protect permission="roles:eliminar">
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(rol.id)} className="text-slate-500 hover:text-rose-600">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </Protect>
+                        showDeleted ? (
+                          <Protect permission="sistema:restaurar">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => restoreItem(rol.id)} 
+                              disabled={isRestoring}
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                            </Button>
+                          </Protect>
+                        ) : (
+                          <>
+                            <Protect permission="roles:actualizar" fallbackType="hide">
+                              {(() => {
+                                const isGlobalRole = !rol.organizacionId;
+                                const canEditRow = isSuperAdmin ? isGlobalRole : !isGlobalRole;
+                                const reason = !canEditRow
+                                  ? (isGlobalRole
+                                      ? 'Los roles globales del sistema solo los edita el superadmin'
+                                      : 'El superadmin no puede editar roles de una organización específica')
+                                  : undefined;
+                                return (
+                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(rol)} disabled={!canEditRow} title={reason} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                );
+                              })()}
+                            </Protect>
+                            <Protect permission="roles:eliminar" fallbackType="hide">
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(rol.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                          </>
+                        )
                       )}
                     </div>
                   </TableCell>

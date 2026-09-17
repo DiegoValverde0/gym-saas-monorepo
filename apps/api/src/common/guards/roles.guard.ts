@@ -1,5 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Inject } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { RedisClientType } from 'redis';
 import { PERMISSIONS_KEY, PermissionRequirement } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatPermiso } from '../utils/permiso.util';
@@ -9,7 +10,7 @@ export class RolesGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: any,
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -39,7 +40,7 @@ export class RolesGuard implements CanActivate {
     }
 
     const cacheKey = `rbac:${user.sub}:${user.organizacionId ?? 'global'}`;
-    let userPermissionsStr = await this.redisClient.get(cacheKey);
+    const userPermissionsStr = await this.redisClient.get(cacheKey);
     let userPermissions: string[] = [];
 
     if (userPermissionsStr) {

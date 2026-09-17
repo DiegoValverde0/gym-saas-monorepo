@@ -182,6 +182,13 @@ function ToastIcon({ type }: { type: string | undefined }) {
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager()
 
+  interface CustomToast {
+    id: string | number;
+    type?: "success" | "info" | "warning" | "error" | "loading";
+    action?: React.ReactNode;
+    [key: string]: unknown;
+  }
+
   return toasts.map((toastItem: any) => (
     <Toast key={toastItem.id} toast={toastItem}>
       <ToastContent>

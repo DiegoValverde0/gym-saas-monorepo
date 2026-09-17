@@ -1,12 +1,13 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisClientType } from 'redis';
 import { HealthCheckResponse } from './health.interface';
 
 @Injectable()
 export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: any,
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
   ) {}
 
   async check(): Promise<HealthCheckResponse> {
@@ -27,7 +28,7 @@ export class HealthService {
         status: 'up',
         latency: Date.now() - dbStart,
       };
-    } catch (error) {
+    } catch {
       response.status = 'error';
     }
 
@@ -43,7 +44,7 @@ export class HealthService {
       } else {
         response.status = 'error';
       }
-    } catch (error) {
+    } catch {
       response.status = 'error';
     }
 

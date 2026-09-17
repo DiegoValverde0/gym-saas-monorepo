@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateCuentaBancariaDto } from './dto/create-cuenta-bancaria.dto';
 import { UpdateCuentaBancariaDto } from './dto/update-cuenta-bancaria.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -12,7 +13,7 @@ export class CuentaBancariaService {
   async create(createCuentaBancariaDto: CreateCuentaBancariaDto) {
     return this.prisma.extendedClient.cuentaBancaria.create({
       // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-      data: createCuentaBancariaDto as any,
+      data: createCuentaBancariaDto as unknown as Prisma.CuentaBancariaUncheckedCreateInput,
     });
   }
 
@@ -49,6 +50,14 @@ export class CuentaBancariaService {
     await this.findOne(id);
     return this.prisma.extendedClient.cuentaBancaria.delete({
       where: { id },
+    });
+  }
+
+  async restore(id: string) {
+    // No usamos findOne porque está filtrado por deletedAt: null
+    return this.prisma.extendedClient.cuentaBancaria.update({
+      where: { id },
+      data: { deletedAt: null },
     });
   }
 }
