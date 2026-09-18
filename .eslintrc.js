@@ -61,6 +61,9 @@ module.exports = {
         // Mismo motivo que turno-plantilla.service.ts arriba, pero para
         // ClasePlantilla: generarParaOrganizacion/handleGeneracionDiaria.
         'apps/api/src/modules/clase-plantilla/clase-plantilla.service.ts',
+        // Mismo motivo que turno-plantilla/clase-plantilla arriba, pero para
+        // GastoPlantilla: generarParaOrganizacion/handleGeneracionDiaria.
+        'apps/api/src/modules/gasto-plantilla/gasto-plantilla.service.ts',
         // signIn() lee el Usuario y sus AsignacionAcceso (tenant-scoped) ANTES
         // de que exista un organizacionId en el contexto (CLS) -- login es la
         // operación que determina a qué tenant(s) pertenece el usuario, así

@@ -121,6 +121,37 @@ export class AuthService {
     };
   }
 
+  // Datos del usuario para hidratar el cliente (GET /auth/me). El payload del
+  // JWT ya trae organizacionId/organizacionNombre/sucursalId/sucursalNombre/
+  // rolNombre/is_superadmin -- solo falta nombre/correo, que no viajan en el
+  // token para mantenerlo chico, así que se buscan acá.
+  async getMe(payload: {
+    sub: string;
+    organizacionId?: string;
+    organizacionNombre?: string;
+    sucursalId?: string;
+    sucursalNombre?: string;
+    rolNombre?: string;
+    is_superadmin?: boolean;
+  }) {
+    const usuario = await this.prisma.extendedClient.usuario.findUnique({
+      where: { id: payload.sub },
+      select: { nombreCompleto: true, correo: true },
+    });
+
+    return {
+      sub: payload.sub,
+      nombre: usuario?.nombreCompleto ?? null,
+      correo: usuario?.correo ?? null,
+      organizacionId: payload.organizacionId ?? null,
+      organizacionNombre: payload.organizacionNombre ?? null,
+      sucursalId: payload.sucursalId ?? null,
+      sucursalNombre: payload.sucursalNombre ?? null,
+      rolNombre: payload.rolNombre ?? null,
+      is_superadmin: !!payload.is_superadmin,
+    };
+  }
+
   async getPermisos(userId: string, organizacionId: string | undefined, isSuperAdmin: boolean): Promise<string[]> {
     // Sin caso especial para superadmin: sus permisos son los de su propio rol
     // global SUPERADMIN (AsignacionAcceso con organizacionId: null), igual que

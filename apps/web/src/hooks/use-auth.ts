@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
+import { apiGet, apiPost } from '@/lib/api-client';
 
 export interface AuthUser {
   sub: string;
-  correo?: string;
-  email?: string;
-  nombre?: string;
+  correo?: string | null;
+  email?: string | null;
+  nombre?: string | null;
   organizacionId?: string | null;
   organizacionNombre?: string | null;
   sucursalId?: string | null;
@@ -17,68 +19,53 @@ export interface AuthUser {
   is_superadmin?: boolean;
 }
 
-// Única implementación de decodificación de JWT del frontend -- antes había
-// varias copias, algunas sin decodeURIComponent (rompían con tildes/ñ en
-// nombre/organización). Ver Auditoria_Claude.md, Fase E2.
-export function decodeJwt(token: string): AuthUser | null {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(''),
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
-
 interface UseAuthOptions {
   // false para páginas públicas (ej. login) que no deben redirigir.
   redirectIfUnauthenticated?: boolean;
 }
 
 /**
- * Punto único de verdad para la sesión del lado del cliente: lee el token,
- * lo decodifica, expone el usuario y centraliza logout() (que ahora sí
- * limpia también el tenant activo, no solo el token).
+ * Punto único de verdad para la sesión del lado del cliente. El JWT vive
+ * únicamente en la cookie HttpOnly `gym_token` (nunca en localStorage -- ver
+ * Auditoria_Claude.md), así que este hook no puede leerlo/decodificarlo:
+ * pide los datos del usuario a GET /auth/me, que el navegador autentica
+ * solo con la cookie. react-query dedupea/cachea la llamada entre los
+ * múltiples componentes que llaman useAuth() en la misma página.
  */
 export function useAuth(options: UseAuthOptions = {}) {
   const { redirectIfUnauthenticated = true } = options;
   const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: user, isError, isFetched } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiGet<AuthUser>('/auth/me'),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem('gym_token');
-    if (!stored) {
-      if (redirectIfUnauthenticated) router.push('/login');
-      setIsReady(true);
-      return;
-    }
-    setToken(stored);
-    setUser(decodeJwt(stored));
-    setIsReady(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (isError && redirectIfUnauthenticated) router.push('/login');
+  }, [isError, redirectIfUnauthenticated, router]);
 
   const logout = () => {
-    localStorage.removeItem('gym_token');
-    localStorage.removeItem('gym_tenant_storage');
-    document.cookie = 'has_session=; path=/; max-age=0';
+    queryClient.removeQueries({ queryKey: ['auth-me'] });
     useTenantStore.getState().setActiveTenantId(null);
-    window.location.href = '/login';
+    // Debe pegarle al backend: es el único que puede borrar la cookie
+    // HttpOnly y revocar el token en Redis -- limpiar solo el lado cliente
+    // dejaba la sesión viva hasta que expirara sola.
+    apiPost('/auth/logout', {})
+      .catch(() => {})
+      .finally(() => {
+        window.location.href = '/login';
+      });
   };
 
   return {
-    token,
-    user,
+    token: !!user,
+    user: user ?? null,
     isSuperAdmin: !!user?.is_superadmin,
-    isReady,
+    isReady: isFetched,
     logout,
   };
 }

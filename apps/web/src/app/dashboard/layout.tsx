@@ -33,7 +33,9 @@ import {
   ClipboardList,
   UserCog,
   Clock,
-  CalendarDays
+  CalendarDays,
+  Receipt,
+  Truck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -93,6 +95,8 @@ const navigationGroups: NavGroup[] = [
     items: [
       { name: 'Reportes Diarios', href: '/dashboard/reportes', icon: FileText },
       { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
+      { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
+      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer' },
       { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer' },
       { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer' }
     ]

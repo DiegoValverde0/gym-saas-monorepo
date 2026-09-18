@@ -21,6 +21,8 @@ import { AsistenciaModule } from './modules/asistencia/asistencia.module';
 import { CuentaBancariaModule } from './modules/cuenta-bancaria/cuenta-bancaria.module';
 import { AperturaCajaModule } from './modules/apertura-caja/apertura-caja.module';
 import { TransaccionModule } from './modules/transaccion/transaccion.module';
+import { ProveedorModule } from './modules/proveedor/proveedor.module';
+import { GastoPlantillaModule } from './modules/gasto-plantilla/gasto-plantilla.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ProductoModule } from './modules/producto/producto.module';
 import { InventarioModule } from './modules/inventario/inventario.module';
@@ -63,6 +65,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     CuentaBancariaModule,
     AperturaCajaModule,
     TransaccionModule,
+    ProveedorModule,
+    GastoPlantillaModule,
     DashboardModule,
     ProductoModule,
     InventarioModule,

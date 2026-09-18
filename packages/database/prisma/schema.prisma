@@ -233,6 +233,8 @@ model Organizacion {
   registrosAsistencia RegistroAsistencia[]
   cuentasBancarias    CuentaBancaria[]
   aperturasCaja       AperturaCaja[]
+  proveedores         Proveedor[]
+  gastosPlantilla     GastoPlantilla[]
   transacciones       Transaccion[]
   pagos               Pago[]
   detallesTransaccion DetalleTransaccion[]
@@ -270,6 +272,7 @@ model Sucursal {
   clientesBase        Cliente[]
   registrosAsistencia RegistroAsistencia[]
   transacciones       Transaccion[]
+  gastosPlantilla     GastoPlantilla[]
   inventarios         Inventario[]
   membresias          Membresia[]
 
@@ -833,12 +836,42 @@ model CuentaBancaria {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
-  pagos        Pago[]
+  organizacion    Organizacion     @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  pagos           Pago[]
+  gastosPlantilla GastoPlantilla[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId])
   @@map("cuentas_bancarias")
+}
+
+// Catálogo de "a quién le pagamos" (arrendador, empresa de servicios,
+// proveedor de insumos, etc.) -- el espejo de Cliente pero del lado del
+// gasto. Sigue siendo opcional en Transaccion.proveedorId: un gasto
+// informal puede seguir usando solo el texto libre `beneficiario`.
+model Proveedor {
+  id               String             @id @default(uuid()) @db.Uuid
+  organizacionId   String             @map("organizacion_id") @db.Uuid
+  nombre           String             @db.VarChar(150)
+  numeroDocumento  String?            @map("numero_documento") @db.VarChar(50) // NIT/CI
+  telefono         String?            @db.VarChar(30)
+  correo           String?            @db.VarChar(150)
+  // Categoría que se sugiere (no se fuerza) al registrar un gasto con este
+  // proveedor -- mismo enum de siempre, ver nota en TipoConceptoVenta.
+  categoriaDefault TipoConceptoVenta? @map("categoria_default")
+  estado           EstadoGeneral      @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion    Organizacion     @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  transacciones   Transaccion[]
+  gastosPlantilla GastoPlantilla[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
+  @@map("proveedores")
 }
 
 model AperturaCaja {
@@ -875,10 +908,12 @@ model Transaccion {
   aperturaCajaId String?         @map("apertura_caja_id") @db.Uuid // opcional: permite operar sin flujo formal de caja
   clienteId      String?         @map("cliente_id") @db.Uuid // opcional: venta de mostrador sin cliente identificado
   tipo           TipoTransaccion
-  // Solo tiene sentido cuando tipo = EGRESO: a quién se le pagó (arrendador,
-  // proveedor, empresa de servicios, empleado). Texto libre a propósito, no
-  // una FK a un catálogo de proveedores -- eso es un modelo aparte que no
-  // se pidió acá; esto ya deja el gasto legible sin inventar esa entidad.
+  // Ambos solo tienen sentido cuando tipo = EGRESO: a quién se le pagó.
+  // proveedorId cuando es un proveedor ya registrado en el catálogo;
+  // beneficiario (texto libre) se mantiene para el gasto informal sin
+  // proveedor formal, o para dejar una copia legible del nombre aunque el
+  // proveedor se edite/borre más adelante.
+  proveedorId    String?         @map("proveedor_id") @db.Uuid
   beneficiario   String?         @db.VarChar(150)
   montoTotal     Decimal         @map("monto_total") @db.Decimal(12, 2) // debe igualar la suma de Pagos y de DetalleTransaccion (validar en app)
   fechaHora      DateTime        @default(now()) @map("fecha_hora") @db.Timestamptz(6)
@@ -893,6 +928,7 @@ model Transaccion {
   aperturaCaja AperturaCaja?        @relation(fields: [aperturaCajaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
   cliente      Cliente?             @relation(fields: [clienteId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  proveedor    Proveedor?           @relation(fields: [proveedorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   creadoPor    Usuario?             @relation("TransaccionesCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
   pagos        Pago[]
   detalles     DetalleTransaccion[]
@@ -939,6 +975,10 @@ model DetalleTransaccion {
   membresiaId      String?           @map("membresia_id") @db.Uuid
   productoId       String?           @map("producto_id") @db.Uuid
   servicioId       String?           @map("servicio_id") @db.Uuid
+  // Plantilla de gasto recurrente que generó esta línea, si vino de una (ver
+  // GastoPlantillaService). Además de trazabilidad, es lo que usa el propio
+  // generador para no duplicar el gasto del mes ya generado.
+  gastoPlantillaId String?           @map("gasto_plantilla_id") @db.Uuid
   descripcionLibre String?           @map("descripcion_libre") @db.VarChar(200) // obligatorio en la app cuando tipoConcepto = OTRO
   cantidad         Int               @default(1)
   precioUnitario   Decimal           @map("precio_unitario") @db.Decimal(10, 2)
@@ -947,17 +987,63 @@ model DetalleTransaccion {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
-  transaccion  Transaccion  @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
-  membresia    Membresia?   @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  producto     Producto?    @relation(fields: [productoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  servicio     Servicio?    @relation(fields: [servicioId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  organizacion   Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  transaccion    Transaccion     @relation(fields: [transaccionId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  membresia      Membresia?      @relation(fields: [membresiaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  producto       Producto?       @relation(fields: [productoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  servicio       Servicio?       @relation(fields: [servicioId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  gastoPlantilla GastoPlantilla? @relation(fields: [gastoPlantillaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
 
   @@index([organizacionId, transaccionId])
   @@index([membresiaId])
   @@index([productoId])
   @@index([servicioId])
+  @@index([gastoPlantillaId])
   @@map("detalles_transaccion")
+}
+
+// Plantilla de gasto mensual recurrente (alquiler, nómina, suscripciones de
+// servicios). A diferencia de TurnoPlantilla/ClasePlantilla (semanales, se
+// proyectan varias semanas hacia adelante porque tiene sentido pre-programar
+// turnos/clases futuros), un gasto se genera solo cuando efectivamente
+// corresponde -- no tiene sentido dejar un gasto de un mes futuro ya
+// asentado en los libros. El generador corre a diario y solo actúa el día
+// del mes que le toca a cada plantilla (con tope a fin de mes si el mes es
+// más corto que `diaDelMes`, ver GastoPlantillaService).
+model GastoPlantilla {
+  id               String            @id @default(uuid()) @db.Uuid
+  organizacionId   String            @map("organizacion_id") @db.Uuid
+  sucursalId       String            @map("sucursal_id") @db.Uuid
+  proveedorId      String?           @map("proveedor_id") @db.Uuid
+  beneficiario     String?           @db.VarChar(150) // si no hay proveedor formal
+  tipoConcepto     TipoConceptoVenta @map("tipo_concepto") // debe ser una categoría de egreso
+  descripcion      String?           @db.Text
+  monto            Decimal           @db.Decimal(12, 2)
+  metodoPago       MetodoPago        @map("metodo_pago")
+  cuentaBancariaId String            @map("cuenta_bancaria_id") @db.Uuid
+  diaDelMes        Int               @map("dia_del_mes") // 1-31
+  vigenciaDesde    DateTime          @map("vigencia_desde") @db.Date
+  vigenciaHasta    DateTime?         @map("vigencia_hasta") @db.Date
+  activa           Boolean           @default(true)
+  // Primer día del mes ya generado (UTC). Puerta atómica de idempotencia:
+  // generarParaOrganizacion la reclama con un UPDATE condicional antes de
+  // crear la Transaccion, así dos disparos concurrentes (cron + "generar
+  // ahora" manual) no duplican el gasto del mismo mes -- ver gasto-plantilla.service.ts.
+  ultimaGeneracion DateTime?         @map("ultima_generacion") @db.Date
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion    Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal        Sucursal             @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  proveedor       Proveedor?           @relation(fields: [proveedorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  cuentaBancaria  CuentaBancaria       @relation(fields: [cuentaBancariaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  gastosGenerados DetalleTransaccion[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@map("gastos_plantilla")
 }
 
 // Comprobante fiscal/no fiscal emitido para una transaccion (recibo simple

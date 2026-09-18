@@ -9,6 +9,10 @@ interface RequestWithUser extends ExpressRequest {
   user: {
     sub: string;
     organizacionId?: string;
+    organizacionNombre?: string;
+    sucursalId?: string;
+    sucursalNombre?: string;
+    rolNombre?: string;
     is_superadmin?: boolean;
   };
 }
@@ -37,7 +41,10 @@ export class AuthController {
         sameSite: 'strict',
         maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
       });
-      return { user: result.user, access_token: result.access_token };
+      // El token vive solo en la cookie HttpOnly -- no se devuelve en el
+      // body para que ningún script en el navegador (ni siquiera el propio
+      // frontend) pueda leerlo. El frontend hidrata al usuario vía /auth/me.
+      return { user: result.user };
     }
   }
 
@@ -55,6 +62,15 @@ export class AuthController {
       sameSite: 'strict',
     });
     return { message: 'Sesión terminada' };
+  }
+
+  // Hidratación del usuario en el cliente: el JWT vive solo en la cookie
+  // HttpOnly (ilegible desde JS), así que el frontend pide sus propios datos
+  // acá en vez de decodificar un token que ya no tiene en localStorage.
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@Request() req: RequestWithUser) {
+    return this.authService.getMe(req.user);
   }
 
   @UseGuards(JwtAuthGuard)

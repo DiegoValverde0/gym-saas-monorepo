@@ -1,24 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma, TipoConceptoVenta } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
 import { QueryTransaccionDto } from './dto/query-transaccion.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
-
-// TipoConceptoVenta quedó como único discriminador polimórfico de
-// DetalleTransaccion al extenderlo a egresos (ver comentario en
-// schema.prisma sobre por qué no se renombró el enum). Estos dos sets
-// evitan que una línea de gasto use una categoría de venta o viceversa.
-const CONCEPTOS_INGRESO = new Set<TipoConceptoVenta>(['MEMBRESIA', 'PRODUCTO', 'SERVICIO', 'OTRO']);
-const CONCEPTOS_EGRESO = new Set<TipoConceptoVenta>([
-  'ALQUILER',
-  'SERVICIOS_BASICOS',
-  'NOMINA',
-  'INSUMOS',
-  'MANTENIMIENTO',
-  'IMPUESTOS',
-  'OTRO_GASTO',
-]);
+import { CONCEPTOS_INGRESO, CONCEPTOS_EGRESO } from './tipo-concepto.util';
 
 @Injectable()
 export class TransaccionService {
@@ -96,6 +82,7 @@ export class TransaccionService {
                 clienteId: dto.clienteId || null,
                 aperturaCajaId: aperturaCaja ? aperturaCaja.id : null,
                 tipo: dto.tipo,
+                proveedorId: dto.proveedorId || null,
                 beneficiario: dto.beneficiario || null,
                 montoTotal: dto.montoTotal,
                 creadoPorId: userId,
@@ -216,6 +203,7 @@ export class TransaccionService {
         where: whereClause,
         include: {
           cliente: { select: { nombre: true, numeroDocumento: true } },
+          proveedor: { select: { nombre: true } },
           sucursal: { select: { nombre: true } },
           creadoPor: { select: { nombreCompleto: true, correo: true } },
           pagos: {

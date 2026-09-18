@@ -67,7 +67,11 @@ export class CreateTransaccionDto {
   @IsNotEmpty()
   tipo: TipoTransaccion;
 
-  // Solo aplica cuando tipo = EGRESO (ver comentario en schema.prisma).
+  // Ambos solo aplican cuando tipo = EGRESO (ver comentario en schema.prisma).
+  @IsUUID()
+  @IsOptional()
+  proveedorId?: string;
+
   @IsString()
   @IsOptional()
   beneficiario?: string;

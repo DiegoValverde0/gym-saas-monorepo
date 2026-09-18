@@ -21,7 +21,6 @@ interface LoginResponse {
   requireTenantSelection?: boolean;
   tenants?: Tenant[];
   user?: unknown;
-  access_token?: string;
 }
 
 export default function LoginPage() {
@@ -59,10 +58,8 @@ export default function LoginPage() {
         return;
       }
 
-      // Si pasamos aquí, el login fue 100% exitoso.
-      if (response.access_token) {
-        localStorage.setItem('gym_token', response.access_token);
-      }
+      // Si pasamos aquí, el login fue 100% exitoso. El backend ya dejó la
+      // sesión en una cookie HttpOnly -- no hay nada que guardar acá.
       setActiveTenantId(step === 2 ? selectedTenant : null);
       router.push('/dashboard');
     } catch (err: unknown) {
