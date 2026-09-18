@@ -226,6 +226,7 @@ export default function UsuariosPage() {
               : 'Crea una cuenta global para el empleado y asígnale un rol en tu organización.'}
             form={form as any}
             maxWidthClass="sm:max-w-xl"
+            multiStep
             sections={[
               {
                 title: 'Datos de Identidad (Global)',

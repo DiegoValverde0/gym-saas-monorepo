@@ -36,4 +36,11 @@ export class DashboardController {
     const sucursalId = req.user.sucursalId;
     return this.dashboardService.getRecentActivity(sucursalId);
   }
+
+  @Get('segmentacion-clientes')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
+  async getSegmentacionClientes(@Req() req: RequestWithUser) {
+    const sucursalId = req.user.sucursalId;
+    return this.dashboardService.getSegmentacionClientes(sucursalId);
+  }
 }

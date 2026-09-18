@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { startOfDay, startOfMonth, subDays, format } from 'date-fns';
+import { calcularSegmentoCliente, SEGMENTOS_CLIENTE } from '../clientes/segmentacion-cliente.util';
 
 @Injectable()
 export class DashboardService {
@@ -105,6 +106,29 @@ export class DashboardService {
     }
 
     return chartData;
+  }
+
+  // Reporte agregado para el Objetivo 1 de segmentación (ver
+  // segmentacion-cliente.util.ts para la lógica de clasificación y las
+  // decisiones de diseño detrás de cada balde). Trae solo lo mínimo por
+  // cliente (id + membresías resumidas) y clasifica en memoria -- a escala
+  // de un gimnasio (cientos/miles de clientes, no millones) es una sola
+  // consulta liviana, no un problema de rendimiento.
+  async getSegmentacionClientes(sucursalId?: string) {
+    const clientes = await this.prisma.extendedClient.cliente.findMany({
+      where: sucursalId ? { sucursalBaseId: sucursalId } : undefined,
+      select: {
+        id: true,
+        membresias: { select: { estado: true, fechaInicio: true, fechaFin: true, pagada: true } },
+      },
+    });
+
+    const conteos = Object.fromEntries(SEGMENTOS_CLIENTE.map((s) => [s, 0])) as Record<string, number>;
+    for (const cliente of clientes) {
+      conteos[calcularSegmentoCliente(cliente.membresias)]++;
+    }
+
+    return { total: clientes.length, porSegmento: conteos };
   }
 
   async getRecentActivity(sucursalId?: string) {

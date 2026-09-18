@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
-import { useForm, useWatch } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { MembresiaWizardModal } from '@/components/ui/membresia-wizard-modal';
+import { MembresiaWizardModal, membresiaWizardSchema } from '@/components/ui/membresia-wizard-modal';
 import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,23 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { POSModal } from './POSModal';
+import type { z } from 'zod';
 
-interface Cliente {
-  id: string;
-  nombre: string;
-  numeroDocumento?: string | null;
-  sucursalBaseId?: string | null;
-}
-
-const membresiaSchema = z.object({
-  clienteId: z.string().min(1, "Selecciona un cliente"),
-  sucursalId: z.string().optional(),
-  planId: z.string().min(1, "Selecciona un plan"),
-  promocionId: z.string().optional().or(z.literal('')),
-  fechaInicio: z.string().min(1, "Fecha obligatoria"),
-});
-
-type MembresiaFormValues = z.infer<typeof membresiaSchema>;
+type MembresiaFormValues = z.infer<typeof membresiaWizardSchema>;
 
 export default function MembresiasPage() {
   const queryClient = useQueryClient();
@@ -47,6 +30,12 @@ export default function MembresiasPage() {
   const { token, user } = useAuth();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Membresía PENDIENTE_PAGO que se está "editando" (null = venta nueva). El
+  // wizard usa esto para precargarse y arrancar en el paso 2 -- antes esta
+  // página tenía su propio `form` desconectado del wizard (que tiene el
+  // suyo propio), así que "Editar" siempre abría un formulario en blanco,
+  // idéntico a "Nueva Venta". Ver membresia-wizard-modal.tsx.
+  const [editingMembresia, setEditingMembresia] = useState<any | null>(null);
 
   const [detailsMembresia, setDetailsMembresia] = useState<any | null>(null);
   const [posOpen, setPosOpen] = useState(false);
@@ -66,19 +55,6 @@ export default function MembresiasPage() {
 
   const [directorySearch, setDirectorySearch] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
-
-  const form = useForm<MembresiaFormValues>({
-    resolver: zodResolver(membresiaSchema),
-    mode: 'onChange',
-    defaultValues: {
-      clienteId: '',
-      planId: '',
-      promocionId: '',
-      fechaInicio: new Date().toISOString().split('T')[0],
-    },
-  });
-
-  const watchClienteId = useWatch({ control: form.control, name: 'clienteId' });
 
   // Consultas
   const { data: membresias, isLoading } = useQuery({
@@ -111,21 +87,6 @@ export default function MembresiasPage() {
     enabled: !!token,
   });
 
-  // Autocompletar sucursalId si el usuario es global
-  useEffect(() => {
-    if (userSucursalId === null || userSucursalId === undefined) {
-      if (watchClienteId && clientes) {
-        const clList = unwrapList(clientes) as Cliente[];
-        const client = clList.find((c: Cliente) => c.id === watchClienteId);
-        if (client && client.sucursalBaseId) {
-          form.setValue('sucursalId', client.sucursalBaseId);
-        } else {
-          form.setValue('sucursalId', '');
-        }
-      }
-    }
-  }, [watchClienteId, clientes, userSucursalId, form]);
-
   const createMutation = useMutation({
     mutationFn: async (values: MembresiaFormValues) => {
       const payload: any = { ...values };
@@ -146,7 +107,7 @@ export default function MembresiasPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['membresias'] });
       setIsDialogOpen(false);
-      form.reset();
+      setEditingMembresia(null);
       toast({ title: 'Éxito', description: 'Membresía creada (Pendiente de Pago).', variant: 'success' });
     },
     onError: (err: any) => {
@@ -154,42 +115,31 @@ export default function MembresiasPage() {
     }
   });
 
-  // Para actualizar la membresía PENDIENTE_PAGO si el usuario la edita antes de pagar.
-  // Notar que el backend actualmente tiene el update(), pero la re-evaluacion de precios/encolamiento no está en el PATCH en el servicio, sino en el POST.
-  // La mejor práctica para "editar" una venta pendiente es CANCELARLA y CREAR UNA NUEVA, pero para UX lo simularemos como un POST si la estamos re-haciendo, 
-  // o si el backend soporte update completo, usamos update. 
-  // Dado que el POST anula las anteriores pendientes, simplemente usar POST funciona perfecto como un "Update destructivo".
+  // No existe un PATCH real para "editar" una membresía PENDIENTE_PAGO:
+  // UpdateMembresiaDto (backend) solo permite cambiar `estado` (transiciones
+  // como cancelar/congelar), no plan/promoción/fecha. Por eso "editar" sigue
+  // siendo un POST -- el backend cancela automáticamente la PENDIENTE_PAGO
+  // anterior del cliente antes de crear la nueva (ver membresia.service.ts,
+  // create(), paso 1). El wizard ahora sí precarga los valores anteriores y
+  // lo deja claro en el paso 2 (antes abría en blanco, como una venta nueva).
   const onSubmit = (values: MembresiaFormValues) => {
-    // Si estamos editando, simplemente creamos una nueva, el backend anulará automáticamente la PENDIENTE_PAGO anterior!
     createMutation.mutate(values);
   };
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['membresias', showDeleted],
+    queryKey: ['membresias', activeTenantId, showDeleted],
     endpoint: 'membresias',
     itemName: 'La membresía',
     modelName: 'membresia'
   });
 
   const handleAddNew = () => {
-    form.reset({
-      clienteId: '',
-      sucursalId: userSucursalId || '',
-      planId: '',
-      promocionId: '',
-      fechaInicio: new Date().toISOString().split('T')[0],
-    });
+    setEditingMembresia(null);
     setIsDialogOpen(true);
   };
 
   const handleEdit = (membresia: any) => {
-    form.reset({
-      clienteId: membresia.clienteId,
-      sucursalId: membresia.sucursalId || userSucursalId || '',
-      planId: membresia.planId,
-      promocionId: membresia.promocionId || '',
-      fechaInicio: new Date(membresia.fechaInicio).toISOString().split('T')[0],
-    });
+    setEditingMembresia(membresia);
     setIsDialogOpen(true);
   };
 
@@ -276,6 +226,7 @@ export default function MembresiasPage() {
           promociones={promocionesList.filter((p: any) => p.estado === 'ACTIVO')}
           sucursales={sucursales || []}
           userSucursalId={userSucursalId || undefined}
+          editingMembresia={editingMembresia}
         />
 
         {isLoading ? (

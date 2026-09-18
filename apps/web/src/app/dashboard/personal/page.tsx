@@ -333,8 +333,10 @@ export default function PersonalPage() {
         title={editingPersonal ? 'Editar Perfil de Staff' : 'Nuevo Perfil de Staff'}
         description={editingPersonal ? 'Ajusta la contratación y disciplinas de este staff.' : 'Convierte a un usuario ya registrado en personal del gimnasio.'}
         form={form as any}
+        multiStep
         sections={[
           {
+            title: 'Usuario',
             fields: editingPersonal
               ? [
                   {
@@ -362,6 +364,7 @@ export default function PersonalPage() {
                 ],
           },
           {
+            title: 'Contratación',
             fields: [
               {
                 name: 'tipoContratacion',

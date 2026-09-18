@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Banknote, Coins, ArrowRight, ArrowLeft, AlertTriangle, CheckCircle2, Save, X } from 'lucide-react';
+import { Banknote, Coins, ArrowRight, ArrowLeft, AlertTriangle, CheckCircle2, Save } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -84,35 +84,25 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden bg-slate-50 border-0 shadow-2xl">
-        {/* Cabecera */}
-        <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center relative overflow-hidden">
-          <div className="absolute -right-10 -top-10 opacity-10">
-             <Banknote className="w-40 h-40" />
+      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
+        {/* Cabecera unificada: misma barra gris + puntos de progreso que el
+            resto de los formularios paginados de la app (ver
+            membresia-wizard-modal.tsx y global-form-modal.tsx). */}
+        <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+          <div>
+            <DialogTitle className="text-xl">Arqueo y Cierre de Caja</DialogTitle>
+            <DialogDescription className="mt-1">
+              Caja: {estadoApertura?.apertura?.caja?.nombre || 'Desconocida'} — {step === 1 ? 'Paso 1: Conteo Físico' : 'Paso 2: Resumen y Ajustes'}
+            </DialogDescription>
           </div>
-          <div className="relative z-10 text-white flex-1">
-            <h2 className="text-2xl font-bold">Arqueo y Cierre de Caja</h2>
-            <p className="text-indigo-100 mt-1">Caja: {estadoApertura?.apertura?.caja?.nombre || 'Desconocida'}</p>
-          </div>
-        </div>
-
-        {/* Stepper Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-white">
-          <div className="flex items-center justify-center gap-8">
-             <div className={`flex items-center gap-2 ${step === 1 ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${step === 1 ? 'bg-indigo-100' : 'bg-slate-100'}`}>1</div>
-                <span>Conteo Físico</span>
-             </div>
-             <div className="w-12 h-px bg-slate-200"></div>
-             <div className={`flex items-center gap-2 ${step === 2 ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${step === 2 ? 'bg-indigo-100' : 'bg-slate-100'}`}>2</div>
-                <span>Resumen y Ajustes</span>
-             </div>
+          <div className="flex gap-2 shrink-0 pl-4">
+            <div className={`w-3 h-3 rounded-full ${step >= 1 ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
+            <div className={`w-3 h-3 rounded-full ${step >= 2 ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
           </div>
         </div>
 
         {/* Formulario */}
-        <div className="px-6 py-6 bg-white min-h-[400px]">
+        <div className="px-6 py-6 bg-white dark:bg-slate-900 min-h-[400px]">
           {step === 1 && (
              <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                <div className="mb-6">
@@ -147,7 +137,7 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
                    <p className="text-sm font-medium text-slate-500">Total Efectivo Contado</p>
                    <p className="text-3xl font-black text-emerald-600">Bs. {totalEfectivoCalculado.toFixed(2)}</p>
                  </div>
-                 <Button onClick={nextStep} className="bg-indigo-600 hover:bg-indigo-700 h-12 px-6 rounded-full shadow-md shadow-indigo-200">
+                 <Button onClick={nextStep}>
                    Siguiente <ArrowRight className="w-4 h-4 ml-2" />
                  </Button>
                </div>
@@ -205,10 +195,10 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
                   </div>
 
                   <div className="mt-8 pt-4 border-t border-slate-200 flex justify-between items-center">
-                    <Button type="button" variant="ghost" onClick={prevStep} className="text-slate-500 hover:text-slate-700">
-                      <ArrowLeft className="w-4 h-4 mr-2" /> Volver al Conteo
+                    <Button type="button" variant="ghost" onClick={prevStep}>
+                      <ArrowLeft className="w-4 h-4 mr-2" /> Atrás
                     </Button>
-                    <Button type="submit" disabled={isPending} className="bg-rose-600 hover:bg-rose-700 text-white h-12 px-8 rounded-full shadow-md shadow-rose-200 font-bold text-base">
+                    <Button type="submit" disabled={isPending} variant="destructive">
                       {isPending ? 'Cerrando...' : 'Confirmar Cierre de Caja'} <Save className="w-4 h-4 ml-2" />
                     </Button>
                   </div>

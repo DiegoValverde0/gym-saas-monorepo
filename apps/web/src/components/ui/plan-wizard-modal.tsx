@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowRight, ArrowLeft, Save, Briefcase, CalendarClock, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Save, CalendarClock } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -122,56 +122,49 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
   
   const prevStep = () => setStep(step - 1);
 
+  // Defensa contra envío prematuro: la única vía normal para llegar acá es
+  // el botón "Guardar Plan" del paso 3 (ver también el onKeyDown del <form>
+  // más abajo, que evita que Enter en el paso 2 -- que en los planes "Por
+  // Tiempo"/"Por Sesiones" tiene un solo input numérico visible -- dispare el
+  // envío implícito nativo del navegador y salte los pasos siguientes). Este
+  // era el mismo bug encontrado y corregido en membresia-wizard-modal.tsx.
   const onFinalSubmit = form.handleSubmit((values) => {
+    if (step !== 3) return;
     onSubmit(values);
   });
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden bg-slate-50 border-0 shadow-2xl">
-        {/* Cabecera */}
-        <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center relative overflow-hidden">
-          <div className="absolute -right-10 -top-10 opacity-10">
-             <Briefcase className="w-40 h-40" />
+      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
+        {/* Misma barra gris + puntos de progreso que el resto de los
+            formularios paginados de la app (ver membresia-wizard-modal.tsx,
+            global-form-modal.tsx, arqueo-caja-wizard.tsx). */}
+        <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+          <div>
+            <DialogTitle className="text-xl">{initialData ? 'Editar Plan' : 'Nuevo Plan'}</DialogTitle>
+            <DialogDescription className="mt-1">
+              Paso {step}: {['Información', 'Reglas de Duración', 'Restricciones'][step - 1]}
+            </DialogDescription>
           </div>
-          <div className="relative z-10 text-white flex-1">
-            <h2 className="text-2xl font-bold">{initialData ? 'Editar Plan' : 'Nuevo Plan'}</h2>
-            <p className="text-indigo-100 mt-1">Configura las reglas comerciales y accesos.</p>
-          </div>
-        </div>
-
-        {/* Stepper Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-white">
-          <div className="flex justify-between relative">
-            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -z-10 -translate-y-1/2"></div>
-            <div 
-              className="absolute top-1/2 left-0 h-0.5 bg-indigo-500 -z-10 -translate-y-1/2 transition-all duration-300"
-              style={{ width: `${((step - 1) / 2) * 100}%` }}
-            ></div>
-            
-            {[
-              { num: 1, label: 'Información', icon: <Briefcase className="w-4 h-4" /> },
-              { num: 2, label: 'Reglas de Duración', icon: <CalendarClock className="w-4 h-4" /> },
-              { num: 3, label: 'Restricciones', icon: <ShieldCheck className="w-4 h-4" /> }
-            ].map((s) => (
-              <div key={s.num} className="flex flex-col items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
-                  step >= s.num ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border-2 border-slate-200'
-                }`}>
-                  {s.icon}
-                </div>
-                <span className={`text-xs font-semibold ${step >= s.num ? 'text-indigo-700' : 'text-slate-400'}`}>
-                  {s.label}
-                </span>
-              </div>
+          <div className="flex gap-2 shrink-0 pl-4">
+            {[1, 2, 3].map((s) => (
+              <div key={s} className={`w-3 h-3 rounded-full ${step >= s ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
             ))}
           </div>
         </div>
 
         {/* Formulario */}
-        <div className="px-8 py-6">
-          <form onSubmit={onFinalSubmit} className="space-y-6">
-            
+        <div className="px-6 py-6">
+          <form
+            onSubmit={onFinalSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && step !== 3) {
+                e.preventDefault();
+              }
+            }}
+            className="space-y-6"
+          >
+
             {/* Paso 1: Información Básica */}
             <div className={step === 1 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
               <div className="grid grid-cols-2 gap-6">
@@ -343,12 +336,12 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
         </div>
 
         {/* Botonera inferior */}
-        <div className="bg-slate-100/50 px-6 py-4 flex justify-between items-center border-t border-slate-200 rounded-b-lg">
-          <Button 
-            variant="outline" 
+        <div className="px-6 py-4 flex justify-between items-center border-t border-slate-200">
+          <Button
+            type="button"
+            variant="ghost"
             onClick={step === 1 ? onClose : prevStep}
             disabled={isPending}
-            className="bg-white"
           >
             {step === 1 ? 'Cancelar' : (
               <>
@@ -358,11 +351,11 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
           </Button>
 
           {step < 3 ? (
-            <Button onClick={nextStep} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md">
+            <Button type="button" onClick={nextStep}>
               Siguiente <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={onFinalSubmit} disabled={isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md">
+            <Button type="button" onClick={onFinalSubmit} disabled={isPending} className="bg-indigo-600 hover:bg-indigo-500 text-white">
               {isPending ? 'Guardando...' : 'Guardar Plan'} <Save className="w-4 h-4 ml-2" />
             </Button>
           )}

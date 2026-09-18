@@ -16,12 +16,17 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle, Repeat, Sparkles, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { Label } from '@/components/ui/label';
 import { UseFormReturn } from 'react-hook-form';
 import { WeeklyCalendar } from '@/components/ui/weekly-calendar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 interface Cliente {
   id: string;
@@ -78,6 +83,43 @@ interface ClaseFormValues {
   fechaHora: string;
   duracionMinutos: number | string;
   estado: string;
+}
+
+interface ClasePlantilla {
+  id: string;
+  sucursalId: string;
+  disciplinaId?: string | null;
+  entrenadorId?: string | null;
+  nombreClase: string;
+  descripcion?: string | null;
+  capacidadMaxima: number;
+  diaSemana: number;
+  horaInicio: string;
+  duracionMinutos: number;
+  vigenciaDesde: string;
+  vigenciaHasta?: string | null;
+  activa: boolean;
+  disciplina?: Disciplina;
+  entrenador?: Entrenador;
+  sucursal?: Sucursal;
+}
+
+interface ClasePlantillaFormValues {
+  sucursalId: string;
+  disciplinaId: string;
+  entrenadorId: string;
+  nombreClase: string;
+  descripcion: string;
+  capacidadMaxima: number | string;
+  // Al editar se cambia un solo día; al crear se pueden tildar varios que
+  // comparten horario (mismo patrón que las plantillas de turno).
+  diaSemana: number | string;
+  diasSemana: number[];
+  horaInicio: string;
+  duracionMinutos: number | string;
+  vigenciaDesde: string;
+  vigenciaHasta: string;
+  activa: boolean;
 }
 
 const dateInputClass = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
@@ -225,6 +267,160 @@ export default function ClasesPage() {
     itemName: 'La clase',
   });
 
+  // ---- Plantillas recurrentes de clase: mismo concepto que las plantillas
+  // de turno -- se define una vez por día de la semana y un job (nocturno, o
+  // el botón "Generar clases ahora") materializa las ClaseProgramada de las
+  // próximas semanas a partir de esto, en vez de crear cada clase a mano.
+  const [isPlantillaDialogOpen, setIsPlantillaDialogOpen] = useState(false);
+  const [editingPlantilla, setEditingPlantilla] = useState<ClasePlantilla | null>(null);
+  const [showDeletedPlantillas, setShowDeletedPlantillas] = useState(false);
+  const [confirmPlantillaConfig, setConfirmPlantillaConfig] = useState({ title: '', description: '', onConfirm: () => {} });
+  const [confirmPlantillaOpen, setConfirmPlantillaOpen] = useState(false);
+  const [semanasGenerarClases, setSemanasGenerarClases] = useState(8);
+
+  const plantillaForm = useForm<ClasePlantillaFormValues>({
+    defaultValues: {
+      sucursalId: '',
+      disciplinaId: '',
+      entrenadorId: '',
+      nombreClase: '',
+      descripcion: '',
+      capacidadMaxima: 20,
+      diaSemana: 1,
+      diasSemana: [],
+      horaInicio: '',
+      duracionMinutos: 60,
+      vigenciaDesde: '',
+      vigenciaHasta: '',
+      activa: true,
+    },
+  });
+
+  const { data: clasesPlantilla, isLoading: isLoadingPlantillas } = useQuery({
+    queryKey: ['clases-plantilla', activeTenantId, showDeletedPlantillas],
+    queryFn: async () => unwrapList(await apiGet(showDeletedPlantillas ? '/clases-plantilla?deleted=true' : '/clases-plantilla')),
+    enabled: !!token,
+  });
+
+  const savePlantillaMutation = useMutation({
+    mutationFn: async (values: ClasePlantillaFormValues) => {
+      const base: Record<string, unknown> = {
+        sucursalId: userSucursalId || values.sucursalId,
+        nombreClase: values.nombreClase,
+        descripcion: values.descripcion || undefined,
+        capacidadMaxima: Number(values.capacidadMaxima) || 20,
+        horaInicio: values.horaInicio,
+        duracionMinutos: Number(values.duracionMinutos) || 60,
+        vigenciaDesde: values.vigenciaDesde,
+        activa: values.activa,
+      };
+      if (values.disciplinaId) base.disciplinaId = values.disciplinaId;
+      if (values.entrenadorId) base.entrenadorId = values.entrenadorId;
+      if (values.vigenciaHasta) base.vigenciaHasta = values.vigenciaHasta;
+
+      if (editingPlantilla) {
+        return apiPatch(`/clases-plantilla/${editingPlantilla.id}`, { ...base, diaSemana: Number(values.diaSemana) });
+      }
+
+      const dias = values.diasSemana ?? [];
+      if (dias.length === 0) {
+        throw new Error('Selecciona al menos un día de la semana.');
+      }
+      return Promise.all(dias.map((dia) => apiPost('/clases-plantilla', { ...base, diaSemana: dia })));
+    },
+    onSuccess: (_data, values) => {
+      queryClient.invalidateQueries({ queryKey: ['clases-plantilla'] });
+      setIsPlantillaDialogOpen(false);
+      plantillaForm.reset();
+      const cantidadDias = editingPlantilla ? 1 : (values.diasSemana ?? []).length;
+      toast({
+        title: 'Éxito',
+        description: editingPlantilla
+          ? 'Plantilla de clase actualizada correctamente.'
+          : cantidadDias > 1
+            ? `Se crearon ${cantidadDias} plantillas de clase (una por día seleccionado).`
+            : 'Plantilla de clase creada correctamente.',
+        variant: 'success',
+      });
+    },
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+
+  const { deleteItem: deletePlantilla, restoreItem: restorePlantilla, isRestoring: isRestoringPlantilla } = useSoftDelete({
+    queryKey: ['clases-plantilla', activeTenantId, showDeletedPlantillas],
+    endpoint: 'clases-plantilla',
+    modelName: 'clasePlantilla',
+    itemName: 'La plantilla',
+  });
+
+  const generarClasesMutation = useMutation({
+    mutationFn: async () => apiPost(`/clases-plantilla/generar?semanas=${semanasGenerarClases}`, {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['clases'] });
+      const creadas = data?.clasesCreadas ?? 0;
+      const omitidas = data?.clasesOmitidas ?? 0;
+      const partes = [
+        creadas > 0
+          ? `Se crearon ${creadas} clases nuevas a partir de las plantillas activas (próximas ${semanasGenerarClases} semanas).`
+          : `Las plantillas activas ya tenían todas sus clases generadas para las próximas ${semanasGenerarClases} semanas.`,
+      ];
+      if (omitidas > 0) {
+        partes.push(`${omitidas} no se generaron porque el entrenador no tenía turno registrado y la organización lo exige.`);
+      }
+      toast({ title: 'Clases generadas', description: partes.join(' '), variant: 'success' });
+    },
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+
+  const handleAddNewPlantilla = () => {
+    setEditingPlantilla(null);
+    plantillaForm.reset({
+      sucursalId: userSucursalId || '',
+      disciplinaId: '',
+      entrenadorId: '',
+      nombreClase: '',
+      descripcion: '',
+      capacidadMaxima: 20,
+      diaSemana: 1,
+      diasSemana: [],
+      horaInicio: '',
+      duracionMinutos: 60,
+      vigenciaDesde: new Date().toISOString().split('T')[0],
+      vigenciaHasta: '',
+      activa: true,
+    });
+    setIsPlantillaDialogOpen(true);
+  };
+
+  const handleEditPlantilla = (plantilla: ClasePlantilla) => {
+    setEditingPlantilla(plantilla);
+    plantillaForm.reset({
+      sucursalId: plantilla.sucursalId,
+      disciplinaId: plantilla.disciplinaId || '',
+      entrenadorId: plantilla.entrenadorId || '',
+      nombreClase: plantilla.nombreClase,
+      descripcion: plantilla.descripcion || '',
+      capacidadMaxima: plantilla.capacidadMaxima,
+      diaSemana: plantilla.diaSemana,
+      diasSemana: [plantilla.diaSemana],
+      horaInicio: plantilla.horaInicio ? new Date(plantilla.horaInicio).toISOString().substring(11, 16) : '',
+      duracionMinutos: plantilla.duracionMinutos,
+      vigenciaDesde: plantilla.vigenciaDesde ? new Date(plantilla.vigenciaDesde).toISOString().split('T')[0] : '',
+      vigenciaHasta: plantilla.vigenciaHasta ? new Date(plantilla.vigenciaHasta).toISOString().split('T')[0] : '',
+      activa: plantilla.activa,
+    });
+    setIsPlantillaDialogOpen(true);
+  };
+
+  const handleDeletePlantilla = (id: string) => {
+    setConfirmPlantillaConfig({
+      title: '¿Eliminar plantilla?',
+      description: 'No borra las clases ya generadas, solo detiene nuevas proyecciones. Podrás deshacerlo en los próximos segundos.',
+      onConfirm: () => deletePlantilla(id),
+    });
+    setConfirmPlantillaOpen(true);
+  };
+
   const handleAddNew = (date?: Date) => {
     setEditingClase(null);
     form.reset({
@@ -321,14 +517,32 @@ export default function ClasesPage() {
     return c.nombreClase?.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  const plantillaList = unwrapList(clasesPlantilla) as ClasePlantilla[];
+
   return (
     <Protect permission="clases:leer" fallbackType="redirect">
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Clases Programadas</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Calendario de clases, cupos y reservas.</p>
+        </div>
+
+        <Tabs defaultValue="clases" className="w-full">
+          <TabsList className="bg-slate-100 dark:bg-slate-800 p-1">
+            <TabsTrigger value="clases" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
+              <CalendarDays className="h-4 w-4 mr-1.5" /> Clases
+            </TabsTrigger>
+            <TabsTrigger value="plantillas" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
+              <Repeat className="h-4 w-4 mr-1.5" /> Plantillas recurrentes
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="clases" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Clases Programadas</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Calendario de clases, cupos y reservas.</p>
-          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+            Clases puntuales. Para no crear cada semana a mano, define un horario recurrente en la pestaña
+            &quot;Plantillas recurrentes&quot;.
+          </p>
 
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             {viewMode === 'calendar' && (
@@ -496,6 +710,167 @@ export default function ClasesPage() {
             </TableBody>
           </Table>
         )}
+          </TabsContent>
+
+          <TabsContent value="plantillas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+                Define el horario semanal habitual de una clase una sola vez (ej. &quot;Yoga, Lunes/Miércoles/Viernes 07:00&quot;).
+                Todas las noches (o cuando aprietes &quot;Generar clases ahora&quot;) el sistema crea las clases individuales de
+                las próximas semanas a partir de esto.
+              </p>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
+                <PapeleraToggle showDeleted={showDeletedPlantillas} setShowDeleted={setShowDeletedPlantillas} />
+
+                <Protect permission="clases:crear" fallbackType="hide">
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-1 pr-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                          <Info className="h-4 w-4" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Crea, a partir de tus plantillas activas, las clases individuales reales de las próximas N semanas (no
+                          duplica las que ya existen; si el entrenador no tiene turno y la organización lo exige, esa clase
+                          puntual se omite). Esto mismo corre automáticamente todas las noches; el botón es para no esperar
+                          hasta entonces.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <Label htmlFor="semanas-generar-clases" className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      Semanas:
+                    </Label>
+                    <input
+                      id="semanas-generar-clases"
+                      type="number"
+                      min={1}
+                      max={26}
+                      value={semanasGenerarClases}
+                      onChange={(e) => setSemanasGenerarClases(Math.min(26, Math.max(1, Number(e.target.value) || 1)))}
+                      className="w-14 h-8 text-xs text-center rounded-md border border-slate-200 dark:border-slate-700 bg-transparent"
+                    />
+
+                    <Button
+                      variant="outline"
+                      onClick={() => generarClasesMutation.mutate()}
+                      disabled={generarClasesMutation.isPending}
+                      className="border-none shadow-none text-indigo-700 dark:text-indigo-400"
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {generarClasesMutation.isPending ? 'Generando...' : 'Generar clases ahora'}
+                    </Button>
+                  </div>
+                </Protect>
+
+                <Protect permission="clases:crear" fallbackType="hide">
+                  <TenantRequiredButton onClick={handleAddNewPlantilla} icon={<Plus className="mr-2 h-4 w-4" />} label="Nueva Plantilla" />
+                </Protect>
+              </div>
+            </div>
+
+            {isLoadingPlantillas ? (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
+                <div className="animate-pulse flex flex-col items-center gap-4">
+                  <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                  <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+              </div>
+            ) : plantillaList.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
+                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
+                  <Repeat className="w-6 h-6" />
+                </div>
+                <p className="text-base font-semibold text-slate-900 dark:text-white">No hay plantillas de clase registradas</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Crea una plantilla por cada horario semanal habitual (ej. &quot;Spinning Martes y Jueves 18:00&quot;).
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Clase</TableHead>
+                    <TableHead>Entrenador</TableHead>
+                    <TableHead>Sucursal</TableHead>
+                    <TableHead>Día</TableHead>
+                    <TableHead>Horario</TableHead>
+                    <TableHead>Vigencia</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plantillaList.map((p: ClasePlantilla) => (
+                    <TableRow key={p.id} className={showDeletedPlantillas ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
+                      <TableCell>
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">{p.nombreClase}</p>
+                          {p.disciplina?.nombre && <p className="text-xs text-slate-500 dark:text-slate-400">{p.disciplina.nombre}</p>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.entrenador?.usuario?.nombreCompleto || 'Sin asignar'}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.sucursal?.nombre}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">{DIAS_SEMANA[p.diaSemana]}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          {new Date(p.horaInicio).toISOString().substring(11, 16)} ({p.duracionMinutos} min)
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          {new Date(p.vigenciaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })}
+                          {' – '}
+                          {p.vigenciaHasta ? new Date(p.vigenciaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : 'Indefinido'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.activa ? 'success' : 'outline'}>{p.activa ? 'Activa' : 'Inactiva'}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {showDeletedPlantillas ? (
+                            <Protect permission="sistema:restaurar">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => restorePlantilla(p.id)}
+                                disabled={isRestoringPlantilla}
+                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                              >
+                                <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                              </Button>
+                            </Protect>
+                          ) : (
+                            <>
+                              <Protect permission="clases:actualizar" fallbackType="hide">
+                                <Button variant="ghost" size="icon" onClick={() => handleEditPlantilla(p)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </Protect>
+                              <Protect permission="clases:eliminar" fallbackType="hide">
+                                <Button variant="ghost" size="icon" onClick={() => handleDeletePlantilla(p.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </Protect>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <GlobalFormModal
@@ -550,6 +925,143 @@ export default function ClasesPage() {
         title={confirmConfig.title}
         description={confirmConfig.description}
         onConfirm={confirmConfig.onConfirm}
+        isDestructive={true}
+      />
+
+      <GlobalFormModal
+        open={isPlantillaDialogOpen}
+        onOpenChange={setIsPlantillaDialogOpen}
+        title={editingPlantilla ? 'Editar Plantilla de Clase' : 'Nueva Plantilla de Clase'}
+        description={editingPlantilla ? 'Modifica el horario semanal recurrente.' : 'Define un horario que se repite cada semana.'}
+        form={plantillaForm as any}
+        sections={[
+          {
+            fields: [
+              { name: 'nombreClase', label: 'Nombre de la Clase', type: 'text', placeholder: 'Ej. Yoga Matutino', colSpan: 2 },
+              { name: 'disciplinaId', label: 'Disciplina', type: 'select', options: [{ label: 'Ninguna', value: '' }, ...(unwrapList(disciplinas) as Disciplina[]).map((d: Disciplina) => ({ label: d.nombre, value: d.id }))] },
+              { name: 'entrenadorId', label: 'Entrenador', type: 'select', options: [{ label: 'Sin asignar', value: '' }, ...(personalList as Entrenador[]).map((p: Entrenador) => ({ label: p.usuario?.nombreCompleto || 'Sin nombre', value: p.id }))] },
+              ...(!userSucursalId
+                ? [{
+                    name: 'sucursalId',
+                    label: 'Sucursal',
+                    type: 'select' as const,
+                    options: (unwrapList(sucursales) as Sucursal[]).map((s: Sucursal) => ({ label: s.nombre, value: s.id })),
+                    colSpan: 2 as const,
+                  }]
+                : []),
+              editingPlantilla
+                ? {
+                    name: 'diaSemana',
+                    label: 'Día de la semana',
+                    type: 'select' as const,
+                    options: DIAS_SEMANA.map((label, value) => ({ label, value: String(value) })),
+                  }
+                : {
+                    name: 'diasSemana',
+                    label: 'Días de la semana',
+                    type: 'custom' as const,
+                    colSpan: 2 as const,
+                    renderCustom: (f: any) => {
+                      const seleccionados: number[] = f.watch('diasSemana') || [];
+                      const toggle = (dia: number) => {
+                        const set = new Set(seleccionados);
+                        if (set.has(dia)) set.delete(dia); else set.add(dia);
+                        f.setValue('diasSemana', Array.from(set).sort(), { shouldDirty: true });
+                      };
+                      return (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Días de la semana</label>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Tilda todos los días que comparten este mismo horario, entrenador y sucursal (ej. Lunes, Miércoles
+                            y Viernes). Si un día tiene un horario distinto, créalo aparte en otra plantilla.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {DIAS_SEMANA.map((label, value) => {
+                              const active = seleccionados.includes(value);
+                              return (
+                                <button
+                                  type="button"
+                                  key={value}
+                                  onClick={() => toggle(value)}
+                                  aria-pressed={active}
+                                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                    active
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700'
+                                  }`}
+                                >
+                                  {label.slice(0, 3)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    },
+                  },
+              {
+                name: 'horaInicio',
+                label: 'Hora de Inicio',
+                type: 'custom',
+                renderCustom: (f: any) => (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hora de Inicio</label>
+                    <input type="time" {...f.register('horaInicio')} className={dateInputClass} />
+                  </div>
+                ),
+              },
+              { name: 'duracionMinutos', label: 'Duración (min)', type: 'number' },
+              { name: 'capacidadMaxima', label: 'Capacidad Máxima', type: 'number' },
+              {
+                name: 'activa',
+                label: 'Estado',
+                type: 'custom',
+                renderCustom: (f: any) => (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Plantilla activa</label>
+                    <div className="flex items-center h-10">
+                      <Switch checked={f.watch('activa')} onCheckedChange={(c: boolean) => f.setValue('activa', c, { shouldDirty: true })} />
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                name: 'vigenciaDesde',
+                label: 'Vigente desde',
+                type: 'custom',
+                renderCustom: (f: any) => (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Vigente desde</label>
+                    <input type="date" {...f.register('vigenciaDesde')} className={dateInputClass} />
+                  </div>
+                ),
+              },
+              {
+                name: 'vigenciaHasta',
+                label: 'Vigente hasta (Opcional)',
+                type: 'custom',
+                renderCustom: (f: any) => (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Vigente hasta (Opcional)</label>
+                    <input type="date" {...f.register('vigenciaHasta')} className={dateInputClass} />
+                  </div>
+                ),
+              },
+              { name: 'descripcion', label: 'Descripción (Opcional)', type: 'text', colSpan: 2 },
+            ],
+          },
+        ]}
+        onSubmit={savePlantillaMutation.mutateAsync as any}
+        isPending={savePlantillaMutation.isPending}
+        submitLabel="Guardar Plantilla"
+      />
+
+      <GlobalConfirmDialog
+        open={confirmPlantillaOpen}
+        onOpenChange={setConfirmPlantillaOpen}
+        title={confirmPlantillaConfig.title}
+        description={confirmPlantillaConfig.description}
+        onConfirm={confirmPlantillaConfig.onConfirm}
         isDestructive={true}
       />
 

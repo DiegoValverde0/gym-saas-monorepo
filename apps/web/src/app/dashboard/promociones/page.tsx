@@ -235,11 +235,8 @@ export default function PromocionesPage() {
       formSections[1].fields.push({ name: 'montoDescuentoFijo', label: 'Monto Fijo ($)', type: 'number', placeholder: 'Ej. 50.00', colSpan: 2 });
   }
 
-  formSections.push({
-      fields: [
-          { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }], colSpan: 2 },
-      ]
-  })
+  // En el mismo paso que el descuento (no amerita un paso propio de un solo campo).
+  formSections[1].fields.push({ name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }], colSpan: 2 });
 
   return (
     <Protect permission="promociones:leer" fallbackType="redirect">
@@ -280,6 +277,7 @@ export default function PromocionesPage() {
           title={editingPromocion ? 'Editar Promoción' : 'Nueva Promoción'}
           description={editingPromocion ? 'Ajusta los detalles de la oferta.' : 'Crea una nueva campaña de descuentos.'}
           form={form as any}
+          multiStep
           sections={formSections}
           onSubmit={onSubmit as any}
           isPending={createMutation.isPending || updateMutation.isPending}

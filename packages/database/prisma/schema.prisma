@@ -208,6 +208,7 @@ model Organizacion {
   turnosTrabajo       TurnoTrabajo[]
   turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
+  clasesPlantilla     ClasePlantilla[]
   reservasClase       ReservaClase[]
   clientes            Cliente[]
   promociones         Promocion[]
@@ -250,6 +251,7 @@ model Sucursal {
   turnosTrabajo       TurnoTrabajo[]
   turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
+  clasesPlantilla     ClasePlantilla[]
   clientesBase        Cliente[]
   registrosAsistencia RegistroAsistencia[]
   transacciones       Transaccion[]
@@ -398,6 +400,7 @@ model Disciplina {
   organizacion      Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   staffDisciplinas  StaffDisciplina[]
   clasesProgramadas ClaseProgramada[]
+  clasesPlantilla   ClasePlantilla[]
 
   @@unique([id, organizacionId])
   @@unique([organizacionId, nombre])
@@ -424,6 +427,7 @@ model PerfilStaff {
   turnosTrabajo    TurnoTrabajo[]
   turnosPlantilla  TurnoPlantilla[]
   clasesImpartidas ClaseProgramada[]
+  clasesPlantilla  ClasePlantilla[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId])
@@ -507,46 +511,89 @@ model TurnoPlantilla {
 }
 
 model ClaseProgramada {
-  id              String        @id @default(uuid()) @db.Uuid
-  organizacionId  String        @map("organizacion_id") @db.Uuid
-  sucursalId      String        @map("sucursal_id") @db.Uuid
-  disciplinaId    String?       @map("disciplina_id") @db.Uuid
-  entrenadorId    String?       @map("entrenador_id") @db.Uuid
+  id               String        @id @default(uuid()) @db.Uuid
+  organizacionId   String        @map("organizacion_id") @db.Uuid
+  sucursalId       String        @map("sucursal_id") @db.Uuid
+  disciplinaId     String?       @map("disciplina_id") @db.Uuid
+  entrenadorId     String?       @map("entrenador_id") @db.Uuid
   // Turno de trabajo del entrenador que cubre este horario, si se encontró
   // uno al crear/editar la clase (ver ClaseProgramadaService.resolverTurno).
   // Null no significa error: solo que no hay match o el entrenador no tiene
   // turno registrado (queda como advertencia o bloqueo según la política
   // `requerimientosClase.exigirTurnoEntrenador` de la organización).
-  turnoId         String?       @map("turno_id") @db.Uuid
-  nombreClase     String        @map("nombre_clase") @db.VarChar(100)
-  descripcion     String?       @db.Text
-  capacidadMaxima Int           @default(20) @map("capacidad_maxima")
-  fechaHora       DateTime      @map("fecha_hora") @db.Timestamptz(6)
-  duracionMinutos Int           @default(60) @map("duracion_minutos")
-  estado          EstadoGeneral @default(ACTIVO) // permite cancelar la clase completa (distinto de cancelar una reserva individual)
+  turnoId          String?       @map("turno_id") @db.Uuid
+  // Plantilla recurrente que generó esta ocurrencia, si vino de una (ver
+  // ClasePlantillaService.generarParaOrganizacion). Null en clases creadas
+  // manualmente, una por una, como antes.
+  clasePlantillaId String?       @map("clase_plantilla_id") @db.Uuid
+  nombreClase      String        @map("nombre_clase") @db.VarChar(100)
+  descripcion      String?       @db.Text
+  capacidadMaxima  Int           @default(20) @map("capacidad_maxima")
+  fechaHora        DateTime      @map("fecha_hora") @db.Timestamptz(6)
+  duracionMinutos  Int           @default(60) @map("duracion_minutos")
+  estado           EstadoGeneral @default(ACTIVO) // permite cancelar la clase completa (distinto de cancelar una reserva individual)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organizacion Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
-  sucursal     Sucursal       @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  organizacion   Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal       Sucursal        @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
   // SetNull es inválido aquí: es una FK compuesta y organizacionId es NOT NULL
   // en este modelo, así que Postgres no puede poner solo disciplinaId/entrenadorId
   // en null al borrar la fila referenciada (violaría el NOT NULL de organizacionId).
   // Restrict obliga a desasignar la disciplina/entrenador antes de poder borrarla.
-  disciplina   Disciplina?    @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  entrenador   PerfilStaff?   @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  disciplina     Disciplina?     @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  entrenador     PerfilStaff?    @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   // Restrict por el mismo motivo que disciplina/entrenador arriba (FK compuesta
   // + organizacionId NOT NULL invalida SetNull): hay que desvincular la clase
   // antes de poder borrar el turno.
-  turno        TurnoTrabajo?  @relation(fields: [turnoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
-  reservas     ReservaClase[]
+  turno          TurnoTrabajo?   @relation(fields: [turnoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  // Mismo motivo de Restrict que arriba (FK compuesta + organizacionId NOT NULL).
+  clasePlantilla ClasePlantilla? @relation(fields: [clasePlantillaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  reservas       ReservaClase[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId, sucursalId])
   @@index([fechaHora])
   @@map("clases_programadas")
+}
+
+// Plantilla recurrente de clase semanal (ej. "Yoga, Lun/Mié/Vie 07:00,
+// 60min"). Mismo rol que TurnoPlantilla pero para clases: un job (ver
+// ClasePlantillaService) materializa ClaseProgramada hacia adelante a partir
+// de estas plantillas, en vez de tener que crear cada clase de la semana
+// una por una.
+model ClasePlantilla {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizacionId  String    @map("organizacion_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  disciplinaId    String?   @map("disciplina_id") @db.Uuid
+  entrenadorId    String?   @map("entrenador_id") @db.Uuid
+  nombreClase     String    @map("nombre_clase") @db.VarChar(100)
+  descripcion     String?   @db.Text
+  capacidadMaxima Int       @default(20) @map("capacidad_maxima")
+  // 0 = domingo ... 6 = sábado (mismo criterio que TurnoPlantilla.diaSemana).
+  diaSemana       Int       @map("dia_semana")
+  horaInicio      DateTime  @map("hora_inicio") @db.Time(6)
+  duracionMinutos Int       @default(60) @map("duracion_minutos")
+  vigenciaDesde   DateTime  @map("vigencia_desde") @db.Date
+  vigenciaHasta   DateTime? @map("vigencia_hasta") @db.Date
+  activa          Boolean   @default(true)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion    Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal        Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  disciplina      Disciplina?       @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  entrenador      PerfilStaff?      @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  clasesGeneradas ClaseProgramada[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@map("clases_plantilla")
 }
 
 model ReservaClase {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Search, CheckCircle2, ChevronRight, ChevronLeft, CreditCard } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, ChevronLeft, CreditCard, AlertTriangle } from 'lucide-react';
 
 export const membresiaWizardSchema = z.object({
   clienteId: z.string().min(1, 'Debes seleccionar un cliente'),
@@ -30,6 +30,13 @@ interface MembresiaWizardModalProps {
   promociones: any[];
   sucursales?: any[];
   userSucursalId?: string;
+  // Cuando viene seteada, el wizard abre en modo "editar": precarga sus
+  // valores y arranca en el paso 2 (el cliente ya está fijo, no tiene
+  // sentido re-elegirlo). No existe un PATCH real para esto en el backend
+  // (UpdateMembresiaDto solo permite cambiar `estado`) -- "editar" sigue
+  // siendo un POST que cancela la venta PENDIENTE_PAGO anterior del mismo
+  // cliente y crea una nueva (ver membresia.service.ts#create(), paso 1).
+  editingMembresia?: any | null;
 }
 
 export function MembresiaWizardModal({
@@ -42,8 +49,10 @@ export function MembresiaWizardModal({
   promociones,
   sucursales,
   userSucursalId,
+  editingMembresia,
 }: MembresiaWizardModalProps) {
-  const [step, setStep] = useState(1);
+  const primerPaso = editingMembresia ? 2 : 1;
+  const [step, setStep] = useState(primerPaso);
   const [searchTerm, setSearchTerm] = useState('');
 
   const form = useForm<MembresiaWizardValues>({
@@ -57,18 +66,50 @@ export function MembresiaWizardModal({
     },
   });
 
-  const { watch, setValue, trigger } = form;
+  const { watch, setValue, trigger, reset } = form;
   const watchClienteId = watch('clienteId');
   const watchPlanId = watch('planId');
   const watchPromoId = watch('promocionId');
 
-  const filteredClientes = clientes.filter(c => 
-    c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  // Al abrir, precarga los valores de la membresía que se está "editando"
+  // (o un formulario limpio para una venta nueva) y arranca en el paso
+  // correspondiente. Antes esto no pasaba: el wizard siempre abría en blanco
+  // sin importar si se venía de "Editar", así que editar se sentía idéntico
+  // a vender una membresía nueva desde cero.
+  useEffect(() => {
+    if (!open) return;
+    if (editingMembresia) {
+      reset({
+        clienteId: editingMembresia.clienteId,
+        sucursalId: editingMembresia.sucursalId || userSucursalId || '',
+        planId: editingMembresia.planId,
+        promocionId: editingMembresia.promocionId || 'none',
+        fechaInicio: editingMembresia.fechaInicio
+          ? new Date(editingMembresia.fechaInicio).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0],
+      });
+      setStep(2);
+    } else {
+      reset({
+        clienteId: '',
+        planId: '',
+        promocionId: '',
+        fechaInicio: new Date().toISOString().split('T')[0],
+        sucursalId: userSucursalId || '',
+      });
+      setStep(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingMembresia]);
+
+  const filteredClientes = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.numeroDocumento && c.numeroDocumento.includes(searchTerm))
   ).slice(0, 30);
 
   const selectedPlan = planes.find(p => p.id === watchPlanId);
   const selectedPromo = promociones.find(p => p.id === watchPromoId);
+  const selectedCliente = clientes.find(c => c.id === watchClienteId);
 
   const nextStep = async () => {
     let isValid = false;
@@ -83,6 +124,10 @@ export function MembresiaWizardModal({
   const prevStep = () => setStep(step - 1);
 
   const handleSubmit = (values: MembresiaWizardValues) => {
+    // Defensa extra: la única vía normal para llegar acá es el botón
+    // "Confirmar Venta" del paso 3 (ver más abajo, y el onKeyDown del
+    // <form> que evita el envío implícito de Enter en pasos anteriores).
+    if (step !== 3) return;
     if (values.promocionId === 'none') {
        values.promocionId = undefined;
     }
@@ -105,7 +150,7 @@ export function MembresiaWizardModal({
   return (
     <Dialog open={open} onOpenChange={(val) => {
         if(!val) {
-            setStep(1);
+            setStep(primerPaso);
             form.reset();
         }
         onOpenChange(val);
@@ -113,9 +158,11 @@ export function MembresiaWizardModal({
       <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden">
         <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
             <div>
-                <DialogTitle className="text-xl">Vender Membresía</DialogTitle>
+                <DialogTitle className="text-xl">{editingMembresia ? 'Editar Venta Pendiente' : 'Vender Membresía'}</DialogTitle>
                 <DialogDescription className="mt-1">
-                    Sigue los pasos para procesar una nueva suscripción.
+                    {editingMembresia
+                      ? 'Ajusta el plan, promoción o fecha. Al confirmar, reemplaza la venta pendiente actual.'
+                      : 'Sigue los pasos para procesar una nueva suscripción.'}
                 </DialogDescription>
             </div>
             <div className="flex gap-2">
@@ -126,8 +173,22 @@ export function MembresiaWizardModal({
         </div>
 
         <div className="p-6">
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-                
+            <form
+                onSubmit={form.handleSubmit(handleSubmit)}
+                // BUG CRÍTICO que arregla esto: sin este guard, presionar Enter en
+                // el campo de fecha del paso 2 (el único <input> de texto en ese
+                // paso) dispara el envío IMPLÍCITO nativo del navegador -- válido
+                // porque para entonces clienteId y planId ya están completos -- y
+                // la membresía se crea sin pasar por el resumen/confirmación del
+                // paso 3. Solo dejamos que Enter someta el formulario en el paso 3.
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && step !== 3) {
+                        e.preventDefault();
+                    }
+                }}
+                className="space-y-6"
+            >
+
                 {/* Paso 1: Cliente */}
                 {step === 1 && (
                     <div className="space-y-4 animate-in slide-in-from-right-4">
@@ -167,7 +228,17 @@ export function MembresiaWizardModal({
                 {step === 2 && (
                     <div className="space-y-6 animate-in slide-in-from-right-4">
                         <h3 className="font-semibold text-lg">Paso 2: Elegir Plan</h3>
-                        
+
+                        {editingMembresia && (
+                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-start gap-2.5 text-amber-800">
+                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                <p className="text-sm">
+                                    Editando la venta pendiente de <strong>{selectedCliente?.nombre}</strong>. Al confirmar en el
+                                    paso 3, esta venta pendiente se cancela y se crea una nueva con los datos que elijas acá.
+                                </p>
+                            </div>
+                        )}
+
                         {!userSucursalId && sucursales && (
                             <div className="space-y-2">
                                 <Label>Sucursal (Requerido para SuperAdmin)</Label>
@@ -233,7 +304,7 @@ export function MembresiaWizardModal({
                             <div className="flex justify-between border-b border-slate-200 pb-3">
                                 <div>
                                     <p className="text-sm text-slate-500">Cliente</p>
-                                    <p className="font-bold text-slate-900">{clientes.find(c => c.id === watchClienteId)?.nombre}</p>
+                                    <p className="font-bold text-slate-900">{selectedCliente?.nombre}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm text-slate-500">Plan</p>
@@ -274,17 +345,17 @@ export function MembresiaWizardModal({
 
                 {/* Controles del footer */}
                 <div className="flex justify-between pt-4 border-t">
-                    <Button 
-                        type="button" 
-                        variant="ghost" 
-                        onClick={() => step === 1 ? onOpenChange(false) : prevStep()}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => step === primerPaso ? onOpenChange(false) : prevStep()}
                         disabled={isPending}
                     >
-                        {step === 1 ? 'Cancelar' : (
+                        {step === primerPaso ? 'Cancelar' : (
                             <><ChevronLeft className="w-4 h-4 mr-2" /> Atrás</>
                         )}
                     </Button>
-                    
+
                     {step < 3 ? (
                         <Button type="button" onClick={nextStep} disabled={!watchClienteId && step === 1}>
                             Siguiente <ChevronRight className="w-4 h-4 ml-2" />

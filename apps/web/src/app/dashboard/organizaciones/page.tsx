@@ -9,10 +9,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
+import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Globe, Plus, Ban, RotateCcw, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -175,82 +172,30 @@ export default function OrganizacionesPage() {
               className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
             />
           </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger render={<Button className="bg-indigo-600 hover:bg-indigo-500 text-white" onClick={handleAddNew} />}>
-            <Plus className="mr-2 h-4 w-4" /> Nueva Organización
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle className="text-xl">Registrar Nuevo Cliente SaaS</DialogTitle>
-              <DialogDescription>
-                Creará la organización, la sede central y la cuenta de administrador automáticamente.
-              </DialogDescription>
-            </DialogHeader>
-            <Separator className="my-2" />
+        <Button className="bg-indigo-600 hover:bg-indigo-500 text-white" onClick={handleAddNew}>
+          <Plus className="mr-2 h-4 w-4" /> Nueva Organización
+        </Button>
 
-            <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-5 py-2">
-                <div className="space-y-2">
-                  <Label htmlFor="nombreOrg" className="text-zinc-700 dark:text-zinc-300">Nombre del Gimnasio</Label>
-                  <Input 
-                    id="nombreOrg" 
-                    {...createForm.register('nombreOrg')} 
-                    placeholder="Ej. Titan Gym" 
-                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
-                    aria-invalid={!!createForm.formState.errors.nombreOrg}
-                  />
-                  {createForm.formState.errors.nombreOrg && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.nombreOrg.message}</p>}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="nombreAdmin" className="text-zinc-700 dark:text-zinc-300">Nombre del Dueño/Admin</Label>
-                  <Input 
-                    id="nombreAdmin" 
-                    {...createForm.register('nombreAdmin')} 
-                    placeholder="Ej. Juan Pérez" 
-                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
-                    aria-invalid={!!createForm.formState.errors.nombreAdmin}
-                  />
-                  {createForm.formState.errors.nombreAdmin && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.nombreAdmin.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="correo" className="text-zinc-700 dark:text-zinc-300">Correo Electrónico (Admin)</Label>
-                  <Input 
-                    id="correo" 
-                    type="email"
-                    {...createForm.register('correo')} 
-                    placeholder="ejemplo@gym.com" 
-                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
-                    aria-invalid={!!createForm.formState.errors.correo}
-                  />
-                  {createForm.formState.errors.correo && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.correo.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="contrasena" className="text-zinc-700 dark:text-zinc-300">Contraseña (Admin)</Label>
-                  <Input 
-                    id="contrasena" 
-                    type="password"
-                    {...createForm.register('contrasena')} 
-                    placeholder="******" 
-                    className="border-zinc-300 dark:border-zinc-700 focus-visible:ring-indigo-500"
-                    aria-invalid={!!createForm.formState.errors.contrasena}
-                  />
-                  {createForm.formState.errors.contrasena && <p className="text-sm text-red-500 dark:text-red-400">{createForm.formState.errors.contrasena.message}</p>}
-                </div>
-
-                <DialogFooter className="mt-6 pt-4 border-t">
-                  <Button 
-                    type="submit" 
-                    className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500" 
-                    disabled={createMutation.isPending || !createForm.formState.isValid}
-                  >
-                    {createMutation.isPending ? 'Creando...' : 'Registrar Cliente'}
-                  </Button>
-                </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <GlobalFormModal
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          title="Registrar Nuevo Cliente SaaS"
+          description="Creará la organización, la sede central y la cuenta de administrador automáticamente."
+          form={createForm as any}
+          sections={[
+            {
+              fields: [
+                { name: 'nombreOrg', label: 'Nombre del Gimnasio', type: 'text', placeholder: 'Ej. Titan Gym', colSpan: 2 },
+                { name: 'nombreAdmin', label: 'Nombre del Dueño/Admin', type: 'text', placeholder: 'Ej. Juan Pérez', colSpan: 2 },
+                { name: 'correo', label: 'Correo Electrónico (Admin)', type: 'email', placeholder: 'ejemplo@gym.com', colSpan: 2 },
+                { name: 'contrasena', label: 'Contraseña (Admin)', type: 'password', placeholder: '******', colSpan: 2 },
+              ],
+            },
+          ]}
+          onSubmit={handleCreateSubmit as any}
+          isPending={createMutation.isPending}
+          submitLabel="Registrar Cliente"
+        />
         </div>
       </div>
 

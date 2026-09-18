@@ -28,6 +28,7 @@ import { DisciplinaModule } from './modules/disciplina/disciplina.module';
 import { PersonalModule } from './modules/personal/personal.module';
 import { TurnoTrabajoModule } from './modules/turno-trabajo/turno-trabajo.module';
 import { TurnoPlantillaModule } from './modules/turno-plantilla/turno-plantilla.module';
+import { ClasePlantillaModule } from './modules/clase-plantilla/clase-plantilla.module';
 import { ClaseProgramadaModule } from './modules/clase-programada/clase-programada.module';
 import { ReservaClaseModule } from './modules/reserva-clase/reserva-clase.module';
 import { SistemaModule } from './modules/sistema/sistema.module';
@@ -70,6 +71,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     TurnoTrabajoModule,
     TurnoPlantillaModule,
     ClaseProgramadaModule,
+    ClasePlantillaModule,
     ReservaClaseModule,
     SistemaModule,
     ScheduleModule.forRoot()

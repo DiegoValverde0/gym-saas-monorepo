@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateTurnoTrabajoDto } from './dto/create-turno-trabajo.dto';
@@ -86,6 +86,69 @@ export class TurnoTrabajoService {
     return this.prisma.extendedClient.turnoTrabajo.update({
       where: { id },
       data: { deletedAt: null },
+    });
+  }
+
+  // =========================================================================
+  // AUTOSERVICIO: "MI TURNO DE HOY" (marcar ingreso/salida real del propio staff)
+  // =========================================================================
+  // A propósito NO exige el permiso 'turnos:crear/actualizar' (ver
+  // turno-trabajo.controller.ts): ese permiso es para programar/editar
+  // turnos AJENOS, y normalmente lo tiene el ADMIN_GYM, no cada entrenador o
+  // recepcionista. Marcar el propio ingreso/salida solo requiere ser un
+  // staff autenticado con un turno hoy -- si el usuario no tiene perfil de
+  // staff (ej. un cliente con cuenta), esto falla igual con un 404 claro.
+
+  private async encontrarStaffDelUsuario(usuarioId: string) {
+    const staff = await this.prisma.extendedClient.perfilStaff.findUnique({ where: { usuarioId } });
+    if (!staff) {
+      throw new NotFoundException('Tu usuario no tiene un perfil de staff asociado.');
+    }
+    return staff;
+  }
+
+  private async encontrarTurnoDeHoy(usuarioId: string) {
+    const staff = await this.encontrarStaffDelUsuario(usuarioId);
+
+    const hoy = new Date();
+    hoy.setUTCHours(0, 0, 0, 0);
+
+    const turno = await this.prisma.extendedClient.turnoTrabajo.findFirst({
+      where: { staffId: staff.id, fecha: hoy },
+      include: INCLUDE_TURNO,
+    });
+    if (!turno) {
+      throw new NotFoundException('No tienes un turno programado para hoy.');
+    }
+    return turno;
+  }
+
+  async miTurnoDeHoy(usuarioId: string) {
+    return this.encontrarTurnoDeHoy(usuarioId);
+  }
+
+  async marcarIngreso(usuarioId: string) {
+    const turno = await this.encontrarTurnoDeHoy(usuarioId);
+    if (turno.horaIngresoReal) {
+      throw new BadRequestException('Ya marcaste tu ingreso de hoy.');
+    }
+    return this.prisma.extendedClient.turnoTrabajo.update({
+      where: { id: turno.id },
+      data: { horaIngresoReal: new Date() },
+    });
+  }
+
+  async marcarSalida(usuarioId: string) {
+    const turno = await this.encontrarTurnoDeHoy(usuarioId);
+    if (!turno.horaIngresoReal) {
+      throw new BadRequestException('Debes marcar tu ingreso antes de marcar la salida.');
+    }
+    if (turno.horaSalidaReal) {
+      throw new BadRequestException('Ya marcaste tu salida de hoy.');
+    }
+    return this.prisma.extendedClient.turnoTrabajo.update({
+      where: { id: turno.id },
+      data: { horaSalidaReal: new Date(), estado: 'COMPLETADO' },
     });
   }
 }

@@ -15,11 +15,12 @@ import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Plus, Edit, Trash2, Search, ArchiveRestore, Repeat, Sparkles } from 'lucide-react';
+import { Clock, Plus, Edit, Trash2, Search, ArchiveRestore, Repeat, Sparkles, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -84,7 +85,12 @@ interface TurnoPlantilla {
 interface PlantillaFormValues {
   staffId: string;
   sucursalId: string;
+  // Al editar una plantilla existente se cambia un solo día (diaSemana). Al
+  // crear una nueva, se pueden tildar varios días a la vez que comparten el
+  // mismo horario (diasSemana) -- evita repetir el formulario entero por
+  // cada día si, por ejemplo, alguien trabaja Lunes/Miércoles/Viernes 06-14.
   diaSemana: number | string;
+  diasSemana: number[];
   horaEntrada: string;
   horaSalida: string;
   vigenciaDesde: string;
@@ -176,6 +182,7 @@ export default function TurnosPage() {
       staffId: '',
       sucursalId: '',
       diaSemana: 1,
+      diasSemana: [1],
       horaEntrada: '',
       horaSalida: '',
       vigenciaDesde: '',
@@ -192,17 +199,44 @@ export default function TurnosPage() {
 
   const savePlantillaMutation = useMutation({
     mutationFn: async (values: PlantillaFormValues) => {
-      const payload: Partial<PlantillaFormValues> = { ...values };
-      if (userSucursalId) payload.sucursalId = userSucursalId;
-      if (!payload.vigenciaHasta) delete payload.vigenciaHasta;
-      payload.diaSemana = Number(payload.diaSemana);
-      return editingPlantilla ? apiPatch(`/turnos-plantilla/${editingPlantilla.id}`, payload) : apiPost('/turnos-plantilla', payload);
+      const base: Record<string, unknown> = {
+        staffId: values.staffId,
+        sucursalId: userSucursalId || values.sucursalId,
+        horaEntrada: values.horaEntrada,
+        horaSalida: values.horaSalida,
+        vigenciaDesde: values.vigenciaDesde,
+        activa: values.activa,
+      };
+      if (values.vigenciaHasta) base.vigenciaHasta = values.vigenciaHasta;
+
+      if (editingPlantilla) {
+        // Editar sigue siendo un solo día: la plantilla ya es una fila puntual.
+        return apiPatch(`/turnos-plantilla/${editingPlantilla.id}`, { ...base, diaSemana: Number(values.diaSemana) });
+      }
+
+      // Crear: un registro por cada día tildado, mismo horario/sucursal/vigencia
+      // -- así se puede armar "Lunes, Miércoles y Viernes 06:00-14:00" en un
+      // solo formulario en vez de repetirlo 3 veces.
+      const dias = values.diasSemana ?? [];
+      if (dias.length === 0) {
+        throw new Error('Selecciona al menos un día de la semana.');
+      }
+      return Promise.all(dias.map((dia) => apiPost('/turnos-plantilla', { ...base, diaSemana: dia })));
     },
-    onSuccess: () => {
+    onSuccess: (_data, values) => {
       queryClient.invalidateQueries({ queryKey: ['turnos-plantilla'] });
       setIsPlantillaDialogOpen(false);
       plantillaForm.reset();
-      toast({ title: 'Éxito', description: 'Plantilla de turno guardada correctamente.', variant: 'success' });
+      const cantidadDias = editingPlantilla ? 1 : (values.diasSemana ?? []).length;
+      toast({
+        title: 'Éxito',
+        description: editingPlantilla
+          ? 'Plantilla de turno actualizada correctamente.'
+          : cantidadDias > 1
+            ? `Se crearon ${cantidadDias} plantillas de turno (una por día seleccionado).`
+            : 'Plantilla de turno creada correctamente.',
+        variant: 'success',
+      });
     },
     onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
@@ -214,16 +248,18 @@ export default function TurnosPage() {
     itemName: 'La plantilla',
   });
 
+  const [semanasGenerar, setSemanasGenerar] = useState(8);
+
   const generarMutation = useMutation({
-    mutationFn: async () => apiPost('/turnos-plantilla/generar', {}),
+    mutationFn: async () => apiPost(`/turnos-plantilla/generar?semanas=${semanasGenerar}`, {}),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['turnos'] });
       const creados = data?.turnosCreados ?? 0;
       toast({
         title: 'Turnos generados',
         description: creados > 0
-          ? `Se crearon ${creados} turnos nuevos a partir de las plantillas activas.`
-          : 'Las plantillas activas ya tenían todos sus turnos generados para las próximas semanas.',
+          ? `Se crearon ${creados} turnos nuevos a partir de las plantillas activas (próximas ${semanasGenerar} semanas).`
+          : `Las plantillas activas ya tenían todos sus turnos generados para las próximas ${semanasGenerar} semanas.`,
         variant: 'success',
       });
     },
@@ -236,6 +272,7 @@ export default function TurnosPage() {
       staffId: '',
       sucursalId: userSucursalId || '',
       diaSemana: 1,
+      diasSemana: [],
       horaEntrada: '',
       horaSalida: '',
       vigenciaDesde: new Date().toISOString().split('T')[0],
@@ -251,6 +288,7 @@ export default function TurnosPage() {
       staffId: plantilla.staffId,
       sucursalId: plantilla.sucursalId,
       diaSemana: plantilla.diaSemana,
+      diasSemana: [plantilla.diaSemana],
       horaEntrada: plantilla.horaEntrada ? new Date(plantilla.horaEntrada).toISOString().substring(11, 16) : '',
       horaSalida: plantilla.horaSalida ? new Date(plantilla.horaSalida).toISOString().substring(11, 16) : '',
       vigenciaDesde: plantilla.vigenciaDesde ? new Date(plantilla.vigenciaDesde).toISOString().split('T')[0] : '',
@@ -464,15 +502,43 @@ export default function TurnosPage() {
                 <PapeleraToggle showDeleted={showDeletedPlantillas} setShowDeleted={setShowDeletedPlantillas} />
 
                 <Protect permission="turnos:crear" fallbackType="hide">
-                  <Button
-                    variant="outline"
-                    onClick={() => generarMutation.mutate()}
-                    disabled={generarMutation.isPending}
-                    className="border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-400"
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {generarMutation.isPending ? 'Generando...' : 'Generar turnos ahora'}
-                  </Button>
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-1 pr-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                          <Info className="h-4 w-4" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Crea, a partir de tus plantillas activas, los turnos individuales reales de las próximas N semanas (no
+                          duplica los que ya existen). Esto mismo corre automáticamente todas las noches; el botón es para no
+                          esperar hasta entonces.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <Label htmlFor="semanas-generar" className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      Semanas:
+                    </Label>
+                    <input
+                      id="semanas-generar"
+                      type="number"
+                      min={1}
+                      max={26}
+                      value={semanasGenerar}
+                      onChange={(e) => setSemanasGenerar(Math.min(26, Math.max(1, Number(e.target.value) || 1)))}
+                      className="w-14 h-8 text-xs text-center rounded-md border border-slate-200 dark:border-slate-700 bg-transparent"
+                    />
+
+                    <Button
+                      variant="outline"
+                      onClick={() => generarMutation.mutate()}
+                      disabled={generarMutation.isPending}
+                      className="border-none shadow-none text-indigo-700 dark:text-indigo-400"
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {generarMutation.isPending ? 'Generando...' : 'Generar turnos ahora'}
+                    </Button>
+                  </div>
                 </Protect>
 
                 <Protect permission="turnos:crear" fallbackType="hide">
@@ -688,12 +754,56 @@ export default function TurnosPage() {
                     colSpan: 2 as const,
                   }]
                 : []),
-              {
-                name: 'diaSemana',
-                label: 'Día de la semana',
-                type: 'select',
-                options: DIAS_SEMANA.map((label, value) => ({ label, value: String(value) })),
-              },
+              editingPlantilla
+                ? {
+                    name: 'diaSemana',
+                    label: 'Día de la semana',
+                    type: 'select' as const,
+                    options: DIAS_SEMANA.map((label, value) => ({ label, value: String(value) })),
+                  }
+                : {
+                    name: 'diasSemana',
+                    label: 'Días de la semana',
+                    type: 'custom' as const,
+                    colSpan: 2 as const,
+                    renderCustom: (f: any) => {
+                      const seleccionados: number[] = f.watch('diasSemana') || [];
+                      const toggle = (dia: number) => {
+                        const set = new Set(seleccionados);
+                        if (set.has(dia)) set.delete(dia); else set.add(dia);
+                        f.setValue('diasSemana', Array.from(set).sort(), { shouldDirty: true });
+                      };
+                      return (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Días de la semana</label>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Tilda todos los días que comparten este mismo horario y sucursal (ej. Lunes, Miércoles y Viernes).
+                            Si un día tiene un horario distinto, créalo aparte en otra plantilla.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {DIAS_SEMANA.map((label, value) => {
+                              const active = seleccionados.includes(value);
+                              return (
+                                <button
+                                  type="button"
+                                  key={value}
+                                  onClick={() => toggle(value)}
+                                  aria-pressed={active}
+                                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                    active
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700'
+                                  }`}
+                                >
+                                  {label.slice(0, 3)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    },
+                  },
               {
                 name: 'activa',
                 label: 'Estado',

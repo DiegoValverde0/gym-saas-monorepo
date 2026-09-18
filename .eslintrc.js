@@ -58,6 +58,9 @@ module.exports = {
         // explícito y lo usa en cada where -- no hay un tenant de request del
         // cual colgarse dentro del cron, mismo motivo que membresia/asistencia.
         'apps/api/src/modules/turno-plantilla/turno-plantilla.service.ts',
+        // Mismo motivo que turno-plantilla.service.ts arriba, pero para
+        // ClasePlantilla: generarParaOrganizacion/handleGeneracionDiaria.
+        'apps/api/src/modules/clase-plantilla/clase-plantilla.service.ts',
         // signIn() lee el Usuario y sus AsignacionAcceso (tenant-scoped) ANTES
         // de que exista un organizacionId en el contexto (CLS) -- login es la
         // operación que determina a qué tenant(s) pertenece el usuario, así

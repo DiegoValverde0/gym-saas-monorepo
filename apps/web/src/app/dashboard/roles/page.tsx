@@ -201,8 +201,10 @@ export default function RolesPage() {
             description="Asigna un nombre al rol y selecciona los permisos exactos que tendrá en el sistema."
             form={form as any}
             maxWidthClass="sm:max-w-xl"
+            multiStep
             sections={[
               {
+                title: 'Datos Básicos',
                 fields: [
                   { name: 'nombre', label: 'Nombre del Rol', type: 'text', placeholder: 'Ej. Gerente de Ventas', disabled: editingRol?.esSistema },
                   { name: 'descripcion', label: 'Descripción', type: 'text', placeholder: 'Puede ver reportes y ventas' }

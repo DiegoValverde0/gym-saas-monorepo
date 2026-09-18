@@ -58,6 +58,39 @@ export class AsistenciaService {
       }
     }
 
+    // 1.5. Validar límite de días por semana (plan.limiteDiasSemana, distinto
+    // de diasPermitidos: ese fija QUÉ días son válidos, este fija CUÁNTOS
+    // días distintos por semana puede venir, sin importar cuáles). Cuenta
+    // días con ingreso ya registrados esta semana (excluyendo hoy, que es
+    // justo lo que se está validando); si ya se alcanzó el límite, hoy sería
+    // un día de más.
+    if (plan.limiteDiasSemana && plan.limiteDiasSemana > 0) {
+      const inicioSemana = new Date(now);
+      const diaSemanaActual = inicioSemana.getDay(); // 0 = domingo
+      const offsetLunes = diaSemanaActual === 0 ? 6 : diaSemanaActual - 1;
+      inicioSemana.setDate(inicioSemana.getDate() - offsetLunes);
+      inicioSemana.setHours(0, 0, 0, 0);
+
+      const inicioHoy = new Date(now);
+      inicioHoy.setHours(0, 0, 0, 0);
+
+      const ingresosEstaSemana = await this.prisma.extendedClient.registroAsistencia.findMany({
+        where: {
+          clienteId,
+          fechaHoraIngreso: { gte: inicioSemana, lt: inicioHoy },
+        },
+        select: { fechaHoraIngreso: true },
+      });
+      const diasDistintos = new Set(ingresosEstaSemana.map((r) => r.fechaHoraIngreso.toISOString().slice(0, 10)));
+
+      if (diasDistintos.size >= plan.limiteDiasSemana) {
+        return {
+          allowed: false,
+          reason: `El plan permite un máximo de ${plan.limiteDiasSemana} día(s) por semana, y ya se alcanzó ese límite esta semana.`,
+        };
+      }
+    }
+
     // 2. Validar Franja Horaria (Si existe)
     if (plan.horaInicioAcceso && plan.horaFinAcceso) {
         // En Prisma, @db.Time(6) se trae como Date con la fecha 1970-01-01

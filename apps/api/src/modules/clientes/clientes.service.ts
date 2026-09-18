@@ -5,6 +5,9 @@ import { CreateClienteDto } from './dto/create-cliente.dto';
 import { Prisma } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { calcularSegmentoCliente } from './segmentacion-cliente.util';
+
+const SELECT_MEMBRESIAS_SEGMENTO = { estado: true, fechaInicio: true, fechaFin: true, pagada: true } as const;
 
 interface RequerimientosClienteConfig {
   exigirDni?: boolean;
@@ -56,20 +59,34 @@ export class ClientesService {
     // Paginado para no traer de golpe toda la tabla de un tenant con miles de clientes.
     const { page, limit, skip, take } = resolverPaginacion(query);
     const [data, total] = await Promise.all([
-      this.prisma.extendedClient.cliente.findMany({ skip, take, orderBy: { createdAt: 'desc' } }),
+      this.prisma.extendedClient.cliente.findMany({
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        // Solo lo mínimo para clasificar (ver segmentacion-cliente.util.ts);
+        // no se expone el array de membresías en la respuesta, solo el
+        // segmento ya calculado.
+        include: { membresias: { select: SELECT_MEMBRESIAS_SEGMENTO } },
+      }),
       this.prisma.extendedClient.cliente.count(),
     ]);
-    return paginar(data, total, page, limit);
+    const dataConSegmento = data.map(({ membresias, ...cliente }) => ({
+      ...cliente,
+      segmento: calcularSegmentoCliente(membresias),
+    }));
+    return paginar(dataConSegmento, total, page, limit);
   }
 
   async findOne(id: string) {
     const cliente = await this.prisma.extendedClient.cliente.findUnique({
       where: { id },
+      include: { membresias: { select: SELECT_MEMBRESIAS_SEGMENTO } },
     });
     if (!cliente) {
       throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
     }
-    return cliente;
+    const { membresias, ...rest } = cliente;
+    return { ...rest, segmento: calcularSegmentoCliente(membresias) };
   }
 
   async update(id: string, updateData: Prisma.ClienteUpdateInput) {

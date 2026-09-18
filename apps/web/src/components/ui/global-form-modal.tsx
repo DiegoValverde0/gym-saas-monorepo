@@ -1,14 +1,12 @@
 "use client";
 
 import { useForm, UseFormReturn, Controller, FieldValues, DefaultValues } from 'react-hook-form';
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +14,7 @@ import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export type FieldType = 'text' | 'email' | 'password' | 'number' | 'select' | 'switch' | 'custom';
 
@@ -67,6 +64,13 @@ export interface GlobalFormModalProps {
   submitLabel?: string;
   submitLabelPending?: string;
   maxWidthClass?: string;
+  // Cuando hay 2+ `sections` con `title`, las pagina como pasos (estilo
+  // "vender membresía": puntos de progreso arriba, Atrás/Siguiente abajo,
+  // valida solo los campos del paso actual antes de avanzar) en vez de
+  // apilarlas todas en un solo scroll. Pensado para formularios con muchos
+  // campos ya agrupados en secciones con nombre -- ver membresia-wizard-modal.tsx,
+  // el origen de este patrón.
+  multiStep?: boolean;
 }
 
 export function GlobalFormModal(props: GlobalFormModalProps) {
@@ -103,14 +107,30 @@ function GlobalFormModalInner({
   submitLabel = 'Guardar',
   submitLabelPending = 'Guardando...',
   maxWidthClass = 'sm:max-w-[500px]',
+  multiStep,
 }: GlobalFormModalProps & { form: UseFormReturn<FieldValues> }) {
-  
+
   const actualOpen = open !== undefined ? open : (isOpen || false);
   const actualOnOpenChange = onOpenChange || ((val) => {
     if (!val && onClose) onClose();
   });
-  
+
   const actualSections = sections || (fields ? [{ fields }] : []);
+  const isPaginated = !!multiStep && actualSections.length > 1;
+  const totalSteps = actualSections.length;
+
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    if (actualOpen) setStep(0);
+  }, [actualOpen]);
+  const isLastStep = !isPaginated || step === totalSteps - 1;
+
+  const goNext = async () => {
+    const fieldNames = actualSections[step]?.fields.map((f) => f.name) ?? [];
+    const valid = await form.trigger(fieldNames as never);
+    if (valid) setStep((s) => Math.min(s + 1, totalSteps - 1));
+  };
+  const goPrev = () => setStep((s) => Math.max(s - 1, 0));
 
   const renderField = (field: FieldConfig) => {
     if (field.type === 'custom' && field.renderCustom) {
@@ -233,42 +253,86 @@ function GlobalFormModalInner({
     );
   };
 
+  const visibleSections = isPaginated ? actualSections.slice(step, step + 1) : actualSections;
+
   return (
     <Dialog open={actualOpen} onOpenChange={actualOnOpenChange}>
-      <DialogContent className={`${maxWidthClass} max-h-[90vh] overflow-y-auto flex flex-col`}>
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="text-xl">{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <Separator className="my-2 shrink-0" />
-        
-        <form onSubmit={form.handleSubmit((v) => !isPending && onSubmit(v))} className="space-y-6 flex-1 overflow-y-auto pr-1">
-          {actualSections.map((section, idx) => (
-            <div key={section.title || idx} className="space-y-4">
+      <DialogContent className={`${maxWidthClass} max-h-[90vh] p-0 overflow-hidden flex flex-col`}>
+        <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
+          <div>
+            <DialogTitle className="text-xl">{title}</DialogTitle>
+            {description && <DialogDescription className="mt-1">{description}</DialogDescription>}
+          </div>
+          {isPaginated && (
+            <div className="flex gap-2 shrink-0 pl-4">
+              {actualSections.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`w-3 h-3 rounded-full transition-colors ${step >= idx ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form
+          onSubmit={form.handleSubmit((v) => !isPending && onSubmit(v))}
+          // Mismo fix que membresia-wizard-modal.tsx: en un formulario paginado,
+          // Enter en el único input de texto de un paso intermedio puede
+          // disparar el envío implícito nativo del navegador y saltarse los
+          // pasos siguientes (incluida la revisión final). Solo se deja sin
+          // pasar por acá el envío que dispara el propio botón "Guardar" del
+          // último paso.
+          onKeyDown={(e) => {
+            if (isPaginated && e.key === 'Enter' && !isLastStep) {
+              e.preventDefault();
+            }
+          }}
+          className="flex-1 overflow-y-auto p-6 space-y-6"
+        >
+          {visibleSections.map((section, idx) => (
+            <div key={section.title || idx} className={`space-y-4 ${isPaginated ? 'animate-in slide-in-from-right-4' : ''}`}>
               {(section.title || section.icon) && (
-                <div className={idx > 0 ? "pt-2" : ""}>
-                    <h4 className="text-sm font-semibold text-zinc-900 flex items-center gap-2 border-b pb-2">
-                        {section.icon} {section.title}
+                <div className={!isPaginated && idx > 0 ? "pt-2" : ""}>
+                    <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        {section.icon} {isPaginated ? `Paso ${step + 1}: ${section.title}` : section.title}
                     </h4>
-                    {section.description && <p className="text-sm text-zinc-500 mt-1">{section.description}</p>}
+                    {section.description && <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{section.description}</p>}
                 </div>
               )}
-              
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {section.fields.map(renderField)}
               </div>
             </div>
           ))}
-          
-          <DialogFooter className="mt-6 pt-4 border-t sticky bottom-0 bg-white/95 backdrop-blur-sm">
-            <Button 
-              type="submit" 
-              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white" 
+
+          <div className="flex justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => (isPaginated && step > 0 ? goPrev() : actualOnOpenChange(false))}
               disabled={isPending}
             >
-              {isPending ? submitLabelPending : submitLabel}
+              {isPaginated && step > 0 ? (
+                <><ChevronLeft className="w-4 h-4 mr-2" /> Atrás</>
+              ) : 'Cancelar'}
             </Button>
-          </DialogFooter>
+
+            {isLastStep ? (
+              <Button
+                type="submit"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                disabled={isPending}
+              >
+                {isPending ? submitLabelPending : submitLabel}
+              </Button>
+            ) : (
+              <Button type="button" onClick={goNext}>
+                Siguiente <ChevronRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </div>
         </form>
       </DialogContent>
     </Dialog>

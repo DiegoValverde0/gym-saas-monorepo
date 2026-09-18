@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, UseGuards } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { TurnoTrabajoService } from './turno-trabajo.service';
 import { CreateTurnoTrabajoDto } from './dto/create-turno-trabajo.dto';
 import { UpdateTurnoTrabajoDto } from './dto/update-turno-trabajo.dto';
@@ -9,11 +10,34 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
+interface RequestWithUser extends ExpressRequest {
+  user: { sub: string };
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
 @RequiereModulo('controlPersonal')
 @Controller('turnos')
 export class TurnoTrabajoController {
   constructor(private readonly turnoTrabajoService: TurnoTrabajoService) {}
+
+  // Autoservicio ("reloj checador" del propio staff) -- declarado antes de
+  // las rutas ':id' a propósito, y sin @RequirePermissions: ver el comentario
+  // en turno-trabajo.service.ts sobre por qué esto no depende del permiso
+  // de gestión de turnos.
+  @Get('mi-turno/hoy')
+  miTurnoDeHoy(@Req() req: RequestWithUser) {
+    return this.turnoTrabajoService.miTurnoDeHoy(req.user.sub);
+  }
+
+  @Post('mi-turno/marcar-ingreso')
+  marcarIngreso(@Req() req: RequestWithUser) {
+    return this.turnoTrabajoService.marcarIngreso(req.user.sub);
+  }
+
+  @Post('mi-turno/marcar-salida')
+  marcarSalida(@Req() req: RequestWithUser) {
+    return this.turnoTrabajoService.marcarSalida(req.user.sub);
+  }
 
   @Post()
   @RequirePermissions({ accion: 'crear', modulo: 'turnos' })

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -149,14 +149,22 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] bg-zinc-50">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <Wallet className="w-6 h-6 text-indigo-600" />
-              Punto de Venta / Cobro
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Misma barra gris que el resto de los modales de la app (ver
+            global-form-modal.tsx / membresia-wizard-modal.tsx). El cuerpo de
+            este modal sigue siendo un layout de 2 paneles propio del punto de
+            venta -- eso es intencional, no un formulario de campos comunes. */}
+        <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 border-b flex justify-between items-center shrink-0">
+          <div>
+            <DialogTitle className="text-xl flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-indigo-600" />
+                Punto de Venta / Cobro
+            </DialogTitle>
+            <DialogDescription className="mt-1">Registra el pago de esta membresía para activarla.</DialogDescription>
+          </div>
+        </div>
 
+        <div className="p-6 overflow-y-auto space-y-4">
         {(estadoApertura as any) && !(estadoApertura as any).abierta && (
             <div className="bg-red-50 text-red-700 p-4 rounded-md flex items-center gap-3 border border-red-200">
                 <AlertCircle className="w-5 h-5 shrink-0" />
@@ -164,7 +172,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
             </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* PANEL IZQUIERDO: DETALLE */}
             <div className="bg-white p-5 rounded-xl border shadow-sm space-y-4">
@@ -278,15 +286,21 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
                         </div>
                     )}
                 </div>
-
-                <Button 
-                    className="w-full h-12 text-lg font-bold bg-emerald-600 hover:bg-emerald-700" 
-                    onClick={handleCobrar}
-                    disabled={cobrarMutation.isPending || !(estadoApertura as any)?.abierta || Math.abs(diferencia) > 0.01}
-                >
-                    {cobrarMutation.isPending ? 'Procesando...' : 'Confirmar Cobro'}
-                </Button>
             </div>
+        </div>
+        </div>
+
+        <div className="flex justify-between items-center px-6 py-4 border-t shrink-0">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={cobrarMutation.isPending}>
+                Cancelar
+            </Button>
+            <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={handleCobrar}
+                disabled={cobrarMutation.isPending || !(estadoApertura as any)?.abierta || Math.abs(diferencia) > 0.01}
+            >
+                {cobrarMutation.isPending ? 'Procesando...' : 'Confirmar Cobro'}
+            </Button>
         </div>
 
       </DialogContent>
