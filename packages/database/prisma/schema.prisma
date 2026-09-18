@@ -99,11 +99,26 @@ enum MetodoPago {
   OTRO
 }
 
+// El nombre quedó corto tras extender la Transaccion/DetalleTransaccion
+// polimórfica a egresos (ver Transaccion.tipo y los valores de gasto de
+// abajo) -- no se renombró a algo más genérico porque `db push` lo detecta
+// como un cambio de tipo destructivo sobre una columna con datos (intentado
+// y confirmado: exige dropear y recrear detalles_transaccion.tipo_concepto).
 enum TipoConceptoVenta {
+  // Ingresos (venta)
   MEMBRESIA
   PRODUCTO
   SERVICIO
   OTRO // cobro libre/informal sin catalogo previo (ej. "prestamo de toalla")
+
+  // Egresos (gasto)
+  ALQUILER
+  SERVICIOS_BASICOS // luz, agua, internet, telefonia
+  NOMINA // sueldos y comisiones de staff
+  INSUMOS // proveedores: suplementos, articulos de limpieza, papeleria, etc.
+  MANTENIMIENTO // equipo, infraestructura
+  IMPUESTOS
+  OTRO_GASTO // gasto libre/informal sin categoria previa
 }
 
 enum TipoContratacionStaff {
@@ -860,6 +875,11 @@ model Transaccion {
   aperturaCajaId String?         @map("apertura_caja_id") @db.Uuid // opcional: permite operar sin flujo formal de caja
   clienteId      String?         @map("cliente_id") @db.Uuid // opcional: venta de mostrador sin cliente identificado
   tipo           TipoTransaccion
+  // Solo tiene sentido cuando tipo = EGRESO: a quién se le pagó (arrendador,
+  // proveedor, empresa de servicios, empleado). Texto libre a propósito, no
+  // una FK a un catálogo de proveedores -- eso es un modelo aparte que no
+  // se pidió acá; esto ya deja el gasto legible sin inventar esa entidad.
+  beneficiario   String?         @db.VarChar(150)
   montoTotal     Decimal         @map("monto_total") @db.Decimal(12, 2) // debe igualar la suma de Pagos y de DetalleTransaccion (validar en app)
   fechaHora      DateTime        @default(now()) @map("fecha_hora") @db.Timestamptz(6)
 

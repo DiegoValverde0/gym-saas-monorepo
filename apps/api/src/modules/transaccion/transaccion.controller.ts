@@ -2,10 +2,10 @@ import { Controller, Post, Get, Body, Req, Query, UseGuards } from '@nestjs/comm
 import { Request as ExpressRequest } from 'express';
 import { TransaccionService } from './transaccion.service';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
+import { QueryTransaccionDto } from './dto/query-transaccion.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 interface RequestWithUser extends ExpressRequest {
   user: {
@@ -27,7 +27,7 @@ export class TransaccionController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'transacciones' })
-  findAll(@Query() pagination: PaginationQueryDto) {
-    return this.transaccionService.findAll(pagination);
+  findAll(@Query() query: QueryTransaccionDto) {
+    return this.transaccionService.findAll(query);
   }
 }

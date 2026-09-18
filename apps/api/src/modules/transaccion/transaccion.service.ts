@@ -1,9 +1,24 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { Prisma, TipoConceptoVenta } from '@prisma/client';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { QueryTransaccionDto } from './dto/query-transaccion.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+
+// TipoConceptoVenta quedó como único discriminador polimórfico de
+// DetalleTransaccion al extenderlo a egresos (ver comentario en
+// schema.prisma sobre por qué no se renombró el enum). Estos dos sets
+// evitan que una línea de gasto use una categoría de venta o viceversa.
+const CONCEPTOS_INGRESO = new Set<TipoConceptoVenta>(['MEMBRESIA', 'PRODUCTO', 'SERVICIO', 'OTRO']);
+const CONCEPTOS_EGRESO = new Set<TipoConceptoVenta>([
+  'ALQUILER',
+  'SERVICIOS_BASICOS',
+  'NOMINA',
+  'INSUMOS',
+  'MANTENIMIENTO',
+  'IMPUESTOS',
+  'OTRO_GASTO',
+]);
 
 @Injectable()
 export class TransaccionService {
@@ -22,7 +37,24 @@ export class TransaccionService {
         throw new BadRequestException('La suma de los pagos debe cubrir exactamente el 100% del monto total para poder procesar la operación.');
     }
 
-    // 2. Blindaje de Caja (Validar Apertura)
+    // 1.5. Consistencia entre el tipo de transacción y las categorías de sus
+    // líneas -- sin esto se podría registrar, por ejemplo, un EGRESO con una
+    // línea de concepto MEMBRESIA (que además activaría la membresía más
+    // abajo, algo sin sentido para un gasto).
+    const conceptosEsperados = dto.tipo === 'INGRESO' ? CONCEPTOS_INGRESO : CONCEPTOS_EGRESO;
+    const detalleInvalido = dto.detalles.find((det) => !conceptosEsperados.has(det.tipoConcepto));
+    if (detalleInvalido) {
+        throw new BadRequestException(
+            `La categoría "${detalleInvalido.tipoConcepto}" no corresponde a una transacción de tipo ${dto.tipo}.`,
+        );
+    }
+
+    // 2. Blindaje de Caja (Validar Apertura). Solo INGRESO lo exige, igual
+    // que antes -- EGRESO se queda con la misma flexibilidad que ya tenía
+    // (coherente con que AperturaCaja sea opcional en el modelo, pensado
+    // para el gym informal). Si hay un turno abierto, el gasto en efectivo
+    // también se descuenta de esa gaveta más abajo; si no lo hay, el gasto
+    // igual se registra y afecta la cuenta bancaria/fondo general elegido.
     const aperturaCaja = await this.prisma.extendedClient.aperturaCaja.findFirst({
         where: {
             usuarioId: userId,
@@ -64,6 +96,7 @@ export class TransaccionService {
                 clienteId: dto.clienteId || null,
                 aperturaCajaId: aperturaCaja ? aperturaCaja.id : null,
                 tipo: dto.tipo,
+                beneficiario: dto.beneficiario || null,
                 montoTotal: dto.montoTotal,
                 creadoPorId: userId,
             } as unknown as Prisma.TransaccionUncheckedCreateInput
@@ -130,44 +163,52 @@ export class TransaccionService {
             })) as unknown as Prisma.PagoCreateManyInput[],
         });
 
-        // Afectación de saldos contables: se suma el incremento total por
+        // Afectación de saldos contables: se suma el movimiento total por
         // cuenta destino (en vez de un update por cada pago individual) y se
-        // aplica en una sola operación por cuenta afectada.
-        if (dto.tipo === 'INGRESO') {
-            let incrementoCaja = 0;
-            const incrementosPorCuenta = new Map<string, number>();
+        // aplica en una sola operación por cuenta afectada. INGRESO suma,
+        // EGRESO resta -- antes de este cambio EGRESO no tocaba ningún saldo
+        // (el bloque entero estaba condicionado a `tipo === 'INGRESO'`), así
+        // que un gasto se registraba sin ningún efecto contable real.
+        let montoCaja = 0;
+        const montosPorCuenta = new Map<string, number>();
 
-            for (const pago of dto.pagos) {
-                if (pago.metodoPago === 'EFECTIVO' && aperturaCaja) {
-                    incrementoCaja += Number(pago.monto);
-                }
-                const cuentaId = pago.cuentaBancariaId as string;
-                incrementosPorCuenta.set(cuentaId, (incrementosPorCuenta.get(cuentaId) || 0) + Number(pago.monto));
+        for (const pago of dto.pagos) {
+            if (pago.metodoPago === 'EFECTIVO' && aperturaCaja) {
+                montoCaja += Number(pago.monto);
             }
+            const cuentaId = pago.cuentaBancariaId as string;
+            montosPorCuenta.set(cuentaId, (montosPorCuenta.get(cuentaId) || 0) + Number(pago.monto));
+        }
 
-            // Doble contabilidad: Se registra en la gaveta física si hay turno abierto
-            if (incrementoCaja > 0 && aperturaCaja) {
-                await tx.cajaRegistradora.update({
-                    where: { id: aperturaCaja.cajaId },
-                    data: { saldoActual: { increment: incrementoCaja } }
-                });
-            }
+        // A propósito no se bloquea un saldo que quedaría negativo: igual que
+        // con la caja física (ver arqueo-caja-wizard.tsx), un descuadre es
+        // información legítima a detectar en el cierre, no un error a impedir
+        // -- coherente con la flexibilidad informal que ya tiene el resto del
+        // sistema (ver notas de arquitectura al inicio de schema.prisma).
+        const signo = dto.tipo === 'INGRESO' ? 1 : -1;
 
-            // Y siempre se registra en la cuenta bancaria / fondo general seleccionado
-            for (const [cuentaBancariaId, monto] of incrementosPorCuenta) {
-                await tx.cuentaBancaria.update({
-                    where: { id: cuentaBancariaId },
-                    data: { saldo: { increment: monto } }
-                });
-            }
+        // Doble contabilidad: Se registra en la gaveta física si hay turno abierto
+        if (montoCaja > 0 && aperturaCaja) {
+            await tx.cajaRegistradora.update({
+                where: { id: aperturaCaja.cajaId },
+                data: { saldoActual: { increment: signo * montoCaja } }
+            });
+        }
+
+        // Y siempre se registra en la cuenta bancaria / fondo general seleccionado
+        for (const [cuentaBancariaId, monto] of montosPorCuenta) {
+            await tx.cuentaBancaria.update({
+                where: { id: cuentaBancariaId },
+                data: { saldo: { increment: signo * monto } }
+            });
         }
 
         return transaccion;
     });
   }
 
-  async findAll(query?: PaginationQueryDto) {
-    const whereClause: Prisma.TransaccionWhereInput = {};
+  async findAll(query?: QueryTransaccionDto) {
+    const whereClause: Prisma.TransaccionWhereInput = query?.tipo ? { tipo: query.tipo } : {};
 
     const { page, limit, skip, take } = resolverPaginacion(query);
     const [transacciones, total] = await Promise.all([
