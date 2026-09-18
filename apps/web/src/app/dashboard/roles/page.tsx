@@ -106,7 +106,7 @@ export default function RolesPage() {
   });
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['roles', showDeleted],
+    queryKey: ['roles', activeTenantId, showDeleted],
     endpoint: 'roles',
     modelName: 'rol',
     itemName: 'El rol'

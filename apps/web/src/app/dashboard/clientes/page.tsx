@@ -95,6 +95,11 @@ export default function ClientesPage() {
       if (!payload.sucursalBaseId) {
           delete payload.sucursalBaseId;
       }
+      // Igual para correo: '' no es un email válido para @IsEmail() del backend,
+      // y la organización puede no exigirlo.
+      if (!payload.correo) {
+          delete payload.correo;
+      }
 
       return apiPost('/clientes', payload);
     },
@@ -114,6 +119,7 @@ export default function ClientesPage() {
       const payload = { ...data.values };
       if (!payload.sucursalBaseId) delete payload.sucursalBaseId;
       if (userSucursalId) delete payload.sucursalBaseId; // No dejamos que cambie su sucursal base si el admin es de una específica.
+      if (!payload.correo) delete payload.correo;
 
       return apiPatch(`/clientes/${data.id}`, payload);
     },
@@ -130,7 +136,7 @@ export default function ClientesPage() {
   });
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['clientes', showDeleted],
+    queryKey: ['clientes', activeTenantId, showDeleted],
     endpoint: 'clientes',
     modelName: 'cliente',
     itemName: 'El cliente'

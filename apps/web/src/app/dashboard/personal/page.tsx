@@ -143,7 +143,7 @@ export default function PersonalPage() {
   });
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['personal', showDeleted],
+    queryKey: ['personal', activeTenantId, showDeleted],
     endpoint: 'personal',
     modelName: 'perfilStaff',
     itemName: 'El perfil de staff',

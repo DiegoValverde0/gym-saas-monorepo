@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } f
 import { ClaseProgramadaService } from './clase-programada.service';
 import { CreateClaseProgramadaDto } from './dto/create-clase-programada.dto';
 import { UpdateClaseProgramadaDto } from './dto/update-clase-programada.dto';
+import { VerificarDisponibilidadDto } from './dto/verificar-disponibilidad.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
@@ -25,6 +26,14 @@ export class ClaseProgramadaController {
   @RequirePermissions({ accion: 'leer', modulo: 'clases' })
   findAll(@Query() pagination: PaginationQueryDto) {
     return this.claseProgramadaService.findAll(pagination);
+  }
+
+  // Declarado antes de ':id' a propósito: si fuera después, Nest lo
+  // interpretaría como Get(':id') con id="disponibilidad".
+  @Get('disponibilidad')
+  @RequirePermissions({ accion: 'leer', modulo: 'clases' })
+  verificarDisponibilidad(@Query() query: VerificarDisponibilidadDto) {
+    return this.claseProgramadaService.verificarDisponibilidad(query);
   }
 
   @Get(':id')

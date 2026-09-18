@@ -52,6 +52,12 @@ module.exports = {
         // handleAutoCheckout (cron diario) recorre TODAS las organizaciones
         // igual que los crons de membresia.service.ts de arriba -- mismo motivo.
         'apps/api/src/modules/asistencia/asistencia.service.ts',
+        // generarParaOrganizacion (llamado tanto por el cron diario
+        // handleGeneracionDiaria, que recorre TODAS las organizaciones, como
+        // por generarAhora vía HTTP) recibe organizacionId como parámetro
+        // explícito y lo usa en cada where -- no hay un tenant de request del
+        // cual colgarse dentro del cron, mismo motivo que membresia/asistencia.
+        'apps/api/src/modules/turno-plantilla/turno-plantilla.service.ts',
         // signIn() lee el Usuario y sus AsignacionAcceso (tenant-scoped) ANTES
         // de que exista un organizacionId en el contexto (CLS) -- login es la
         // operación que determina a qué tenant(s) pertenece el usuario, así

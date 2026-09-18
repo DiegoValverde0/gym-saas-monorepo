@@ -31,7 +31,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       // Manejar el error estricto de RLS
       if (exception.message.includes('[Seguridad RLS]')) {
         status = HttpStatus.FORBIDDEN;
-        message = 'Acceso denegado: Faltan credenciales de inquilino (Tenant).';
+        message = exception.message.includes('El superadmin no puede escribir')
+          ? 'El superadmin de plataforma no puede crear, editar ni eliminar datos de una organización. Usa el flujo de administración de plataforma.'
+          : 'Acceso denegado: Faltan credenciales de inquilino (Tenant).';
       }
       this.logger.error(`Error no controlado: ${exception.message}`, exception.stack);
     }

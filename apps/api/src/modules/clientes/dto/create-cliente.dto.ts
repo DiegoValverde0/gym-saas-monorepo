@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, IsUUID, IsEnum, IsDateString, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail, IsUUID, IsEnum, IsDateString, IsBoolean, ValidateIf } from 'class-validator';
 import { TipoDocumento, Genero, EstadoCliente } from '@prisma/client';
 
 export class CreateClienteDto {
@@ -10,8 +10,11 @@ export class CreateClienteDto {
   @IsNotEmpty()
   nombre: string;
 
+  // @ValidateIf en vez de @IsOptional: un string vacío ('' , el valor por
+  // defecto del formulario cuando la organización no exige correo) no debe
+  // disparar @IsEmail(). @IsOptional() solo ignora null/undefined, no ''.
+  @ValidateIf((o) => o.correo !== undefined && o.correo !== null && o.correo !== '')
   @IsEmail()
-  @IsOptional()
   correo?: string;
 
   @IsString()

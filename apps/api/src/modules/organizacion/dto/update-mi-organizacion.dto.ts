@@ -37,6 +37,15 @@ export class RequerimientosClienteConfigDto {
   exigirHuella?: boolean;
 }
 
+export class RequerimientosClaseConfigDto {
+  // false/undefined (default): si el entrenador no tiene turno registrado en
+  // el horario de la clase, se avisa pero se deja guardar. true: se bloquea
+  // el guardado hasta que haya un turno que cubra ese horario.
+  @IsOptional()
+  @IsBoolean()
+  exigirTurnoEntrenador?: boolean;
+}
+
 export class PreferenciasOperativasConfigDto {
   @IsOptional()
   @IsBoolean()
@@ -61,6 +70,11 @@ export class ConfiguracionTenantDto {
   @ValidateNested()
   @Type(() => RequerimientosClienteConfigDto)
   requerimientosCliente?: RequerimientosClienteConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RequerimientosClaseConfigDto)
+  requerimientosClase?: RequerimientosClaseConfigDto;
 
   @IsOptional()
   @ValidateNested()

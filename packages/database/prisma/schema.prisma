@@ -206,6 +206,7 @@ model Organizacion {
   perfilesStaff       PerfilStaff[]
   staffDisciplinas    StaffDisciplina[]
   turnosTrabajo       TurnoTrabajo[]
+  turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
   reservasClase       ReservaClase[]
   clientes            Cliente[]
@@ -247,6 +248,7 @@ model Sucursal {
   cajasRegistradoras  CajaRegistradora[]
   asignacionesAcceso  AsignacionAcceso[]
   turnosTrabajo       TurnoTrabajo[]
+  turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
   clientesBase        Cliente[]
   registrosAsistencia RegistroAsistencia[]
@@ -420,6 +422,7 @@ model PerfilStaff {
   organizacion     Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   staffDisciplinas StaffDisciplina[]
   turnosTrabajo    TurnoTrabajo[]
+  turnosPlantilla  TurnoPlantilla[]
   clasesImpartidas ClaseProgramada[]
 
   @@unique([id, organizacionId])
@@ -463,13 +466,44 @@ model TurnoTrabajo {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  organizacion Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  staff        PerfilStaff       @relation(fields: [staffId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  sucursal     Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  // Clases programadas que quedaron vinculadas a este turno (ver ClaseProgramada.turnoId).
+  clases       ClaseProgramada[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId, fecha])
+  @@index([staffId])
+  @@map("turnos_trabajo")
+}
+
+// Plantilla recurrente de turno semanal (ej. "Marta, Lun/Mié/Vie 06:00-14:00").
+// Reemplaza la carga manual día por día: un job (ver TurnoPlantillaService)
+// materializa filas de TurnoTrabajo hacia adelante a partir de estas plantillas.
+model TurnoPlantilla {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizacionId String    @map("organizacion_id") @db.Uuid
+  staffId        String    @map("staff_id") @db.Uuid
+  sucursalId     String    @map("sucursal_id") @db.Uuid
+  // 0 = domingo ... 6 = sábado (mismo criterio que Date#getUTCDay()).
+  diaSemana      Int       @map("dia_semana")
+  horaEntrada    DateTime  @map("hora_entrada") @db.Time(6)
+  horaSalida     DateTime  @map("hora_salida") @db.Time(6)
+  vigenciaDesde  DateTime  @map("vigencia_desde") @db.Date
+  vigenciaHasta  DateTime? @map("vigencia_hasta") @db.Date
+  activa         Boolean   @default(true)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   staff        PerfilStaff  @relation(fields: [staffId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
   sucursal     Sucursal     @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
 
-  @@index([organizacionId, sucursalId, fecha])
-  @@index([staffId])
-  @@map("turnos_trabajo")
+  @@index([organizacionId, staffId])
+  @@map("turnos_plantilla")
 }
 
 model ClaseProgramada {
@@ -478,6 +512,12 @@ model ClaseProgramada {
   sucursalId      String        @map("sucursal_id") @db.Uuid
   disciplinaId    String?       @map("disciplina_id") @db.Uuid
   entrenadorId    String?       @map("entrenador_id") @db.Uuid
+  // Turno de trabajo del entrenador que cubre este horario, si se encontró
+  // uno al crear/editar la clase (ver ClaseProgramadaService.resolverTurno).
+  // Null no significa error: solo que no hay match o el entrenador no tiene
+  // turno registrado (queda como advertencia o bloqueo según la política
+  // `requerimientosClase.exigirTurnoEntrenador` de la organización).
+  turnoId         String?       @map("turno_id") @db.Uuid
   nombreClase     String        @map("nombre_clase") @db.VarChar(100)
   descripcion     String?       @db.Text
   capacidadMaxima Int           @default(20) @map("capacidad_maxima")
@@ -497,6 +537,10 @@ model ClaseProgramada {
   // Restrict obliga a desasignar la disciplina/entrenador antes de poder borrarla.
   disciplina   Disciplina?    @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   entrenador   PerfilStaff?   @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  // Restrict por el mismo motivo que disciplina/entrenador arriba (FK compuesta
+  // + organizacionId NOT NULL invalida SetNull): hay que desvincular la clase
+  // antes de poder borrar el turno.
+  turno        TurnoTrabajo?  @relation(fields: [turnoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   reservas     ReservaClase[]
 
   @@unique([id, organizacionId])

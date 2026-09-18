@@ -40,9 +40,21 @@ function injectReadFiltersRecursively(args: Record<string, unknown>, modelName: 
 
   // 1. Soft Delete
   const onlyDeleted = cls.get('onlyDeleted');
-  
+
+  // Esta función también se llama para `update`/`updateMany` (ver más abajo
+  // en $allOperations), no solo para lecturas. Un restore() es exactamente
+  // eso: `update({ where: { id }, data: { deletedAt: null } })`. Sin este
+  // caso especial, la rama `else` de abajo fuerza `where.deletedAt = null`
+  // sobre un registro que hoy tiene `deletedAt` seteado (por eso se está
+  // restaurando) -- cero filas coinciden y Prisma tira P2025 "Record to
+  // update not found" en TODOS los módulos con papelera, siempre. Se detectó
+  // probando manualmente turnos-plantilla y clientes tras implementar los
+  // hallazgos del QA (ver docs/plan-correccion-hallazgos.md).
+  const data = args.data as Record<string, unknown> | undefined;
+  const esRestoreExplicito = !!data && Object.prototype.hasOwnProperty.call(data, 'deletedAt') && data.deletedAt === null;
+
   if (hasDeletedAt && where.deletedAt === undefined) {
-    if (onlyDeleted) {
+    if (onlyDeleted || esRestoreExplicito) {
       where.deletedAt = { not: null };
     } else {
       where.deletedAt = null;

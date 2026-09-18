@@ -154,7 +154,7 @@ export default function CajasPage() {
   });
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['cajas', showDeleted],
+    queryKey: ['cajas', activeTenantId, showDeleted],
     endpoint: 'cajas-registradoras',
     modelName: 'cajaRegistradora',
     itemName: 'La caja registradora'

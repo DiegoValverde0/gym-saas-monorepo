@@ -36,6 +36,9 @@ const organizacionSchema = z.object({
       exigirTelefono: z.boolean(),
       exigirHuella: z.boolean(),
     }),
+    requerimientosClase: z.object({
+      exigirTurnoEntrenador: z.boolean(),
+    }),
     preferenciasOperativas: z.object({
       renovacionAutomaticaPlanes: z.boolean(),
       impresionTickets: z.string(),
@@ -80,6 +83,9 @@ export default function ConfiguracionPage() {
           exigirTelefono: (organizacion as any).configuracion?.requerimientosCliente?.exigirTelefono ?? false,
           exigirHuella: (organizacion as any).configuracion?.requerimientosCliente?.exigirHuella ?? false,
         },
+        requerimientosClase: {
+          exigirTurnoEntrenador: (organizacion as any).configuracion?.requerimientosClase?.exigirTurnoEntrenador ?? false,
+        },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: (organizacion as any).configuracion?.preferenciasOperativas?.renovacionAutomaticaPlanes ?? true,
           impresionTickets: (organizacion as any).configuracion?.preferenciasOperativas?.impresionTickets ?? 'NINGUNA',
@@ -107,6 +113,9 @@ export default function ConfiguracionPage() {
           exigirCorreo: false,
           exigirTelefono: false,
           exigirHuella: false,
+        },
+        requerimientosClase: {
+          exigirTurnoEntrenador: false,
         },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: true,
@@ -430,6 +439,36 @@ export default function ConfiguracionPage() {
                   <div className="space-y-1">
                     <Label className="font-medium text-slate-900 dark:text-white">Exigir Huella / Biometría</Label>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Requiere enrolar la huella antes de habilitar planes. (Próximamente)</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-xs border-slate-200 dark:border-slate-800">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
+                  <Clock className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+                  Políticas de Programación de Clases
+                </CardTitle>
+                <CardDescription>
+                  Define qué tan estricta es la validación entre los turnos de tus entrenadores y las clases que se programan.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 grid gap-4 grid-cols-1">
+                <div className="flex items-start space-x-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <Switch
+                    checked={form.watch('configuracion.requerimientosClase.exigirTurnoEntrenador')}
+                    onCheckedChange={(c) => form.setValue('configuracion.requerimientosClase.exigirTurnoEntrenador', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label className="font-medium text-slate-900 dark:text-white">Exigir turno registrado para programar una clase</Label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Si está inactivo (recomendado para gimnasios pequeños), solo se muestra una advertencia cuando el entrenador
+                      no tiene turno en ese horario, pero la clase se puede guardar igual. Actívalo en franquicias donde la cobertura
+                      de turnos debe ser estricta: bloqueará el guardado hasta asignar un turno al entrenador en ese horario.
+                    </p>
                   </div>
                 </div>
               </CardContent>

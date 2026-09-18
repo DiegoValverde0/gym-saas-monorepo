@@ -16,7 +16,7 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore } from 'lucide-react';
+import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { Label } from '@/components/ui/label';
@@ -90,6 +90,51 @@ function toDatetimeLocal(iso?: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Aviso en vivo mientras se completa el formulario: consulta si el entrenador
+// elegido tiene un turno de trabajo que cubra ese horario y sucursal. No
+// bloquea nada por sí mismo -- el bloqueo real (si la organización lo exige)
+// pasa en el backend al guardar (ver clase-programada.service.ts).
+function AvisoDisponibilidadEntrenador({ form }: { form: UseFormReturn<any> }) {
+  const entrenadorId = form.watch('entrenadorId');
+  const sucursalId = form.watch('sucursalId');
+  const fechaHoraLocal = form.watch('fechaHora');
+  const duracionMinutos = form.watch('duracionMinutos');
+  const { token } = useAuth();
+
+  const habilitado = !!token && !!entrenadorId && !!sucursalId && !!fechaHoraLocal;
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['clases-disponibilidad', entrenadorId, sucursalId, fechaHoraLocal, duracionMinutos],
+    queryFn: async () => {
+      const fechaHora = new Date(fechaHoraLocal).toISOString();
+      const params = new URLSearchParams({
+        entrenadorId,
+        sucursalId,
+        fechaHora,
+        duracionMinutos: String(Number(duracionMinutos) || 60),
+      });
+      return apiGet(`/clases/disponibilidad?${params.toString()}`);
+    },
+    enabled: habilitado,
+    staleTime: 0,
+  });
+
+  if (!habilitado || isFetching || !data) return null;
+  if ((data as { disponible?: boolean }).disponible) {
+    return (
+      <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-1">
+        <CheckCircle className="h-3.5 w-3.5" /> El entrenador tiene turno registrado en este horario.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mt-1">
+      <AlertTriangle className="h-3.5 w-3.5" /> Este entrenador no tiene turno registrado en este horario y sucursal. Puedes
+      guardar igual, salvo que la organización exija turno asignado.
+    </p>
+  );
+}
+
 export default function ClasesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -127,6 +172,11 @@ export default function ClasesPage() {
     queryKey: ['clases', activeTenantId, showDeleted],
     queryFn: async () => unwrapList(await apiGet(showDeleted ? '/clases?deleted=true' : '/clases')),
     enabled: !!token,
+    // El calendario lo suele mirar más de una persona a la vez (recepción,
+    // coordinador); sin esto, una clase creada por otro usuario/pestaña solo
+    // aparece al volver a esta pestaña o tras el staleTime de 60s por defecto.
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,
   });
 
   const { data: disciplinas } = useQuery({
@@ -169,7 +219,7 @@ export default function ClasesPage() {
   });
 
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
-    queryKey: ['clases', showDeleted],
+    queryKey: ['clases', activeTenantId, showDeleted],
     endpoint: 'clases',
     modelName: 'claseProgramada',
     itemName: 'La clase',
@@ -478,6 +528,7 @@ export default function ClasesPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Fecha y Hora</label>
                     <input type="datetime-local" {...f.register('fechaHora')} className={dateInputClass} />
+                    <AvisoDisponibilidadEntrenador form={f} />
                   </div>
                 ),
               },
