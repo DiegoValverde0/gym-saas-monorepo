@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateClaseProgramadaDto } from './dto/create-clase-programada.dto';
 import { UpdateClaseProgramadaDto } from './dto/update-clase-programada.dto';
+import { EntrenadoresClaseDto } from './dto/entrenadores-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
@@ -113,6 +114,68 @@ export class ClaseProgramadaService {
         'El entrenador seleccionado no tiene un turno de trabajo registrado en este horario y sucursal. Esta organización exige turno asignado para programar una clase.',
       );
     }
+  }
+
+  // Lista para el selector de entrenador: quién imparte la disciplina y quién
+  // tiene turno/horario que cubra la clase. Ordenada con los más adecuados
+  // primero. `disponible`/`imparteDisciplina` son null cuando falta el dato
+  // para calcularlos (ej. todavía no se eligió hora o disciplina).
+  async entrenadoresParaClase(q: EntrenadoresClaseDto) {
+    const db = this.prisma.extendedClient;
+    const duracion = q.duracionMinutos ?? 60;
+    const diasSemana = q.diasSemana ? [...new Set(q.diasSemana.split(',').map(Number))] : [];
+
+    const staff: Array<{
+      id: string;
+      usuario: { nombreCompleto: string } | null;
+      staffDisciplinas: { disciplinaId: string }[];
+      turnosPlantilla: { diaSemana: number; horaEntrada: Date; horaSalida: Date }[];
+    }> = await db.perfilStaff.findMany({
+      where: { estado: 'ACTIVO' },
+      include: {
+        usuario: { select: { nombreCompleto: true } },
+        staffDisciplinas: { select: { disciplinaId: true } },
+        turnosPlantilla: { where: { activa: true, sucursalId: q.sucursalId }, select: { diaSemana: true, horaEntrada: true, horaSalida: true } },
+      },
+    });
+
+    const minutos = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes();
+    const cubre = (bloque: { horaEntrada: Date; horaSalida: Date }, inicio: number) =>
+      minutos(bloque.horaEntrada) <= inicio && minutos(bloque.horaSalida) >= inicio + duracion;
+
+    // Clase puntual: turnos reales de ese día en la sucursal.
+    let turnosDelDia: { staffId: string; horaEntrada: Date; horaSalida: Date }[] = [];
+    let inicioPuntual = 0;
+    if (q.fechaHora) {
+      const local = aHoraLocal(new Date(q.fechaHora), await this.zonaHorariaOrganizacion());
+      inicioPuntual = local.minutosDelDia;
+      turnosDelDia = await db.turnoTrabajo.findMany({
+        where: { sucursalId: q.sucursalId, fecha: local.fechaSolo, estado: { notIn: ['AUSENTE', 'CANCELADO'] } },
+        select: { staffId: true, horaEntrada: true, horaSalida: true },
+      });
+    }
+    const inicioRecurrente = q.horaInicio ? Number(q.horaInicio.slice(0, 2)) * 60 + Number(q.horaInicio.slice(3, 5)) : 0;
+
+    const resultado = staff.map((s) => {
+      let disponible: boolean | null = null;
+      let diasSinTurno: number[] = [];
+      if (q.fechaHora) {
+        disponible = turnosDelDia.some((t) => t.staffId === s.id && cubre(t, inicioPuntual));
+      } else if (diasSemana.length > 0 && q.horaInicio) {
+        diasSinTurno = diasSemana.filter((dia) => !s.turnosPlantilla.some((b) => b.diaSemana === dia && cubre(b, inicioRecurrente)));
+        disponible = diasSinTurno.length === 0;
+      }
+      return {
+        id: s.id,
+        nombre: s.usuario?.nombreCompleto ?? 'Sin nombre',
+        imparteDisciplina: q.disciplinaId ? s.staffDisciplinas.some((sd) => sd.disciplinaId === q.disciplinaId) : null,
+        disponible,
+        diasSinTurno,
+      };
+    });
+
+    const puntaje = (r: (typeof resultado)[number]) => (r.disponible ? 2 : 0) + (r.imparteDisciplina ? 1 : 0);
+    return resultado.sort((a, b) => puntaje(b) - puntaje(a) || a.nombre.localeCompare(b.nombre));
   }
 
   async verificarDisponibilidad(datos: DatosDisponibilidad) {

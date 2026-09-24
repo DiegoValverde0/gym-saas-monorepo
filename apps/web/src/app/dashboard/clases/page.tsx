@@ -4,8 +4,8 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
-import { useForm } from 'react-hook-form';
+import { apiGet, apiPost, apiPatch, apiPut, unwrapList } from '@/lib/api-client';
+import { useForm, Controller } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,15 +16,13 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle, Repeat, Sparkles, Info, UserX } from 'lucide-react';
+import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle, Repeat, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
 import { UseFormReturn } from 'react-hook-form';
 import { WeeklyCalendar } from '@/components/ui/weekly-calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -113,22 +111,57 @@ interface ClasePlantilla {
   sucursal?: Sucursal;
 }
 
-interface ClasePlantillaFormValues {
+interface SerieFormValues {
   sucursalId: string;
   disciplinaId: string;
   entrenadorId: string;
   nombreClase: string;
   descripcion: string;
   capacidadMaxima: number | string;
-  // Al editar se cambia un solo día; al crear se pueden tildar varios que
-  // comparten horario (mismo patrón que las plantillas de turno).
-  diaSemana: number | string;
   diasSemana: number[];
   horaInicio: string;
   duracionMinutos: number | string;
   vigenciaDesde: string;
   vigenciaHasta: string;
   activa: boolean;
+}
+
+// Una clase recurrente = varias ClasePlantilla (una por día) con los mismos datos.
+interface SerieClase {
+  clave: string;
+  ids: string[];
+  dias: number[];
+  base: ClasePlantilla;
+}
+
+interface OpcionEntrenador {
+  id: string;
+  nombre: string;
+  imparteDisciplina: boolean | null;
+  disponible: boolean | null;
+  diasSinTurno: number[];
+}
+
+const horaDe = (iso: string) => new Date(iso).toISOString().substring(11, 16);
+const fechaDe = (iso?: string | null) => (iso ? new Date(iso).toISOString().split('T')[0] : '');
+const ordenDia = (d: number) => (d === 0 ? 7 : d); // lunes primero
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function agruparSeries(plantillas: ClasePlantilla[]): SerieClase[] {
+  const grupos = new Map<string, SerieClase>();
+  for (const p of plantillas) {
+    const clave = [
+      p.sucursalId, p.disciplinaId ?? '', p.entrenadorId ?? '', p.nombreClase, p.descripcion ?? '', p.capacidadMaxima,
+      horaDe(p.horaInicio), p.duracionMinutos, fechaDe(p.vigenciaDesde), fechaDe(p.vigenciaHasta), p.activa,
+    ].join('|');
+    const serie = grupos.get(clave) ?? { clave, ids: [], dias: [], base: p };
+    serie.ids.push(p.id);
+    serie.dias.push(p.diaSemana);
+    grupos.set(clave, serie);
+  }
+  return [...grupos.values()]
+    .map((g) => ({ ...g, dias: [...new Set(g.dias)].sort((a, b) => ordenDia(a) - ordenDia(b)) }))
+    .sort((a, b) => horaDe(a.base.horaInicio).localeCompare(horaDe(b.base.horaInicio)) || a.base.nombreClase.localeCompare(b.base.nombreClase));
 }
 
 const dateInputClass = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
@@ -141,48 +174,90 @@ function toDatetimeLocal(iso?: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Aviso en vivo mientras se completa el formulario: consulta si el entrenador
-// elegido tiene un turno de trabajo que cubra ese horario y sucursal. No
-// bloquea nada por sí mismo -- el bloqueo real (si la organización lo exige)
-// pasa en el backend al guardar (ver clase-programada.service.ts).
-function AvisoDisponibilidadEntrenador({ form }: { form: UseFormReturn<any> }) {
-  const entrenadorId = form.watch('entrenadorId');
-  const sucursalId = form.watch('sucursalId');
-  const fechaHoraLocal = form.watch('fechaHora');
-  const duracionMinutos = form.watch('duracionMinutos');
+// Selector de entrenador con disponibilidad. Pide al backend la lista de
+// entrenadores ordenada por quién tiene turno (clase puntual) u horario
+// semanal (clase recurrente) que cubra la clase, y quién imparte la
+// disciplina. No bloquea nada por sí mismo -- el bloqueo real (si la
+// organización lo exige) pasa en el backend al guardar.
+function SelectorEntrenador({ form, modo, sucursalFija }: { form: UseFormReturn<any>; modo: 'puntual' | 'recurrente'; sucursalFija?: string | null }) {
   const { token } = useAuth();
+  const sucursalId: string = sucursalFija || form.watch('sucursalId') || '';
+  const disciplinaId: string = form.watch('disciplinaId') || '';
+  const duracion = Number(form.watch('duracionMinutos')) || 60;
+  const fechaHoraLocal: string = modo === 'puntual' ? form.watch('fechaHora') || '' : '';
+  const dias: number[] = modo === 'recurrente' ? form.watch('diasSemana') || [] : [];
+  const horaInicio: string = modo === 'recurrente' ? form.watch('horaInicio') || '' : '';
+  const entrenadorId: string = form.watch('entrenadorId') || '';
 
-  const habilitado = !!token && !!entrenadorId && !!sucursalId && !!fechaHoraLocal;
-
-  const { data, isFetching } = useQuery({
-    queryKey: ['clases-disponibilidad', entrenadorId, sucursalId, fechaHoraLocal, duracionMinutos],
-    queryFn: async () => {
-      const fechaHora = new Date(fechaHoraLocal).toISOString();
-      const params = new URLSearchParams({
-        entrenadorId,
-        sucursalId,
-        fechaHora,
-        duracionMinutos: String(Number(duracionMinutos) || 60),
-      });
-      return apiGet(`/clases/disponibilidad?${params.toString()}`);
-    },
-    enabled: habilitado,
-    staleTime: 0,
-  });
-
-  if (!habilitado || isFetching || !data) return null;
-  if ((data as { disponible?: boolean }).disponible) {
-    return (
-      <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-1">
-        <CheckCircle className="h-3.5 w-3.5" /> El entrenador tiene turno registrado en este horario.
-      </p>
-    );
+  const params = new URLSearchParams({ sucursalId, duracionMinutos: String(duracion) });
+  if (disciplinaId) params.set('disciplinaId', disciplinaId);
+  if (modo === 'puntual' && fechaHoraLocal) params.set('fechaHora', new Date(fechaHoraLocal).toISOString());
+  if (modo === 'recurrente' && dias.length > 0 && horaInicio) {
+    params.set('diasSemana', [...dias].sort().join(','));
+    params.set('horaInicio', horaInicio);
   }
+
+  const { data } = useQuery({
+    queryKey: ['clases-entrenadores', params.toString()],
+    queryFn: async () => apiGet<OpcionEntrenador[]>(`/clases/entrenadores?${params.toString()}`),
+    enabled: !!token && !!sucursalId,
+    placeholderData: (previo) => previo,
+  });
+  const opciones = data || [];
+  const elegido = opciones.find((o) => o.id === entrenadorId);
+
+  const etiqueta = (o: OpcionEntrenador) => {
+    const partes: string[] = [];
+    if (o.disponible === true) partes.push('Disponible');
+    if (o.disponible === false) partes.push(modo === 'recurrente' ? `Sin turno: ${o.diasSinTurno.map((d) => DIAS_CORTOS[d]).join(', ')}` : 'Sin turno');
+    if (o.imparteDisciplina === false) partes.push('no imparte la disciplina');
+    return partes.length ? ` — ${partes.join(' · ')}` : '';
+  };
+
+  let aviso: { tono: 'ok' | 'alerta' | 'info'; texto: string } | null = null;
+  if (!sucursalId) {
+    aviso = { tono: 'info', texto: 'Elige la sucursal para ver quién está disponible.' };
+  } else if (elegido) {
+    if (elegido.disponible === false) {
+      aviso = {
+        tono: 'alerta',
+        texto: modo === 'recurrente'
+          ? `No tiene horario que cubra la clase los ${elegido.diasSinTurno.map((d) => DIAS_SEMANA[d].toLowerCase()).join(', ')}.`
+          : 'No tiene turno registrado en este horario y sucursal. Puedes guardar igual, salvo que la organización exija turno asignado.',
+      };
+    } else if (elegido.imparteDisciplina === false) {
+      aviso = { tono: 'alerta', texto: 'No tiene asignada esta disciplina en su perfil.' };
+    } else if (elegido.disponible === true) {
+      aviso = { tono: 'ok', texto: 'Tiene turno en este horario.' };
+    } else {
+      aviso = { tono: 'info', texto: modo === 'recurrente' ? 'Elige días y hora para ver su disponibilidad.' : 'Elige fecha y hora para ver su disponibilidad.' };
+    }
+  }
+  const colorAviso = { ok: 'text-emerald-600 dark:text-emerald-400', alerta: 'text-amber-600 dark:text-amber-400', info: 'text-slate-500 dark:text-slate-400' };
+
   return (
-    <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mt-1">
-      <AlertTriangle className="h-3.5 w-3.5" /> Este entrenador no tiene turno registrado en este horario y sucursal. Puedes
-      guardar igual, salvo que la organización exija turno asignado.
-    </p>
+    <div className="space-y-2">
+      <label className="text-sm font-medium">Entrenador</label>
+      <Controller
+        name="entrenadorId"
+        control={form.control}
+        render={({ field }) => (
+          <select value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)} className={dateInputClass}>
+            <option value="">Sin asignar</option>
+            {entrenadorId && !elegido && <option value={entrenadorId}>Entrenador actual</option>}
+            {opciones.map((o) => (
+              <option key={o.id} value={o.id}>{o.nombre}{etiqueta(o)}</option>
+            ))}
+          </select>
+        )}
+      />
+      {aviso && (
+        <p className={`text-xs flex items-center gap-1.5 ${colorAviso[aviso.tono]}`}>
+          {aviso.tono === 'ok' ? <CheckCircle className="h-3.5 w-3.5" /> : aviso.tono === 'alerta' ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
+          {aviso.texto}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -236,12 +311,6 @@ export default function ClasesPage() {
     enabled: !!token,
   });
 
-  const { data: personal } = useQuery({
-    queryKey: ['personal', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/personal')),
-    enabled: !!token,
-  });
-
   const { data: sucursales } = useQuery({
     queryKey: ['sucursales', activeTenantId],
     queryFn: async () => unwrapList(await apiGet('/sucursales')),
@@ -250,11 +319,12 @@ export default function ClasesPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: ClaseFormValues) => {
-      const payload: Partial<ClaseFormValues> = { ...values };
+      const payload: Record<string, unknown> = { ...values };
       if (userSucursalId) payload.sucursalId = userSucursalId;
-      if (!payload.disciplinaId) delete payload.disciplinaId;
-      if (!payload.entrenadorId) delete payload.entrenadorId;
-      payload.fechaHora = payload.fechaHora ? new Date(payload.fechaHora).toISOString() : undefined;
+      // Al editar, vacío = quitar (null); al crear, simplemente no se envía.
+      if (!payload.disciplinaId) payload.disciplinaId = editingClase ? null : undefined;
+      if (!payload.entrenadorId) payload.entrenadorId = editingClase ? null : undefined;
+      payload.fechaHora = values.fechaHora ? new Date(values.fechaHora).toISOString() : undefined;
       payload.capacidadMaxima = Number(payload.capacidadMaxima) || undefined;
       payload.duracionMinutos = Number(payload.duracionMinutos) || undefined;
 
@@ -276,156 +346,127 @@ export default function ClasesPage() {
     itemName: 'La clase',
   });
 
-  // ---- Plantillas recurrentes de clase: mismo concepto que las plantillas
-  // de turno -- se define una vez por día de la semana y un job (nocturno, o
-  // el botón "Generar clases ahora") materializa las ClaseProgramada de las
-  // próximas semanas a partir de esto, en vez de crear cada clase a mano.
+  // ---- Clases recurrentes (series): una sola ficha con varios días. Crear o
+  // editar genera / actualiza en el acto las clases de las próximas semanas.
   const [isPlantillaDialogOpen, setIsPlantillaDialogOpen] = useState(false);
-  const [editingPlantilla, setEditingPlantilla] = useState<ClasePlantilla | null>(null);
+  const [editingSerie, setEditingSerie] = useState<SerieClase | null>(null);
   const [showDeletedPlantillas, setShowDeletedPlantillas] = useState(false);
   const [confirmPlantillaConfig, setConfirmPlantillaConfig] = useState({ title: '', description: '', onConfirm: () => {} });
   const [confirmPlantillaOpen, setConfirmPlantillaOpen] = useState(false);
-  const [semanasGenerarClases, setSemanasGenerarClases] = useState(8);
 
-  const plantillaForm = useForm<ClasePlantillaFormValues>({
-    defaultValues: {
-      sucursalId: '',
-      disciplinaId: '',
-      entrenadorId: '',
-      nombreClase: '',
-      descripcion: '',
-      capacidadMaxima: 20,
-      diaSemana: 1,
-      diasSemana: [],
-      horaInicio: '',
-      duracionMinutos: 60,
-      vigenciaDesde: '',
-      vigenciaHasta: '',
-      activa: true,
-    },
+  const valoresSerie = (): SerieFormValues => ({
+    sucursalId: userSucursalId || '',
+    disciplinaId: '',
+    entrenadorId: '',
+    nombreClase: '',
+    descripcion: '',
+    capacidadMaxima: 20,
+    diasSemana: [],
+    horaInicio: '',
+    duracionMinutos: 60,
+    vigenciaDesde: toDatetimeLocal(new Date().toISOString()).slice(0, 10),
+    vigenciaHasta: '',
+    activa: true,
   });
+  const plantillaForm = useForm<SerieFormValues>({ defaultValues: valoresSerie() });
 
   const { data: clasesPlantilla, isLoading: isLoadingPlantillas } = useQuery({
     queryKey: ['clases-plantilla', activeTenantId, showDeletedPlantillas],
-    queryFn: async () => unwrapList(await apiGet(showDeletedPlantillas ? '/clases-plantilla?deleted=true' : '/clases-plantilla')),
+    queryFn: async () => unwrapList(await apiGet(showDeletedPlantillas ? '/clases-plantilla?deleted=true&limit=100' : '/clases-plantilla?limit=100')),
     enabled: !!token,
   });
 
-  const savePlantillaMutation = useMutation({
-    mutationFn: async (values: ClasePlantillaFormValues) => {
-      const base: Record<string, unknown> = {
+  const describirSerie = (r: Record<string, number | undefined>) => {
+    const partes: string[] = [];
+    if (r.clasesCreadas) partes.push(`${r.clasesCreadas} clases programadas`);
+    if (r.clasesActualizadas) partes.push(`${r.clasesActualizadas} actualizadas`);
+    if (r.clasesEliminadas) partes.push(`${r.clasesEliminadas} quitadas`);
+    if (r.clasesConservadas) partes.push(`${r.clasesConservadas} conservadas porque tienen reservas`);
+    if (r.clasesOmitidas) partes.push(`${r.clasesOmitidas} omitidas porque el entrenador no tiene turno y la organización lo exige`);
+    return partes.length ? `${partes.join(', ')}.` : undefined;
+  };
+
+  const saveSerieMutation = useMutation({
+    mutationFn: async (values: SerieFormValues) => {
+      if (!values.diasSemana?.length) throw new Error('Selecciona al menos un día de la semana.');
+      if (!values.horaInicio) throw new Error('Indica la hora de inicio.');
+      const payload = {
         sucursalId: userSucursalId || values.sucursalId,
+        disciplinaId: values.disciplinaId || null,
+        entrenadorId: values.entrenadorId || null,
         nombreClase: values.nombreClase,
-        descripcion: values.descripcion || undefined,
+        descripcion: values.descripcion || null,
         capacidadMaxima: Number(values.capacidadMaxima) || 20,
         horaInicio: values.horaInicio,
         duracionMinutos: Number(values.duracionMinutos) || 60,
         vigenciaDesde: values.vigenciaDesde,
+        vigenciaHasta: values.vigenciaHasta || null,
         activa: values.activa,
+        diasSemana: values.diasSemana,
       };
-      if (values.disciplinaId) base.disciplinaId = values.disciplinaId;
-      if (values.entrenadorId) base.entrenadorId = values.entrenadorId;
-      if (values.vigenciaHasta) base.vigenciaHasta = values.vigenciaHasta;
-
-      if (editingPlantilla) {
-        return apiPatch(`/clases-plantilla/${editingPlantilla.id}`, { ...base, diaSemana: Number(values.diaSemana) });
-      }
-
-      const dias = values.diasSemana ?? [];
-      if (dias.length === 0) {
-        throw new Error('Selecciona al menos un día de la semana.');
-      }
-      return Promise.all(dias.map((dia) => apiPost('/clases-plantilla', { ...base, diaSemana: dia })));
+      return editingSerie
+        ? apiPut<Record<string, number>>('/clases-plantilla/serie', { ...payload, ids: editingSerie.ids })
+        : apiPost<Record<string, number>>('/clases-plantilla/serie', payload);
     },
-    onSuccess: (_data, values) => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['clases-plantilla'] });
+      queryClient.invalidateQueries({ queryKey: ['clases'] });
       setIsPlantillaDialogOpen(false);
-      plantillaForm.reset();
-      const cantidadDias = editingPlantilla ? 1 : (values.diasSemana ?? []).length;
-      toast({
-        title: 'Éxito',
-        description: editingPlantilla
-          ? 'Plantilla de clase actualizada correctamente.'
-          : cantidadDias > 1
-            ? `Se crearon ${cantidadDias} plantillas de clase (una por día seleccionado).`
-            : 'Plantilla de clase creada correctamente.',
-        variant: 'success',
-      });
+      toast({ title: editingSerie ? 'Clase recurrente actualizada' : 'Clase recurrente creada', description: describirSerie(res || {}), variant: 'success' });
+      setEditingSerie(null);
     },
     onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
-  const { deleteItem: deletePlantilla, restoreItem: restorePlantilla, isRestoring: isRestoringPlantilla } = useSoftDelete({
+  const eliminarSerieMutation = useMutation({
+    mutationFn: async (serie: SerieClase) => apiPost<Record<string, number>>('/clases-plantilla/serie/eliminar', { ids: serie.ids }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['clases-plantilla'] });
+      queryClient.invalidateQueries({ queryKey: ['clases'] });
+      toast({ title: 'Clase recurrente eliminada', description: describirSerie(res || {}), variant: 'success' });
+    },
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+
+  // Papelera: se restaura plantilla por plantilla (un día a la vez).
+  const { restoreItem: restorePlantilla, isRestoring: isRestoringPlantilla } = useSoftDelete({
     queryKey: ['clases-plantilla', activeTenantId, showDeletedPlantillas],
     endpoint: 'clases-plantilla',
     modelName: 'clasePlantilla',
     itemName: 'La plantilla',
   });
 
-  const generarClasesMutation = useMutation({
-    mutationFn: async () => apiPost(`/clases-plantilla/generar?semanas=${semanasGenerarClases}`, {}),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['clases'] });
-      const creadas = data?.clasesCreadas ?? 0;
-      const omitidas = data?.clasesOmitidas ?? 0;
-      const partes = [
-        creadas > 0
-          ? `Se crearon ${creadas} clases nuevas a partir de las plantillas activas (próximas ${semanasGenerarClases} semanas).`
-          : `Las plantillas activas ya tenían todas sus clases generadas para las próximas ${semanasGenerarClases} semanas.`,
-      ];
-      if (omitidas > 0) {
-        partes.push(`${omitidas} no se generaron porque el entrenador no tenía turno registrado y la organización lo exige.`);
-      }
-      toast({ title: 'Clases generadas', description: partes.join(' '), variant: 'success' });
-    },
-    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
-  });
-
   const handleAddNewPlantilla = () => {
-    setEditingPlantilla(null);
+    setEditingSerie(null);
+    plantillaForm.reset(valoresSerie());
+    setIsPlantillaDialogOpen(true);
+  };
+
+  const handleEditSerie = (serie: SerieClase) => {
+    const p = serie.base;
+    setEditingSerie(serie);
     plantillaForm.reset({
-      sucursalId: userSucursalId || '',
-      disciplinaId: '',
-      entrenadorId: '',
-      nombreClase: '',
-      descripcion: '',
-      capacidadMaxima: 20,
-      diaSemana: 1,
-      diasSemana: [],
-      horaInicio: '',
-      duracionMinutos: 60,
-      vigenciaDesde: new Date().toISOString().split('T')[0],
-      vigenciaHasta: '',
-      activa: true,
+      sucursalId: p.sucursalId,
+      disciplinaId: p.disciplinaId || '',
+      entrenadorId: p.entrenadorId || '',
+      nombreClase: p.nombreClase,
+      descripcion: p.descripcion || '',
+      capacidadMaxima: p.capacidadMaxima,
+      diasSemana: serie.dias,
+      horaInicio: horaDe(p.horaInicio),
+      duracionMinutos: p.duracionMinutos,
+      vigenciaDesde: fechaDe(p.vigenciaDesde),
+      vigenciaHasta: fechaDe(p.vigenciaHasta),
+      activa: p.activa,
     });
     setIsPlantillaDialogOpen(true);
   };
 
-  const handleEditPlantilla = (plantilla: ClasePlantilla) => {
-    setEditingPlantilla(plantilla);
-    plantillaForm.reset({
-      sucursalId: plantilla.sucursalId,
-      disciplinaId: plantilla.disciplinaId || '',
-      entrenadorId: plantilla.entrenadorId || '',
-      nombreClase: plantilla.nombreClase,
-      descripcion: plantilla.descripcion || '',
-      capacidadMaxima: plantilla.capacidadMaxima,
-      diaSemana: plantilla.diaSemana,
-      diasSemana: [plantilla.diaSemana],
-      horaInicio: plantilla.horaInicio ? new Date(plantilla.horaInicio).toISOString().substring(11, 16) : '',
-      duracionMinutos: plantilla.duracionMinutos,
-      vigenciaDesde: plantilla.vigenciaDesde ? new Date(plantilla.vigenciaDesde).toISOString().split('T')[0] : '',
-      vigenciaHasta: plantilla.vigenciaHasta ? new Date(plantilla.vigenciaHasta).toISOString().split('T')[0] : '',
-      activa: plantilla.activa,
-    });
-    setIsPlantillaDialogOpen(true);
-  };
-
-  const handleDeletePlantilla = (id: string) => {
+  const handleDeleteSerie = (serie: SerieClase) => {
     setConfirmPlantillaConfig({
-      title: '¿Eliminar plantilla?',
-      description: 'No borra las clases ya generadas, solo detiene nuevas proyecciones. Podrás deshacerlo en los próximos segundos.',
-      onConfirm: () => deletePlantilla(id),
+      title: '¿Eliminar clase recurrente?',
+      description: `Se dejará de programar "${serie.base.nombreClase}" y se quitarán sus clases futuras sin reservas (las que tienen reservas se conservan).`,
+      onConfirm: () => eliminarSerieMutation.mutate(serie),
     });
     setConfirmPlantillaOpen(true);
   };
@@ -529,13 +570,13 @@ export default function ClasesPage() {
 
   if (!token) return null;
 
-  const personalList = unwrapList(personal);
   const filteredClases = (unwrapList(clases) as Clase[]).filter((c: Clase) => {
     if (!searchTerm) return true;
     return c.nombreClase?.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const plantillaList = unwrapList(clasesPlantilla) as ClasePlantilla[];
+  const series = agruparSeries(plantillaList);
 
   return (
     <Protect permission="clases:leer" fallbackType="redirect">
@@ -551,15 +592,15 @@ export default function ClasesPage() {
               <CalendarDays className="h-4 w-4 mr-1.5" /> Clases
             </TabsTrigger>
             <TabsTrigger value="plantillas" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
-              <Repeat className="h-4 w-4 mr-1.5" /> Plantillas recurrentes
+              <Repeat className="h-4 w-4 mr-1.5" /> Clases recurrentes
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="clases" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
-            Clases puntuales. Para no crear cada semana a mano, define un horario recurrente en la pestaña
-            &quot;Plantillas recurrentes&quot;.
+            Todas las clases programadas. Las que se repiten cada semana se gestionan en la pestaña
+            &quot;Clases recurrentes&quot;; acá puedes crear una clase suelta o ajustar una fecha puntual.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -733,57 +774,15 @@ export default function ClasesPage() {
           <TabsContent value="plantillas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
-                Define el horario semanal habitual de una clase una sola vez (ej. &quot;Yoga, Lunes/Miércoles/Viernes 07:00&quot;).
-                Todas las noches (o cuando aprietes &quot;Generar clases ahora&quot;) el sistema crea las clases individuales de
-                las próximas semanas a partir de esto.
+                Define una clase que se repite cada semana (ej. &quot;Spinning, martes y jueves 18:00&quot;). Sus clases de las
+                próximas semanas se crean solas al guardar, y los cambios se aplican también a las clases futuras ya creadas.
               </p>
 
               <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
                 <PapeleraToggle showDeleted={showDeletedPlantillas} setShowDeleted={setShowDeletedPlantillas} />
 
                 <Protect permission="clases:crear" fallbackType="hide">
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-1 pr-1">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                          <Info className="h-4 w-4" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          Crea, a partir de tus plantillas activas, las clases individuales reales de las próximas N semanas (no
-                          duplica las que ya existen; si el entrenador no tiene turno y la organización lo exige, esa clase
-                          puntual se omite). Esto mismo corre automáticamente todas las noches; el botón es para no esperar
-                          hasta entonces.
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <Label htmlFor="semanas-generar-clases" className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      Semanas:
-                    </Label>
-                    <input
-                      id="semanas-generar-clases"
-                      type="number"
-                      min={1}
-                      max={26}
-                      value={semanasGenerarClases}
-                      onChange={(e) => setSemanasGenerarClases(Math.min(26, Math.max(1, Number(e.target.value) || 1)))}
-                      className="w-14 h-8 text-xs text-center rounded-md border border-slate-200 dark:border-slate-700 bg-transparent"
-                    />
-
-                    <Button
-                      variant="outline"
-                      onClick={() => generarClasesMutation.mutate()}
-                      disabled={generarClasesMutation.isPending}
-                      className="border-none shadow-none text-indigo-700 dark:text-indigo-400"
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      {generarClasesMutation.isPending ? 'Generando...' : 'Generar clases ahora'}
-                    </Button>
-                  </div>
-                </Protect>
-
-                <Protect permission="clases:crear" fallbackType="hide">
-                  <TenantRequiredButton onClick={handleAddNewPlantilla} icon={<Plus className="mr-2 h-4 w-4" />} label="Nueva Plantilla" />
+                  <TenantRequiredButton onClick={handleAddNewPlantilla} icon={<Plus className="mr-2 h-4 w-4" />} label="Nueva clase recurrente" />
                 </Protect>
               </div>
             </div>
@@ -800,90 +799,110 @@ export default function ClasesPage() {
                 <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
                   <Repeat className="w-6 h-6" />
                 </div>
-                <p className="text-base font-semibold text-slate-900 dark:text-white">No hay plantillas de clase registradas</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Crea una plantilla por cada horario semanal habitual (ej. &quot;Spinning Martes y Jueves 18:00&quot;).
+                <p className="text-base font-semibold text-slate-900 dark:text-white">
+                  {showDeletedPlantillas ? 'La papelera está vacía' : 'Todavía no hay clases recurrentes'}
                 </p>
+                {!showDeletedPlantillas && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    Crea una por cada clase habitual (ej. &quot;Spinning, martes y jueves 18:00&quot;).
+                  </p>
+                )}
               </div>
+            ) : showDeletedPlantillas ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Clase</TableHead>
+                    <TableHead>Día</TableHead>
+                    <TableHead>Horario</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plantillaList.map((p: ClasePlantilla) => (
+                    <TableRow key={p.id} className="bg-rose-50/40 dark:bg-rose-500/20 opacity-80">
+                      <TableCell><span className="font-semibold text-slate-900 dark:text-white text-sm">{p.nombreClase}</span></TableCell>
+                      <TableCell><span className="text-xs text-slate-600 dark:text-slate-400">{DIAS_SEMANA[p.diaSemana]}</span></TableCell>
+                      <TableCell><span className="text-xs text-slate-600 dark:text-slate-400">{horaDe(p.horaInicio)} ({p.duracionMinutos} min)</span></TableCell>
+                      <TableCell className="text-right">
+                        <Protect permission="sistema:restaurar">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => restorePlantilla(p.id)}
+                            disabled={isRestoringPlantilla}
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
+                          >
+                            <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                          </Button>
+                        </Protect>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Clase</TableHead>
-                    <TableHead>Entrenador</TableHead>
-                    <TableHead>Sucursal</TableHead>
-                    <TableHead>Día</TableHead>
+                    <TableHead>Días</TableHead>
                     <TableHead>Horario</TableHead>
+                    <TableHead>Entrenador</TableHead>
                     <TableHead>Vigencia</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {plantillaList.map((p: ClasePlantilla) => (
-                    <TableRow key={p.id} className={showDeletedPlantillas ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
-                      <TableCell>
-                        <div>
+                  {series.map((serie) => {
+                    const p = serie.base;
+                    return (
+                      <TableRow key={serie.clave}>
+                        <TableCell>
                           <p className="font-semibold text-slate-900 dark:text-white text-sm">{p.nombreClase}</p>
-                          {p.disciplina?.nombre && <p className="text-xs text-slate-500 dark:text-slate-400">{p.disciplina.nombre}</p>}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.entrenador?.usuario?.nombreCompleto || 'Sin asignar'}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.sucursal?.nombre}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{DIAS_SEMANA[p.diaSemana]}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                          {new Date(p.horaInicio).toISOString().substring(11, 16)} ({p.duracionMinutos} min)
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                          {new Date(p.vigenciaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })}
-                          {' – '}
-                          {p.vigenciaHasta ? new Date(p.vigenciaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : 'Indefinido'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={p.activa ? 'success' : 'outline'}>{p.activa ? 'Activa' : 'Inactiva'}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {showDeletedPlantillas ? (
-                            <Protect permission="sistema:restaurar">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => restorePlantilla(p.id)}
-                                disabled={isRestoringPlantilla}
-                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
-                              >
-                                <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {[p.disciplina?.nombre, !userSucursalId ? p.sucursal?.nombre : null].filter(Boolean).join(' · ')}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {serie.dias.map((d) => <Badge key={d} variant="primary">{DIAS_CORTOS[d]}</Badge>)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">{horaDe(p.horaInicio)} · {p.duracionMinutos} min · {p.capacidadMaxima} cupos</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">{p.entrenador?.usuario?.nombreCompleto || 'Sin asignar'}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">
+                            {new Date(p.vigenciaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })}
+                            {' – '}
+                            {p.vigenciaHasta ? new Date(p.vigenciaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : 'Indefinido'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={p.activa ? 'success' : 'outline'}>{p.activa ? 'Activa' : 'Pausada'}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Protect permission="clases:actualizar" fallbackType="hide">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditSerie(serie)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                <Edit className="h-4 w-4" />
                               </Button>
                             </Protect>
-                          ) : (
-                            <>
-                              <Protect permission="clases:actualizar" fallbackType="hide">
-                                <Button variant="ghost" size="icon" onClick={() => handleEditPlantilla(p)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </Protect>
-                              <Protect permission="clases:eliminar" fallbackType="hide">
-                                <Button variant="ghost" size="icon" onClick={() => handleDeletePlantilla(p.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </Protect>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            <Protect permission="clases:eliminar" fallbackType="hide">
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteSerie(serie)} disabled={eliminarSerieMutation.isPending} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -902,7 +921,6 @@ export default function ClasesPage() {
             fields: [
               { name: 'nombreClase', label: 'Nombre de la Clase', type: 'text', placeholder: 'Ej. Yoga Matutino', colSpan: 2 },
               { name: 'disciplinaId', label: 'Disciplina', type: 'select', options: [{ label: 'Ninguna', value: '' }, ...(unwrapList(disciplinas) as Disciplina[]).map((d: Disciplina) => ({ label: d.nombre, value: d.id }))] },
-              { name: 'entrenadorId', label: 'Entrenador', type: 'select', options: [{ label: 'Sin asignar', value: '' }, ...(personalList as Entrenador[]).map((p: Entrenador) => ({ label: p.usuario?.nombreCompleto || 'Sin nombre', value: p.id }))] },
               ...(!userSucursalId
                 ? [{
                     name: 'sucursalId',
@@ -921,9 +939,15 @@ export default function ClasesPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Fecha y Hora</label>
                     <input type="datetime-local" {...f.register('fechaHora')} className={dateInputClass} />
-                    <AvisoDisponibilidadEntrenador form={f} />
                   </div>
                 ),
+              },
+              {
+                name: 'entrenadorId',
+                label: 'Entrenador',
+                type: 'custom',
+                colSpan: 2,
+                renderCustom: (f: any) => <SelectorEntrenador form={f} modo="puntual" sucursalFija={userSucursalId} />,
               },
               { name: 'duracionMinutos', label: 'Duración (min)', type: 'number' },
               { name: 'capacidadMaxima', label: 'Capacidad Máxima', type: 'number' },
@@ -949,129 +973,125 @@ export default function ClasesPage() {
       <GlobalFormModal
         open={isPlantillaDialogOpen}
         onOpenChange={setIsPlantillaDialogOpen}
-        title={editingPlantilla ? 'Editar Plantilla de Clase' : 'Nueva Plantilla de Clase'}
-        description={editingPlantilla ? 'Modifica el horario semanal recurrente.' : 'Define un horario que se repite cada semana.'}
+        title={editingSerie ? 'Editar clase recurrente' : 'Nueva clase recurrente'}
+        description={editingSerie ? 'Los cambios se aplican también a las clases futuras ya programadas.' : 'Una clase que se repite cada semana en los días que elijas.'}
         form={plantillaForm as any}
+        maxWidthClass="sm:max-w-[600px]"
         sections={[
           {
             fields: [
-              { name: 'nombreClase', label: 'Nombre de la Clase', type: 'text', placeholder: 'Ej. Yoga Matutino', colSpan: 2 },
+              { name: 'nombreClase', label: 'Nombre de la clase', type: 'text', placeholder: 'Ej. Spinning', colSpan: 2 },
               { name: 'disciplinaId', label: 'Disciplina', type: 'select', options: [{ label: 'Ninguna', value: '' }, ...(unwrapList(disciplinas) as Disciplina[]).map((d: Disciplina) => ({ label: d.nombre, value: d.id }))] },
-              { name: 'entrenadorId', label: 'Entrenador', type: 'select', options: [{ label: 'Sin asignar', value: '' }, ...(personalList as Entrenador[]).map((p: Entrenador) => ({ label: p.usuario?.nombreCompleto || 'Sin nombre', value: p.id }))] },
               ...(!userSucursalId
                 ? [{
                     name: 'sucursalId',
                     label: 'Sucursal',
                     type: 'select' as const,
                     options: (unwrapList(sucursales) as Sucursal[]).map((s: Sucursal) => ({ label: s.nombre, value: s.id })),
-                    colSpan: 2 as const,
                   }]
                 : []),
-              editingPlantilla
-                ? {
-                    name: 'diaSemana',
-                    label: 'Día de la semana',
-                    type: 'select' as const,
-                    options: DIAS_SEMANA.map((label, value) => ({ label, value: String(value) })),
-                  }
-                : {
-                    name: 'diasSemana',
-                    label: 'Días de la semana',
-                    type: 'custom' as const,
-                    colSpan: 2 as const,
-                    renderCustom: (f: any) => {
-                      const seleccionados: number[] = f.watch('diasSemana') || [];
-                      const toggle = (dia: number) => {
-                        const set = new Set(seleccionados);
-                        if (set.has(dia)) set.delete(dia); else set.add(dia);
-                        f.setValue('diasSemana', Array.from(set).sort(), { shouldDirty: true });
-                      };
-                      return (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Días de la semana</label>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Tilda todos los días que comparten este mismo horario, entrenador y sucursal (ej. Lunes, Miércoles
-                            y Viernes). Si un día tiene un horario distinto, créalo aparte en otra plantilla.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {DIAS_SEMANA.map((label, value) => {
-                              const active = seleccionados.includes(value);
-                              return (
-                                <button
-                                  type="button"
-                                  key={value}
-                                  onClick={() => toggle(value)}
-                                  aria-pressed={active}
-                                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                                    active
-                                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700'
-                                  }`}
-                                >
-                                  {label.slice(0, 3)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    },
-                  },
+              {
+                name: 'diasSemana',
+                label: 'Días de la semana',
+                type: 'custom',
+                colSpan: 2,
+                renderCustom: (f: any) => {
+                  const seleccionados: number[] = f.watch('diasSemana') || [];
+                  const toggle = (dia: number) => {
+                    const set = new Set(seleccionados);
+                    if (set.has(dia)) set.delete(dia); else set.add(dia);
+                    f.setValue('diasSemana', Array.from(set).sort((a, b) => ordenDia(a) - ordenDia(b)), { shouldDirty: true });
+                  };
+                  return (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Días de la semana</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3, 4, 5, 6, 0].map((value) => {
+                          const active = seleccionados.includes(value);
+                          return (
+                            <button
+                              type="button"
+                              key={value}
+                              onClick={() => toggle(value)}
+                              aria-pressed={active}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                active
+                                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700'
+                              }`}
+                            >
+                              {DIAS_CORTOS[value]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                },
+              },
               {
                 name: 'horaInicio',
-                label: 'Hora de Inicio',
+                label: 'Hora de inicio',
                 type: 'custom',
                 renderCustom: (f: any) => (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Hora de Inicio</label>
+                    <label className="text-sm font-medium">Hora de inicio</label>
                     <input type="time" {...f.register('horaInicio')} className={dateInputClass} />
                   </div>
                 ),
               },
               { name: 'duracionMinutos', label: 'Duración (min)', type: 'number' },
-              { name: 'capacidadMaxima', label: 'Capacidad Máxima', type: 'number' },
+              {
+                name: 'entrenadorId',
+                label: 'Entrenador',
+                type: 'custom',
+                colSpan: 2,
+                renderCustom: (f: any) => <SelectorEntrenador form={f} modo="recurrente" sucursalFija={userSucursalId} />,
+              },
+              { name: 'capacidadMaxima', label: 'Cupos por clase', type: 'number' },
               {
                 name: 'activa',
                 label: 'Estado',
                 type: 'custom',
                 renderCustom: (f: any) => (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Plantilla activa</label>
-                    <div className="flex items-center h-10">
+                    <label className="text-sm font-medium">Activa</label>
+                    <div className="flex items-center h-10 gap-2">
                       <Switch checked={f.watch('activa')} onCheckedChange={(c: boolean) => f.setValue('activa', c, { shouldDirty: true })} />
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{f.watch('activa') ? 'Se programa cada semana' : 'Pausada: no se programan clases'}</span>
                     </div>
                   </div>
                 ),
               },
               {
                 name: 'vigenciaDesde',
-                label: 'Vigente desde',
+                label: 'Desde',
                 type: 'custom',
                 renderCustom: (f: any) => (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Vigente desde</label>
+                    <label className="text-sm font-medium">Desde</label>
                     <input type="date" {...f.register('vigenciaDesde')} className={dateInputClass} />
                   </div>
                 ),
               },
               {
                 name: 'vigenciaHasta',
-                label: 'Vigente hasta (Opcional)',
+                label: 'Hasta (opcional)',
                 type: 'custom',
                 renderCustom: (f: any) => (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Vigente hasta (Opcional)</label>
+                    <label className="text-sm font-medium">Hasta (opcional)</label>
                     <input type="date" {...f.register('vigenciaHasta')} className={dateInputClass} />
                   </div>
                 ),
               },
-              { name: 'descripcion', label: 'Descripción (Opcional)', type: 'text', colSpan: 2 },
+              { name: 'descripcion', label: 'Descripción (opcional)', type: 'text', colSpan: 2 },
             ],
           },
         ]}
-        onSubmit={savePlantillaMutation.mutateAsync as any}
-        isPending={savePlantillaMutation.isPending}
-        submitLabel="Guardar Plantilla"
+        onSubmit={saveSerieMutation.mutateAsync as any}
+        isPending={saveSerieMutation.isPending}
+        submitLabel={editingSerie ? 'Guardar cambios' : 'Crear clase recurrente'}
       />
 
       <GlobalConfirmDialog

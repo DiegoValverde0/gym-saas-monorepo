@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClasePlantillaDto } from './dto/create-clase-plantilla.dto';
 import { UpdateClasePlantillaDto } from './dto/update-clase-plantilla.dto';
+import { ActualizarSerieClaseDto, SerieClaseDto } from './dto/serie-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
@@ -90,6 +91,146 @@ export class ClasePlantillaService {
       where: { id },
       data: { deletedAt: null },
     });
+  }
+
+  // =========================================================================
+  // SERIES: una clase recurrente = una plantilla por día con los mismos datos
+  // =========================================================================
+
+  // Crea la serie y genera sus clases de las próximas semanas en el acto.
+  async crearSerie(dto: SerieClaseDto) {
+    const { diasSemana, ...base } = dto;
+    const data = this.normalizarHoras(base);
+    await this.prisma.extendedClient.clasePlantilla.createMany({
+      data: diasSemana.map((diaSemana) => ({ ...data, diaSemana })),
+    });
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
+    return { plantillasCreadas: diasSemana.length, ...generacion };
+  }
+
+  // Reemplaza la serie: actualiza los días que siguen, crea los nuevos, quita
+  // los que ya no están, y deja las clases futuras ya generadas coherentes
+  // con el cambio (ver sincronizarClasesFuturas).
+  async actualizarSerie(dto: ActualizarSerieClaseDto) {
+    const { ids, diasSemana, ...base } = dto;
+    const db = this.prisma.extendedClient;
+    const actuales: Array<{ id: string; diaSemana: number }> = await db.clasePlantilla.findMany({ where: { id: { in: ids } } });
+    if (actuales.length !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
+
+    const data = this.normalizarHoras(base);
+    const porDia = new Map(actuales.map((p) => [p.diaSemana, p]));
+    const actualizadas: string[] = [];
+    let plantillasCreadas = 0;
+    for (const diaSemana of diasSemana) {
+      const existente = porDia.get(diaSemana);
+      if (existente) {
+        await db.clasePlantilla.update({ where: { id: existente.id }, data });
+        actualizadas.push(existente.id);
+      } else {
+        await db.clasePlantilla.create({ data: { ...data, diaSemana } });
+        plantillasCreadas++;
+      }
+    }
+    const quitadas = actuales.filter((p) => !actualizadas.includes(p.id)).map((p) => p.id);
+    if (quitadas.length > 0) await db.clasePlantilla.deleteMany({ where: { id: { in: quitadas } } });
+
+    const sincronizacion = await this.sincronizarClasesFuturas(actualizadas, quitadas);
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
+    return { plantillasCreadas, plantillasQuitadas: quitadas.length, ...sincronizacion, ...generacion };
+  }
+
+  // Borra la serie y sus clases futuras sin reservas (las que tienen reservas
+  // se conservan para no dejar a clientes con una reserva fantasma).
+  async eliminarSerie(ids: string[]) {
+    const db = this.prisma.extendedClient;
+    const existentes = await db.clasePlantilla.count({ where: { id: { in: ids } } });
+    if (existentes !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
+    await db.clasePlantilla.deleteMany({ where: { id: { in: ids } } });
+    return this.sincronizarClasesFuturas([], ids);
+  }
+
+  // Lleva las clases futuras (activas) ya generadas desde estas plantillas al
+  // estado actual de cada plantilla:
+  //  - Plantilla quitada, inactiva, o clase fuera de su vigencia: se elimina
+  //    la clase (a la papelera) si no tiene reservas; si tiene, se conserva.
+  //  - Plantilla vigente: se actualizan en el lugar nombre, entrenador, sala,
+  //    hora, duración, cupo y el turno vinculado. Se actualiza en vez de
+  //    borrar y regenerar porque una ocurrencia borrada cuenta como excepción
+  //    y no se vuelve a generar.
+  private async sincronizarClasesFuturas(actualizadas: string[], quitadas: string[]) {
+    const db = this.prisma.extendedClient;
+    const organizacionId = this.cls.get('organizacionId');
+    const org = await db.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const zonaHoraria = org?.zonaHoraria;
+
+    const plantillas: Array<{
+      id: string;
+      activa: boolean;
+      vigenciaDesde: Date;
+      vigenciaHasta: Date | null;
+      horaInicio: Date;
+      duracionMinutos: number;
+      entrenadorId: string | null;
+      sucursalId: string;
+      disciplinaId: string | null;
+      nombreClase: string;
+      descripcion: string | null;
+      capacidadMaxima: number;
+    }> = actualizadas.length ? await db.clasePlantilla.findMany({ where: { id: { in: actualizadas } } }) : [];
+    const porId = new Map(plantillas.map((p) => [p.id, p]));
+
+    const clases: Array<{ id: string; clasePlantillaId: string; fechaHora: Date; _count: { reservas: number } }> =
+      await db.claseProgramada.findMany({
+        where: { clasePlantillaId: { in: [...actualizadas, ...quitadas] }, fechaHora: { gt: new Date() }, estado: 'ACTIVO' },
+        select: {
+          id: true,
+          clasePlantillaId: true,
+          fechaHora: true,
+          _count: { select: { reservas: { where: { estado: { in: ['CONFIRMADA', 'ASISTIO'] } } } } },
+        },
+      });
+
+    const aEliminar: string[] = [];
+    let clasesActualizadas = 0;
+    let clasesConservadas = 0;
+    for (const clase of clases) {
+      const plantilla = porId.get(clase.clasePlantillaId);
+      const fechaLocal = aHoraLocal(clase.fechaHora, zonaHoraria).fechaSolo;
+      const fueraDeVigencia =
+        !plantilla ||
+        !plantilla.activa ||
+        fechaLocal < plantilla.vigenciaDesde ||
+        (plantilla.vigenciaHasta !== null && fechaLocal > plantilla.vigenciaHasta);
+
+      if (fueraDeVigencia) {
+        if (clase._count.reservas > 0) clasesConservadas++;
+        else aEliminar.push(clase.id);
+        continue;
+      }
+
+      const minutosInicio = plantilla.horaInicio.getUTCHours() * 60 + plantilla.horaInicio.getUTCMinutes();
+      const turnoId = plantilla.entrenadorId
+        ? await this.buscarTurnoQueCubre(plantilla.entrenadorId, plantilla.sucursalId, fechaLocal, plantilla.horaInicio, plantilla.duracionMinutos)
+        : null;
+      await db.claseProgramada.update({
+        where: { id: clase.id },
+        data: {
+          nombreClase: plantilla.nombreClase,
+          descripcion: plantilla.descripcion,
+          disciplinaId: plantilla.disciplinaId,
+          entrenadorId: plantilla.entrenadorId,
+          sucursalId: plantilla.sucursalId,
+          capacidadMaxima: plantilla.capacidadMaxima,
+          duracionMinutos: plantilla.duracionMinutos,
+          fechaHora: desdeHoraLocal(fechaLocal, minutosInicio, zonaHoraria),
+          turnoId,
+        },
+      });
+      clasesActualizadas++;
+    }
+
+    if (aEliminar.length > 0) await db.claseProgramada.deleteMany({ where: { id: { in: aEliminar } } });
+    return { clasesActualizadas, clasesEliminadas: aEliminar.length, clasesConservadas };
   }
 
   // Disparado manualmente desde el frontend ("Generar clases ahora"), con el
