@@ -6,7 +6,8 @@
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
     "db:push": "dotenv -e ../../.env -- prisma db push && dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
-    "lint": "eslint \"src/**/*.ts\" --fix"
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "db:corregir-horas-clases": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-horas-clases.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
