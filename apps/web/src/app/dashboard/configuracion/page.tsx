@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, Users, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
