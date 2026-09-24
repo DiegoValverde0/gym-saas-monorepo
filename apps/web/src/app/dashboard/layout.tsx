@@ -34,6 +34,7 @@ import {
   UserCog,
   Clock,
   CalendarDays,
+  CalendarRange,
   Receipt,
   Truck
 } from 'lucide-react';
@@ -82,6 +83,8 @@ const navigationGroups: NavGroup[] = [
     icon: Dumbbell,
     baseHref: '/dashboard/disciplinas',
     items: [
+      // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
+      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange },
       { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
       { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
       { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer' },
@@ -153,6 +156,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         ...group,
         items: group.items.filter(item => {
           if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
+          if (item.name === 'Agenda') {
+            return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
+          }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
           if (['Personal', 'Turnos', 'Asistencias'].includes(item.name)) return modulos.controlPersonal;
           if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
@@ -161,7 +167,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         })
       };
     }).filter(group => group.items.length > 0);
-  }, [modulos]);
+  }, [modulos, hasPermission]);
 
   // Active Group logic
   const activeGroup: ActiveGroup = useMemo(() => {

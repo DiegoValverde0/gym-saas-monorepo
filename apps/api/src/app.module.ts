@@ -34,6 +34,7 @@ import { ClasePlantillaModule } from './modules/clase-plantilla/clase-plantilla.
 import { ClaseProgramadaModule } from './modules/clase-programada/clase-programada.module';
 import { ReservaClaseModule } from './modules/reserva-clase/reserva-clase.module';
 import { SistemaModule } from './modules/sistema/sistema.module';
+import { AgendaModule } from './modules/agenda/agenda.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -78,6 +79,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ClasePlantillaModule,
     ReservaClaseModule,
     SistemaModule,
+    AgendaModule,
     ScheduleModule.forRoot()
   ],
   controllers: [],

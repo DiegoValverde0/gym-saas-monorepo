@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
@@ -511,6 +511,26 @@ export default function ClasesPage() {
     });
     setConfirmOpen(true);
   };
+
+  // Enlaces desde la Agenda: ?nueva=YYYY-MM-DDTHH:MM&sucursal=<id> abre el
+  // formulario de clase ya con fecha/hora; ?clase=<id> abre sus reservas. Se
+  // lee window.location (no useSearchParams) para no exigir un Suspense en la
+  // página, y se limpia la URL para que un F5 no vuelva a abrir el diálogo.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nueva = params.get('nueva');
+    const claseId = params.get('clase');
+    if (!nueva && !claseId) return;
+    if (nueva) {
+      handleAddNew(new Date(nueva));
+      const sucursal = params.get('sucursal');
+      if (sucursal && !userSucursalId) form.setValue('sucursalId', sucursal);
+    }
+    if (claseId) setReservasClaseId(claseId);
+    window.history.replaceState(null, '', window.location.pathname);
+    // Solo al montar: es la lectura de los parámetros con los que se llegó.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ================= Reservas de la clase seleccionada =================
   const { data: claseDetalle, isLoading: loadingDetalle } = useQuery({
