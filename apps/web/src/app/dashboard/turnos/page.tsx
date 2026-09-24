@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
-import { useForm, UseFormReturn } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
@@ -15,14 +15,8 @@ import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Plus, Edit, Trash2, Search, ArchiveRestore, Repeat, Sparkles, Info } from 'lucide-react';
+import { Clock, Plus, Edit, Trash2, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
-
-const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 const ESTADO_VARIANT: Record<string, "default" | "success" | "destructive" | "outline"> = {
   PROGRAMADO: 'default',
@@ -66,36 +60,6 @@ interface TurnoFormValues {
   horaSalida: string;
   estado: string;
   motivoAusencia: string;
-}
-
-interface TurnoPlantilla {
-  id: string;
-  staffId: string;
-  sucursalId: string;
-  diaSemana: number;
-  horaEntrada: string;
-  horaSalida: string;
-  vigenciaDesde: string;
-  vigenciaHasta?: string | null;
-  activa: boolean;
-  staff?: Staff;
-  sucursal?: Sucursal;
-}
-
-interface PlantillaFormValues {
-  staffId: string;
-  sucursalId: string;
-  // Al editar una plantilla existente se cambia un solo día (diaSemana). Al
-  // crear una nueva, se pueden tildar varios días a la vez que comparten el
-  // mismo horario (diasSemana) -- evita repetir el formulario entero por
-  // cada día si, por ejemplo, alguien trabaja Lunes/Miércoles/Viernes 06-14.
-  diaSemana: number | string;
-  diasSemana: number[];
-  horaEntrada: string;
-  horaSalida: string;
-  vigenciaDesde: string;
-  vigenciaHasta: string;
-  activa: boolean;
 }
 
 const dateInputClass = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
@@ -168,145 +132,6 @@ export default function TurnosPage() {
     itemName: 'El turno',
   });
 
-  // ---- Plantillas recurrentes: reemplazan la carga manual de turno día por
-  // día -- se define una vez por día de la semana y un job (nocturno, o el
-  // botón "Generar turnos ahora") materializa los TurnoTrabajo hacia adelante.
-  const [isPlantillaDialogOpen, setIsPlantillaDialogOpen] = useState(false);
-  const [editingPlantilla, setEditingPlantilla] = useState<TurnoPlantilla | null>(null);
-  const [showDeletedPlantillas, setShowDeletedPlantillas] = useState(false);
-  const [confirmPlantillaConfig, setConfirmPlantillaConfig] = useState({ title: '', description: '', onConfirm: () => {} });
-  const [confirmPlantillaOpen, setConfirmPlantillaOpen] = useState(false);
-
-  const plantillaForm = useForm<PlantillaFormValues>({
-    defaultValues: {
-      staffId: '',
-      sucursalId: '',
-      diaSemana: 1,
-      diasSemana: [1],
-      horaEntrada: '',
-      horaSalida: '',
-      vigenciaDesde: '',
-      vigenciaHasta: '',
-      activa: true,
-    },
-  });
-
-  const { data: plantillas, isLoading: isLoadingPlantillas } = useQuery({
-    queryKey: ['turnos-plantilla', activeTenantId, showDeletedPlantillas],
-    queryFn: async () => unwrapList(await apiGet(showDeletedPlantillas ? '/turnos-plantilla?deleted=true' : '/turnos-plantilla')),
-    enabled: !!token,
-  });
-
-  const savePlantillaMutation = useMutation({
-    mutationFn: async (values: PlantillaFormValues) => {
-      const base: Record<string, unknown> = {
-        staffId: values.staffId,
-        sucursalId: userSucursalId || values.sucursalId,
-        horaEntrada: values.horaEntrada,
-        horaSalida: values.horaSalida,
-        vigenciaDesde: values.vigenciaDesde,
-        activa: values.activa,
-      };
-      if (values.vigenciaHasta) base.vigenciaHasta = values.vigenciaHasta;
-
-      if (editingPlantilla) {
-        // Editar sigue siendo un solo día: la plantilla ya es una fila puntual.
-        return apiPatch(`/turnos-plantilla/${editingPlantilla.id}`, { ...base, diaSemana: Number(values.diaSemana) });
-      }
-
-      // Crear: un registro por cada día tildado, mismo horario/sucursal/vigencia
-      // -- así se puede armar "Lunes, Miércoles y Viernes 06:00-14:00" en un
-      // solo formulario en vez de repetirlo 3 veces.
-      const dias = values.diasSemana ?? [];
-      if (dias.length === 0) {
-        throw new Error('Selecciona al menos un día de la semana.');
-      }
-      return Promise.all(dias.map((dia) => apiPost('/turnos-plantilla', { ...base, diaSemana: dia })));
-    },
-    onSuccess: (_data, values) => {
-      queryClient.invalidateQueries({ queryKey: ['turnos-plantilla'] });
-      setIsPlantillaDialogOpen(false);
-      plantillaForm.reset();
-      const cantidadDias = editingPlantilla ? 1 : (values.diasSemana ?? []).length;
-      toast({
-        title: 'Éxito',
-        description: editingPlantilla
-          ? 'Plantilla de turno actualizada correctamente.'
-          : cantidadDias > 1
-            ? `Se crearon ${cantidadDias} plantillas de turno (una por día seleccionado).`
-            : 'Plantilla de turno creada correctamente.',
-        variant: 'success',
-      });
-    },
-    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
-  });
-
-  const { deleteItem: deletePlantilla, restoreItem: restorePlantilla, isRestoring: isRestoringPlantilla } = useSoftDelete({
-    queryKey: ['turnos-plantilla', activeTenantId, showDeletedPlantillas],
-    endpoint: 'turnos-plantilla',
-    modelName: 'turnoPlantilla',
-    itemName: 'La plantilla',
-  });
-
-  const [semanasGenerar, setSemanasGenerar] = useState(8);
-
-  const generarMutation = useMutation({
-    mutationFn: async () => apiPost(`/turnos-plantilla/generar?semanas=${semanasGenerar}`, {}),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['turnos'] });
-      const creados = data?.turnosCreados ?? 0;
-      toast({
-        title: 'Turnos generados',
-        description: creados > 0
-          ? `Se crearon ${creados} turnos nuevos a partir de las plantillas activas (próximas ${semanasGenerar} semanas).`
-          : `Las plantillas activas ya tenían todos sus turnos generados para las próximas ${semanasGenerar} semanas.`,
-        variant: 'success',
-      });
-    },
-    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
-  });
-
-  const handleAddNewPlantilla = () => {
-    setEditingPlantilla(null);
-    plantillaForm.reset({
-      staffId: '',
-      sucursalId: userSucursalId || '',
-      diaSemana: 1,
-      diasSemana: [],
-      horaEntrada: '',
-      horaSalida: '',
-      vigenciaDesde: new Date().toISOString().split('T')[0],
-      vigenciaHasta: '',
-      activa: true,
-    });
-    setIsPlantillaDialogOpen(true);
-  };
-
-  const handleEditPlantilla = (plantilla: TurnoPlantilla) => {
-    setEditingPlantilla(plantilla);
-    plantillaForm.reset({
-      staffId: plantilla.staffId,
-      sucursalId: plantilla.sucursalId,
-      diaSemana: plantilla.diaSemana,
-      diasSemana: [plantilla.diaSemana],
-      horaEntrada: plantilla.horaEntrada ? new Date(plantilla.horaEntrada).toISOString().substring(11, 16) : '',
-      horaSalida: plantilla.horaSalida ? new Date(plantilla.horaSalida).toISOString().substring(11, 16) : '',
-      vigenciaDesde: plantilla.vigenciaDesde ? new Date(plantilla.vigenciaDesde).toISOString().split('T')[0] : '',
-      vigenciaHasta: plantilla.vigenciaHasta ? new Date(plantilla.vigenciaHasta).toISOString().split('T')[0] : '',
-      activa: plantilla.activa,
-    });
-    setIsPlantillaDialogOpen(true);
-  };
-
-  const handleDeletePlantilla = (id: string) => {
-    setConfirmPlantillaConfig({
-      title: '¿Eliminar plantilla?',
-      description: 'No borra los turnos ya generados, solo detiene nuevas proyecciones. Podrás deshacerlo en los próximos segundos.',
-      onConfirm: () => deletePlantilla(id),
-    });
-    setConfirmPlantillaOpen(true);
-  };
-
   const handleAddNew = () => {
     setEditingTurno(null);
     form.reset({
@@ -353,7 +178,6 @@ export default function TurnosPage() {
     return t.staff?.usuario?.nombreCompleto?.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const plantillaList = unwrapList(plantillas) as TurnoPlantilla[];
 
   return (
     <Protect permission="turnos:leer" fallbackType="redirect">
@@ -363,21 +187,11 @@ export default function TurnosPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Horario de staff por sucursal.</p>
         </div>
 
-        <Tabs defaultValue="turnos" className="w-full">
-          <TabsList className="bg-slate-100 dark:bg-slate-800 p-1">
-            <TabsTrigger value="turnos" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
-              <Clock className="h-4 w-4 mr-1.5" /> Turnos
-            </TabsTrigger>
-            <TabsTrigger value="plantillas" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
-              <Repeat className="h-4 w-4 mr-1.5" /> Plantillas recurrentes
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="turnos" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
-            Turnos puntuales, día por día. Para no tener que cargarlos uno a uno, define un horario recurrente en la pestaña
-            &quot;Plantillas recurrentes&quot;.
+            Turnos día por día, generados solos a partir del horario semanal de cada persona (se edita en Equipo).
+            Acá se registran las excepciones: marca un turno como Ausente o Cancelado, o agrega uno extra.
           </p>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -489,158 +303,6 @@ export default function TurnosPage() {
             </TableBody>
           </Table>
         )}
-          </TabsContent>
-
-          <TabsContent value="plantillas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
-                Define el horario semanal habitual de cada persona una sola vez. Todas las noches (o cuando aprietes
-                &quot;Generar turnos ahora&quot;) el sistema crea los turnos individuales de las próximas semanas a partir de esto.
-              </p>
-
-              <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
-                <PapeleraToggle showDeleted={showDeletedPlantillas} setShowDeleted={setShowDeletedPlantillas} />
-
-                <Protect permission="turnos:crear" fallbackType="hide">
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-1 pr-1">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                          <Info className="h-4 w-4" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          Crea, a partir de tus plantillas activas, los turnos individuales reales de las próximas N semanas (no
-                          duplica los que ya existen). Esto mismo corre automáticamente todas las noches; el botón es para no
-                          esperar hasta entonces.
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <Label htmlFor="semanas-generar" className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      Semanas:
-                    </Label>
-                    <input
-                      id="semanas-generar"
-                      type="number"
-                      min={1}
-                      max={26}
-                      value={semanasGenerar}
-                      onChange={(e) => setSemanasGenerar(Math.min(26, Math.max(1, Number(e.target.value) || 1)))}
-                      className="w-14 h-8 text-xs text-center rounded-md border border-slate-200 dark:border-slate-700 bg-transparent"
-                    />
-
-                    <Button
-                      variant="outline"
-                      onClick={() => generarMutation.mutate()}
-                      disabled={generarMutation.isPending}
-                      className="border-none shadow-none text-indigo-700 dark:text-indigo-400"
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      {generarMutation.isPending ? 'Generando...' : 'Generar turnos ahora'}
-                    </Button>
-                  </div>
-                </Protect>
-
-                <Protect permission="turnos:crear" fallbackType="hide">
-                  <TenantRequiredButton onClick={handleAddNewPlantilla} icon={<Plus className="mr-2 h-4 w-4" />} label="Nueva Plantilla" />
-                </Protect>
-              </div>
-            </div>
-
-            {isLoadingPlantillas ? (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
-                <div className="animate-pulse flex flex-col items-center gap-4">
-                  <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
-                  <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                </div>
-              </div>
-            ) : plantillaList.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-                  <Repeat className="w-6 h-6" />
-                </div>
-                <p className="text-base font-semibold text-slate-900 dark:text-white">No hay plantillas de turno registradas</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Crea una plantilla por cada horario semanal habitual (ej. &quot;Lunes a Viernes 06:00-14:00&quot;).
-                </p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Staff</TableHead>
-                    <TableHead>Sucursal</TableHead>
-                    <TableHead>Día</TableHead>
-                    <TableHead>Horario</TableHead>
-                    <TableHead>Vigencia</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {plantillaList.map((p: TurnoPlantilla) => (
-                    <TableRow key={p.id} className={showDeletedPlantillas ? "bg-rose-50/40 dark:bg-rose-500/20 opacity-80" : ""}>
-                      <TableCell>
-                        <span className="font-semibold text-slate-900 dark:text-white text-sm">{p.staff?.usuario?.nombreCompleto}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.sucursal?.nombre}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{DIAS_SEMANA[p.diaSemana]}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                          {new Date(p.horaEntrada).toISOString().substring(11, 16)} - {new Date(p.horaSalida).toISOString().substring(11, 16)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                          {new Date(p.vigenciaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })}
-                          {' – '}
-                          {p.vigenciaHasta ? new Date(p.vigenciaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : 'Indefinido'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={p.activa ? 'success' : 'outline'}>{p.activa ? 'Activa' : 'Inactiva'}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {showDeletedPlantillas ? (
-                            <Protect permission="sistema:restaurar">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => restorePlantilla(p.id)}
-                                disabled={isRestoringPlantilla}
-                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
-                              >
-                                <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
-                              </Button>
-                            </Protect>
-                          ) : (
-                            <>
-                              <Protect permission="turnos:actualizar">
-                                <Button variant="ghost" size="icon" onClick={() => handleEditPlantilla(p)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </Protect>
-                              <Protect permission="turnos:eliminar">
-                                <Button variant="ghost" size="icon" onClick={() => handleDeletePlantilla(p.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </Protect>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </TabsContent>
-        </Tabs>
       </div>
 
       <GlobalFormModal
@@ -727,156 +389,6 @@ export default function TurnosPage() {
         isDestructive={true}
       />
 
-      <GlobalFormModal
-        open={isPlantillaDialogOpen}
-        onOpenChange={setIsPlantillaDialogOpen}
-        title={editingPlantilla ? 'Editar Plantilla de Turno' : 'Nueva Plantilla de Turno'}
-        description={editingPlantilla ? 'Modifica el horario semanal recurrente.' : 'Define un horario que se repite cada semana.'}
-        form={plantillaForm as any}
-        sections={[
-          {
-            fields: [
-              {
-                name: 'staffId',
-                label: 'Staff',
-                type: 'select',
-                placeholder: 'Selecciona un integrante del staff',
-                options: (personalList as Staff[]).map((p: Staff) => ({ label: p.usuario?.nombreCompleto || 'Sin nombre', value: p.id })),
-                colSpan: 2,
-              },
-              ...(!userSucursalId
-                ? [{
-                    name: 'sucursalId',
-                    label: 'Sucursal',
-                    type: 'select' as const,
-                    placeholder: 'Selecciona una sucursal',
-                    options: (unwrapList(sucursales) as Sucursal[]).map((s: Sucursal) => ({ label: s.nombre, value: s.id })),
-                    colSpan: 2 as const,
-                  }]
-                : []),
-              editingPlantilla
-                ? {
-                    name: 'diaSemana',
-                    label: 'Día de la semana',
-                    type: 'select' as const,
-                    options: DIAS_SEMANA.map((label, value) => ({ label, value: String(value) })),
-                  }
-                : {
-                    name: 'diasSemana',
-                    label: 'Días de la semana',
-                    type: 'custom' as const,
-                    colSpan: 2 as const,
-                    renderCustom: (f: any) => {
-                      const seleccionados: number[] = f.watch('diasSemana') || [];
-                      const toggle = (dia: number) => {
-                        const set = new Set(seleccionados);
-                        if (set.has(dia)) set.delete(dia); else set.add(dia);
-                        f.setValue('diasSemana', Array.from(set).sort(), { shouldDirty: true });
-                      };
-                      return (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Días de la semana</label>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Tilda todos los días que comparten este mismo horario y sucursal (ej. Lunes, Miércoles y Viernes).
-                            Si un día tiene un horario distinto, créalo aparte en otra plantilla.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {DIAS_SEMANA.map((label, value) => {
-                              const active = seleccionados.includes(value);
-                              return (
-                                <button
-                                  type="button"
-                                  key={value}
-                                  onClick={() => toggle(value)}
-                                  aria-pressed={active}
-                                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                                    active
-                                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700'
-                                  }`}
-                                >
-                                  {label.slice(0, 3)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    },
-                  },
-              {
-                name: 'activa',
-                label: 'Estado',
-                type: 'custom',
-                renderCustom: (f: any) => (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Plantilla activa</label>
-                    <div className="flex items-center h-10">
-                      <Switch checked={f.watch('activa')} onCheckedChange={(c: boolean) => f.setValue('activa', c, { shouldDirty: true })} />
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                name: 'horaEntrada',
-                label: 'Hora de Entrada',
-                type: 'custom',
-                renderCustom: (f: any) => (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Hora de Entrada</label>
-                    <input type="time" {...f.register('horaEntrada')} className={dateInputClass} />
-                  </div>
-                ),
-              },
-              {
-                name: 'horaSalida',
-                label: 'Hora de Salida',
-                type: 'custom',
-                renderCustom: (f: any) => (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Hora de Salida</label>
-                    <input type="time" {...f.register('horaSalida')} className={dateInputClass} />
-                  </div>
-                ),
-              },
-              {
-                name: 'vigenciaDesde',
-                label: 'Vigente desde',
-                type: 'custom',
-                renderCustom: (f: any) => (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Vigente desde</label>
-                    <input type="date" {...f.register('vigenciaDesde')} className={dateInputClass} />
-                  </div>
-                ),
-              },
-              {
-                name: 'vigenciaHasta',
-                label: 'Vigente hasta (Opcional)',
-                type: 'custom',
-                renderCustom: (f: any) => (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Vigente hasta (Opcional)</label>
-                    <input type="date" {...f.register('vigenciaHasta')} className={dateInputClass} />
-                  </div>
-                ),
-              },
-            ],
-          },
-        ]}
-        onSubmit={savePlantillaMutation.mutateAsync as any}
-        isPending={savePlantillaMutation.isPending}
-        submitLabel="Guardar Plantilla"
-      />
-
-      <GlobalConfirmDialog
-        open={confirmPlantillaOpen}
-        onOpenChange={setConfirmPlantillaOpen}
-        title={confirmPlantillaConfig.title}
-        description={confirmPlantillaConfig.description}
-        onConfirm={confirmPlantillaConfig.onConfirm}
-        isDestructive={true}
-      />
     </Protect>
   );
 }

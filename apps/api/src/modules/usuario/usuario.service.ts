@@ -1,12 +1,11 @@
 import { Injectable, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
-import { promisify } from 'util';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
-import * as crypto from 'crypto';
 import { CreateEmpleadoDto } from './dto/create-empleado.dto';
 import { assertFound } from '../../common/utils/assert-found.util';
+import { hashContrasena } from '../../common/utils/contrasena.util';
 
 @Injectable()
 export class UsuarioService {
@@ -37,11 +36,7 @@ export class UsuarioService {
 
   async registrarEmpleado(data: CreateEmpleadoDto) {
     // 1. Hashear contraseña
-    const salt = crypto.randomBytes(16).toString('hex');
-    const scrypt = promisify(crypto.scrypt);
-    const hashBuffer = (await scrypt(data.contrasena, salt, 64)) as Buffer;
-    const hash = hashBuffer.toString('hex');
-    const contrasenaHash = `${salt}:${hash}`;
+    const contrasenaHash = await hashContrasena(data.contrasena);
 
     // 2. Crear usuario (Global) y su AsignacionAcceso (Tenant) en una transacción
     // NOTA ARQUITECTURA: organizacionId se inyecta por RLS en AsignacionAcceso

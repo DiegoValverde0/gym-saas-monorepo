@@ -1,12 +1,16 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTurnoPlantillaDto } from './dto/create-turno-plantilla.dto';
 import { UpdateTurnoPlantillaDto } from './dto/update-turno-plantilla.dto';
+import { HorarioSemanalDto } from './dto/horario-semanal.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
+
+const aHoraTime = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de turnos
 // a partir de las plantillas activas.
@@ -93,6 +97,100 @@ export class TurnoPlantillaService {
     });
   }
 
+  // Reglas que no expresa el DTO: un solo bloque por día y salida > entrada.
+  // Público para que PersonalService valide ANTES de crear a la persona.
+  validarHorario(horario: HorarioSemanalDto) {
+    const dias = new Set<number>();
+    for (const d of horario.dias) {
+      if (dias.has(d.diaSemana)) throw new BadRequestException('El horario tiene dos bloques para el mismo día.');
+      dias.add(d.diaSemana);
+      if (d.horaSalida <= d.horaEntrada) {
+        throw new BadRequestException(`La hora de salida debe ser posterior a la de entrada (${d.horaEntrada}–${d.horaSalida}).`);
+      }
+    }
+  }
+
+  // Reemplaza el horario semanal de una persona y deja sus turnos futuros
+  // coherentes con él, sin que nadie tenga que "generar turnos" a mano:
+  //  - Turnos futuros aún no iniciados (PROGRAMADO, sin ingreso marcado):
+  //    si el día sigue en el horario se les actualiza la hora/sucursal; si el
+  //    día salió del horario se eliminan.
+  //  - Se conservan siempre las excepciones (AUSENTE/CANCELADO o borradas),
+  //    los turnos ya iniciados y los que tienen clases vinculadas (salvo para
+  //    actualizarles la hora si siguen en la misma sucursal).
+  //  - Los días nuevos se generan en el acto (generarParaOrganizacion).
+  async reemplazarHorarioStaff(staffId: string, horario: HorarioSemanalDto) {
+    this.validarHorario(horario);
+    const organizacionId = this.cls.get('organizacionId');
+    const db = this.prisma.extendedClient;
+
+    const org = await db.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
+
+    await db.turnoPlantilla.deleteMany({ where: { staffId } }); // soft delete vía extensión
+    if (horario.dias.length > 0) {
+      await db.turnoPlantilla.createMany({
+        data: horario.dias.map((d) => ({
+          staffId,
+          sucursalId: horario.sucursalId,
+          diaSemana: d.diaSemana,
+          horaEntrada: aHoraTime(d.horaEntrada),
+          horaSalida: aHoraTime(d.horaSalida),
+          vigenciaDesde: hoy,
+        })),
+      });
+    }
+
+    const futuros: Array<{
+      id: string;
+      fecha: Date;
+      sucursalId: string;
+      horaEntrada: Date;
+      horaSalida: Date;
+      _count: { clases: number };
+    }> = await db.turnoTrabajo.findMany({
+      where: { staffId, fecha: { gte: hoy }, estado: 'PROGRAMADO', horaIngresoReal: null },
+      include: { _count: { select: { clases: true } } },
+    });
+
+    const porDia = new Map(horario.dias.map((d) => [d.diaSemana, d]));
+    const aEliminar: string[] = [];
+    let turnosActualizados = 0;
+    let turnosConservados = 0;
+    for (const turno of futuros) {
+      const tieneClases = turno._count.clases > 0;
+      const dia = porDia.get(turno.fecha.getUTCDay());
+      if (!dia) {
+        if (tieneClases) turnosConservados++;
+        else aEliminar.push(turno.id);
+        continue;
+      }
+      if (tieneClases && turno.sucursalId !== horario.sucursalId) {
+        turnosConservados++;
+        continue;
+      }
+      const entrada = aHoraTime(dia.horaEntrada);
+      const salida = aHoraTime(dia.horaSalida);
+      if (turno.horaEntrada.getTime() !== entrada.getTime() || turno.horaSalida.getTime() !== salida.getTime() || turno.sucursalId !== horario.sucursalId) {
+        await db.turnoTrabajo.update({
+          where: { id: turno.id },
+          data: { horaEntrada: entrada, horaSalida: salida, sucursalId: horario.sucursalId },
+        });
+        turnosActualizados++;
+      }
+    }
+
+    // Borrado físico a propósito (cliente crudo, organizacionId explícito): un
+    // soft delete quedaría como "excepción" y bloquearía para siempre la
+    // regeneración de ese día si vuelve a entrar al horario.
+    if (aEliminar.length > 0) {
+      await this.prisma.turnoTrabajo.deleteMany({ where: { id: { in: aEliminar }, organizacionId } });
+    }
+
+    const { turnosCreados } = await this.generarParaOrganizacion(organizacionId);
+    return { turnosCreados, turnosActualizados, turnosEliminados: aEliminar.length, turnosConservados };
+  }
+
   // Disparado manualmente desde el frontend ("Generar turnos ahora"), con el
   // contexto de tenant de la request ya resuelto en el CLS.
   async generarAhora(semanas: number = SEMANAS_PROYECCION_DEFAULT) {
@@ -108,8 +206,10 @@ export class TurnoPlantillaService {
   // para el mismo patrón) como desde `generarAhora`, y en ambos casos
   // necesitamos fijar `organizacionId` explícitamente en cada fila creada.
   async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT) {
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    // "Hoy" en la zona horaria de la organización: con la fecha UTC, de noche
+    // (desde las 20:00 en La Paz) se saltaba el turno del día en curso.
+    const org = await this.prisma.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
     const finVentana = new Date(hoy);
     finVentana.setUTCDate(finVentana.getUTCDate() + semanas * 7);
 
