@@ -10,17 +10,14 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { hashContrasena } from '../../common/utils/contrasena.util';
 import { TurnoPlantillaService } from '../turno-plantilla/turno-plantilla.service';
+import { assertRolAsignableEnOrganizacion } from '../../common/utils/rol.util';
 
-// Los roles de sistema son globales (organizacionId null) y la extensión RLS
-// los deja ver a cualquier tenant, incluido SUPERADMIN (permisos de
-// plataforma) y CLIENTE (no es un rol de empleado). Ninguno de los dos se
-// puede asignar a una persona del equipo.
-const ROLES_NO_ASIGNABLES = ['SUPERADMIN', 'CLIENTE'];
-
-function assertRolDeEquipo(rol: { nombre: string } | null) {
-  if (!rol) throw new BadRequestException('El rol especificado no existe en tu organización.');
-  if (ROLES_NO_ASIGNABLES.includes(rol.nombre)) {
-    throw new BadRequestException(`El rol ${rol.nombre} no se puede asignar a una persona del equipo.`);
+// Además de SUPERADMIN (ver rol.util.ts), una persona del equipo tampoco
+// puede tener el rol CLIENTE: es el de las cuentas de clientes, no de empleados.
+function assertRolDeEquipo(rol: { nombre: string; organizacionId: string | null } | null) {
+  assertRolAsignableEnOrganizacion(rol);
+  if (rol && rol.organizacionId === null && rol.nombre === 'CLIENTE') {
+    throw new BadRequestException('El rol CLIENTE no se puede asignar a una persona del equipo.');
   }
 }
 

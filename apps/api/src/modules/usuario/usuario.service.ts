@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { CreateEmpleadoDto } from './dto/create-empleado.dto';
 import { assertFound } from '../../common/utils/assert-found.util';
 import { hashContrasena } from '../../common/utils/contrasena.util';
+import { assertRolAsignableEnOrganizacion } from '../../common/utils/rol.util';
 
 @Injectable()
 export class UsuarioService {
@@ -60,13 +61,7 @@ export class UsuarioService {
         }
 
         // Validar si el rol existe en esta organización (RLS aplica automáticamente)
-        const rol = await tx.rol.findUnique({
-          where: { id: data.rolId }
-        });
-
-        if (!rol) {
-          throw new BadRequestException('El rol especificado no existe o no pertenece a su organización.');
-        }
+        assertRolAsignableEnOrganizacion(await tx.rol.findUnique({ where: { id: data.rolId } }));
 
         // Crear asignación (organizacionId lo inyecta RLS)
         const asignacion = await tx.asignacionAcceso.create({
@@ -96,13 +91,7 @@ export class UsuarioService {
     );
 
     // Verificar que el rol existe y pertenece al tenant
-    const rol = await this.prisma.extendedClient.rol.findUnique({
-      where: { id: nuevoRolId },
-    });
-
-    if (!rol) {
-      throw new BadRequestException('El rol especificado no existe en su organización.');
-    }
+    assertRolAsignableEnOrganizacion(await this.prisma.extendedClient.rol.findUnique({ where: { id: nuevoRolId } }));
 
     // Actualizar la asignación (extendedClient valida que la asignación pertenece al tenant)
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.update({

@@ -255,7 +255,8 @@ export default function UsuariosPage() {
                     label: 'Rol en la Organización', 
                     type: 'select', 
                     placeholder: 'Selecciona el rol',
-                    options: (roles as any[] | undefined)?.map((r: any) => ({ label: r.nombre, value: r.id })) || [],
+                    // SUPERADMIN es el rol de la cuenta de plataforma: no se asigna dentro de una organización (el backend también lo rechaza).
+                    options: (roles as any[] | undefined)?.filter((r: any) => r.nombre !== 'SUPERADMIN').map((r: any) => ({ label: r.nombre, value: r.id })) || [],
                     colSpan: 2
                   },
                   {
