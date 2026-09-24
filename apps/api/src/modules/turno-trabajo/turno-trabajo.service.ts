@@ -5,6 +5,7 @@ import { CreateTurnoTrabajoDto } from './dto/create-turno-trabajo.dto';
 import { UpdateTurnoTrabajoDto } from './dto/update-turno-trabajo.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 
 const INCLUDE_TURNO = {
   staff: { include: { usuario: { select: { nombreCompleto: true } } } },
@@ -110,11 +111,16 @@ export class TurnoTrabajoService {
   private async encontrarTurnoDeHoy(usuarioId: string) {
     const staff = await this.encontrarStaffDelUsuario(usuarioId);
 
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    // "Hoy" en la zona horaria de la organización: con la fecha UTC, después
+    // de las 20:00 en La Paz ya se buscaba el turno de mañana.
+    const org = await this.prisma.extendedClient.organizacion.findUnique({
+      where: { id: staff.organizacionId },
+      select: { zonaHoraria: true },
+    });
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
 
     const turno = await this.prisma.extendedClient.turnoTrabajo.findFirst({
-      where: { staffId: staff.id, fecha: hoy },
+      where: { staffId: staff.id, fecha: hoy, estado: { notIn: ['AUSENTE', 'CANCELADO'] } },
       include: INCLUDE_TURNO,
     });
     if (!turno) {

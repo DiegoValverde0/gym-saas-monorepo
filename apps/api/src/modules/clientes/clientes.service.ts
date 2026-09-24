@@ -3,7 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { Prisma } from '@prisma/client';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { ClientesQueryDto } from './dto/clientes-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { calcularSegmentoCliente } from './segmentacion-cliente.util';
 
@@ -54,12 +54,23 @@ export class ClientesService {
     });
   }
 
-  async findAll(query?: PaginationQueryDto) {
+  async findAll(query?: ClientesQueryDto) {
     // 100% Ciego al tenant. La magia RLS de Prisma hará el filtrado.
     // Paginado para no traer de golpe toda la tabla de un tenant con miles de clientes.
     const { page, limit, skip, take } = resolverPaginacion(query);
+    const termino = query?.search?.trim();
+    const where: Prisma.ClienteWhereInput = termino
+      ? {
+          OR: [
+            { nombre: { contains: termino, mode: 'insensitive' } },
+            { numeroDocumento: { contains: termino } },
+            { correo: { contains: termino, mode: 'insensitive' } },
+          ],
+        }
+      : {};
     const [data, total] = await Promise.all([
       this.prisma.extendedClient.cliente.findMany({
+        where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
@@ -68,7 +79,7 @@ export class ClientesService {
         // segmento ya calculado.
         include: { membresias: { select: SELECT_MEMBRESIAS_SEGMENTO } },
       }),
-      this.prisma.extendedClient.cliente.count(),
+      this.prisma.extendedClient.cliente.count({ where }),
     ]);
     const dataConSegmento = data.map(({ membresias, ...cliente }) => ({
       ...cliente,

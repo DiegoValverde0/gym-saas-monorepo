@@ -5,7 +5,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { ClientesQueryDto } from './dto/clientes-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('clientes')
@@ -22,8 +22,8 @@ export class ClientesController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'clientes' })
-  async findAll(@Query() pagination: PaginationQueryDto) {
-    return this.clientesService.findAll(pagination);
+  async findAll(@Query() query: ClientesQueryDto) {
+    return this.clientesService.findAll(query);
   }
 
   @Get(':id')

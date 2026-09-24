@@ -56,8 +56,10 @@ export class ReservaClaseService {
         throw new BadRequestException('No se puede reservar una clase que ya pasó.');
       }
 
+      // ASISTIO también ocupa cupo: si no, marcar asistencia liberaba lugares
+      // y permitía sobrevender la clase.
       const cuposOcupados = await tx.reservaClase.count({
-        where: { claseId: createReservaClaseDto.claseId, estado: 'CONFIRMADA' },
+        where: { claseId: createReservaClaseDto.claseId, estado: { in: ['CONFIRMADA', 'ASISTIO'] } },
       });
       if (cuposOcupados >= clase.capacidadMaxima) {
         throw new ConflictException('Esta clase ya alcanzó su capacidad máxima.');

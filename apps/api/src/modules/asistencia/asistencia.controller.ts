@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, ParseUUIDPipe, UseGuards, Req } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { AsistenciaService } from './asistencia.service';
 import { CreateAsistenciaDto, ValidateAsistenciaDto } from './dto/create-asistencia.dto';
@@ -25,7 +25,7 @@ export class AsistenciaController {
   @Post('validate')
   @RequirePermissions({ accion: 'crear', modulo: 'asistencias' })
   validateAccess(@Body() dto: ValidateAsistenciaDto, @Req() req: RequestWithUser) {
-    return this.asistenciaService.validateAccess(dto.clienteId, req.user);
+    return this.asistenciaService.validateAccess(dto.clienteId, req.user, dto.sucursalId);
   }
 
   @Post('checkin')
@@ -42,13 +42,13 @@ export class AsistenciaController {
 
   @Get('activas/:sucursalId')
   @RequirePermissions({ accion: 'leer', modulo: 'asistencias' })
-  findActivas(@Param('sucursalId') sucursalId: string) {
-    return this.asistenciaService.findActivas(sucursalId);
+  findActivas(@Param('sucursalId', ParseUUIDPipe) sucursalId: string, @Req() req: RequestWithUser) {
+    return this.asistenciaService.findActivas(sucursalId, req.user.organizacionId);
   }
 
   @Get('historial/:sucursalId')
   @RequirePermissions({ accion: 'leer', modulo: 'asistencias' })
-  findHistorial(@Param('sucursalId') sucursalId: string) {
-    return this.asistenciaService.findHistorialHoy(sucursalId);
+  findHistorial(@Param('sucursalId', ParseUUIDPipe) sucursalId: string, @Req() req: RequestWithUser) {
+    return this.asistenciaService.findHistorialHoy(sucursalId, req.user.organizacionId);
   }
 }

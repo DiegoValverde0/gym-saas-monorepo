@@ -49,3 +49,12 @@ export function desdeHoraLocal(fechaSolo: Date, minutosDelDia: number, zonaHorar
   return new Date(instante);
 }
 
+// Día de la semana local (0 = domingo ... 6 = sábado) de un instante.
+export function diaSemanaLocal(instante: Date, zonaHoraria: string | null | undefined): number {
+  return aHoraLocal(instante, zonaHoraria).fechaSolo.getUTCDay();
+}
+
+// Instante UTC en que empieza (00:00 local) el día local de `instante`.
+export function inicioDelDiaLocal(instante: Date, zonaHoraria: string | null | undefined): Date {
+  return desdeHoraLocal(aHoraLocal(instante, zonaHoraria).fechaSolo, 0, zonaHoraria);
+}

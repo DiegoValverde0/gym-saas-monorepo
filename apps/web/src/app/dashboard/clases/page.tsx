@@ -16,7 +16,7 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle, Repeat, Sparkles, Info } from 'lucide-react';
+import { CalendarDays, Plus, Edit, Trash2, Search, Users, X, ArchiveRestore, CheckCircle, AlertTriangle, Repeat, Sparkles, Info, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,15 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+const ESTADO_RESERVA: Record<string, { label: string; variant: 'success' | 'primary' | 'warning' | 'default' }> = {
+  CONFIRMADA: { label: 'Confirmada', variant: 'primary' },
+  ASISTIO: { label: 'Asistió', variant: 'success' },
+  NO_ASISTIO: { label: 'No asistió', variant: 'warning' },
+  CANCELADA: { label: 'Cancelada', variant: 'default' },
+};
+// Mismo criterio que el backend: una reserva con asistencia marcada sigue ocupando su cupo.
+const OCUPA_CUPO = (estado: string) => estado === 'CONFIRMADA' || estado === 'ASISTIO';
 
 interface Cliente {
   id: string;
@@ -469,10 +478,13 @@ export default function ClasesPage() {
     enabled: !!token && !!reservasClaseId,
   });
 
+  // Búsqueda en el servidor: antes se descargaba solo la primera página (50
+  // clientes) y se filtraba en el navegador, así que el resto no aparecía.
+  const clienteSearchTrim = clienteSearch.trim();
   const { data: clientes } = useQuery({
-    queryKey: ['clientes', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet<any>('/clientes')),
-    enabled: !!token && !!reservasClaseId,
+    queryKey: ['clientes', activeTenantId, 'busqueda', clienteSearchTrim],
+    queryFn: async () => unwrapList(await apiGet<any>(`/clientes?search=${encodeURIComponent(clienteSearchTrim)}&limit=10`)),
+    enabled: !!token && !!reservasClaseId && clienteSearchTrim.length >= 2,
   });
 
   const addReservaMutation = useMutation({
@@ -486,6 +498,15 @@ export default function ClasesPage() {
     onError: (err: Error) => toast({ title: 'No se pudo reservar', description: err.message, variant: 'destructive' }),
   });
 
+  const marcarAsistenciaMutation = useMutation({
+    mutationFn: async ({ id, estado }: { id: string; estado: 'ASISTIO' | 'NO_ASISTIO' }) => apiPatch(`/reservas/${id}`, { estado }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clase-detalle', reservasClaseId] });
+      queryClient.invalidateQueries({ queryKey: ['clases'] });
+    },
+    onError: (err: Error) => toast({ title: 'No se pudo marcar la asistencia', description: err.message, variant: 'destructive' }),
+  });
+
   const cancelarReservaMutation = useMutation({
     mutationFn: async (id: string) => apiPatch(`/reservas/${id}/cancelar`),
     onSuccess: () => {
@@ -497,17 +518,14 @@ export default function ClasesPage() {
   });
 
   const clientesFiltrados = useMemo(() => {
-    if (!clienteSearch) return [];
-    const lower = clienteSearch.toLowerCase();
+    if (clienteSearchTrim.length < 2) return [];
     const yaReservados = new Set(
       (claseDetalle?.reservas || [])
-        .filter((r: Reserva) => r.estado === 'CONFIRMADA')
+        .filter((r: Reserva) => OCUPA_CUPO(r.estado))
         .map((r: Reserva) => r.clienteId)
     );
-    return (unwrapList(clientes) as Cliente[])
-      .filter((c: Cliente) => !yaReservados.has(c.id) && c.nombre?.toLowerCase().includes(lower))
-      .slice(0, 8);
-  }, [clienteSearch, clientes, claseDetalle]);
+    return (unwrapList(clientes) as Cliente[]).filter((c: Cliente) => !yaReservados.has(c.id)).slice(0, 8);
+  }, [clienteSearchTrim, clientes, claseDetalle]);
 
   if (!token) return null;
 
@@ -1071,7 +1089,7 @@ export default function ClasesPage() {
           <DialogHeader>
             <DialogTitle>Reservas de {claseDetalle?.nombreClase}</DialogTitle>
             <DialogDescription>
-              {claseDetalle ? `${(claseDetalle.reservas || []).filter((r: Reserva) => r.estado === 'CONFIRMADA').length}/${claseDetalle.capacidadMaxima} cupos ocupados` : 'Cargando...'}
+              {claseDetalle ? `${(claseDetalle.reservas || []).filter((r: Reserva) => OCUPA_CUPO(r.estado)).length}/${claseDetalle.capacidadMaxima} cupos ocupados` : 'Cargando...'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1090,7 +1108,7 @@ export default function ClasesPage() {
                       onChange={(e) => setClienteSearch(e.target.value)}
                     />
                   </div>
-                  {clienteSearch && (
+                  {clienteSearchTrim.length >= 2 && (
                     <div className="divide-y border rounded-lg overflow-hidden bg-white dark:bg-slate-900 max-h-40 overflow-y-auto">
                       {clientesFiltrados.length === 0 ? (
                         <div className="p-3 text-center text-xs text-zinc-500 dark:text-zinc-400">Sin resultados</div>
@@ -1123,7 +1141,31 @@ export default function ClasesPage() {
                         <p className="text-xs text-slate-500 dark:text-slate-400">{r.cliente?.numeroDocumento}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {r.estado === 'CONFIRMADA' ? <Badge variant="success">Confirmada</Badge> : <Badge variant="default">{r.estado}</Badge>}
+                        <Badge variant={ESTADO_RESERVA[r.estado]?.variant ?? 'default'}>{ESTADO_RESERVA[r.estado]?.label ?? r.estado}</Badge>
+                        {r.estado !== 'CANCELADA' && (
+                          <Protect permission="reservas:actualizar" fallbackType="hide">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Asistió"
+                              className={`h-7 w-7 ${r.estado === 'ASISTIO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-emerald-600'}`}
+                              onClick={() => marcarAsistenciaMutation.mutate({ id: r.id, estado: 'ASISTIO' })}
+                              disabled={marcarAsistenciaMutation.isPending || r.estado === 'ASISTIO'}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="No asistió"
+                              className={`h-7 w-7 ${r.estado === 'NO_ASISTIO' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500 hover:text-amber-600'}`}
+                              onClick={() => marcarAsistenciaMutation.mutate({ id: r.id, estado: 'NO_ASISTIO' })}
+                              disabled={marcarAsistenciaMutation.isPending || r.estado === 'NO_ASISTIO'}
+                            >
+                              <UserX className="h-3.5 w-3.5" />
+                            </Button>
+                          </Protect>
+                        )}
                         {r.estado === 'CONFIRMADA' && (
                           <Protect permission="reservas:eliminar" fallbackType="hide">
                             <Button

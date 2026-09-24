@@ -12,9 +12,9 @@ const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
   entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
   sucursal: { select: { nombre: true } },
-  // Solo se listan las CONFIRMADA para calcular cupos ocupados; el frontend
+  // Solo se listan las que ocupan cupo (CONFIRMADA o ASISTIO); el frontend
   // usa reservas.length contra capacidadMaxima.
-  reservas: { where: { estado: 'CONFIRMADA' as const }, select: { id: true } },
+  reservas: { where: { estado: { in: ['CONFIRMADA' as const, 'ASISTIO' as const] } }, select: { id: true } },
 } as const;
 
 const INCLUDE_DETALLE = {

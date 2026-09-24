@@ -4,6 +4,11 @@ import { CreateAsistenciaDto } from './dto/create-asistencia.dto';
 import { formatPermiso } from '../../common/utils/permiso.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
+import { aHoraLocal, desdeHoraLocal, inicioDelDiaLocal } from '../../common/utils/zona-horaria.util';
+
+// Ventana en la que un ingreso al gimnasio cuenta como asistencia a una clase
+// reservada: desde X minutos antes del inicio hasta que la clase termina.
+const MINUTOS_ANTES_CLASE = 60;
 
 export interface TokenPayload {
   sub: string;
@@ -30,7 +35,49 @@ export class AsistenciaService {
     return permisos.includes(formatPermiso(modulo, accion));
   }
 
-  async validateAccess(clienteId: string, user: TokenPayload) {
+  // Todas las comparaciones de "hoy", "esta semana" y franja horaria del plan
+  // se hacen en la hora local de la organización, no en la del servidor (que
+  // en Docker corre en UTC y desplazaba el día 4 horas en La Paz).
+  private async zonaHoraria(organizacionId?: string): Promise<string | null> {
+    if (!organizacionId) return null;
+    const org = await this.prisma.extendedClient.organizacion.findUnique({
+      where: { id: organizacionId },
+      select: { zonaHoraria: true },
+    });
+    return org?.zonaHoraria ?? null;
+  }
+
+  // Reservas confirmadas del cliente para clases de hoy que todavía no
+  // terminaron (en la sucursal indicada, si se pasa).
+  private async reservasDeHoy(clienteId: string, zonaHoraria: string | null, sucursalId?: string) {
+    const ahora = new Date();
+    const inicioHoy = inicioDelDiaLocal(ahora, zonaHoraria);
+    const finHoy = new Date(inicioHoy.getTime() + 24 * 60 * 60_000);
+    const reservas = await this.prisma.extendedClient.reservaClase.findMany({
+      where: {
+        clienteId,
+        estado: 'CONFIRMADA',
+        clase: { fechaHora: { gte: inicioHoy, lt: finHoy }, ...(sucursalId ? { sucursalId } : {}) },
+      },
+      include: { clase: { select: { id: true, nombreClase: true, fechaHora: true, duracionMinutos: true } } },
+      orderBy: { clase: { fechaHora: 'asc' } },
+    });
+    return (reservas as Array<{ id: string; clase: { nombreClase: string; fechaHora: Date; duracionMinutos: number } }>).filter(
+      (r) => r.clase.fechaHora.getTime() + r.clase.duracionMinutos * 60_000 > ahora.getTime(),
+    );
+  }
+
+  async validateAccess(clienteId: string, user: TokenPayload, sucursalId?: string) {
+    const zonaHoraria = await this.zonaHoraria(user?.organizacionId);
+    const now = new Date();
+    const local = aHoraLocal(now, zonaHoraria);
+    const inicioHoy = inicioDelDiaLocal(now, zonaHoraria);
+    const clasesReservadasHoy = (await this.reservasDeHoy(clienteId, zonaHoraria, sucursalId)).map((r) => ({
+      reservaId: r.id,
+      nombreClase: r.clase.nombreClase,
+      fechaHora: r.clase.fechaHora,
+    }));
+
     const membresia = await this.prisma.extendedClient.membresia.findFirst({
       where: {
         clienteId,
@@ -42,19 +89,18 @@ export class AsistenciaService {
     });
 
     if (!membresia) {
-      return { allowed: false, reason: 'El cliente no tiene una membresía ACTIVA.' };
+      return { allowed: false, reason: 'El cliente no tiene una membresía ACTIVA.', clasesReservadasHoy };
     }
 
     const { plan } = membresia;
-    const now = new Date();
 
     // 1. Validar Día de la Semana (1 = Lunes, 7 = Domingo)
-    const jsDay = now.getDay(); 
+    const jsDay = local.fechaSolo.getUTCDay();
     const currentDay = jsDay === 0 ? 7 : jsDay;
 
     if (plan.diasPermitidos && plan.diasPermitidos.length > 0) {
       if (!plan.diasPermitidos.includes(currentDay)) {
-        return { allowed: false, reason: 'El plan de este cliente no permite el ingreso el día de hoy.' };
+        return { allowed: false, reason: 'El plan de este cliente no permite el ingreso el día de hoy.', clasesReservadasHoy };
       }
     }
 
@@ -65,14 +111,9 @@ export class AsistenciaService {
     // justo lo que se está validando); si ya se alcanzó el límite, hoy sería
     // un día de más.
     if (plan.limiteDiasSemana && plan.limiteDiasSemana > 0) {
-      const inicioSemana = new Date(now);
-      const diaSemanaActual = inicioSemana.getDay(); // 0 = domingo
-      const offsetLunes = diaSemanaActual === 0 ? 6 : diaSemanaActual - 1;
-      inicioSemana.setDate(inicioSemana.getDate() - offsetLunes);
-      inicioSemana.setHours(0, 0, 0, 0);
-
-      const inicioHoy = new Date(now);
-      inicioHoy.setHours(0, 0, 0, 0);
+      const offsetLunes = jsDay === 0 ? 6 : jsDay - 1;
+      const lunesLocal = new Date(local.fechaSolo.getTime() - offsetLunes * 24 * 60 * 60_000);
+      const inicioSemana = desdeHoraLocal(lunesLocal, 0, zonaHoraria);
 
       const ingresosEstaSemana = await this.prisma.extendedClient.registroAsistencia.findMany({
         where: {
@@ -81,12 +122,15 @@ export class AsistenciaService {
         },
         select: { fechaHoraIngreso: true },
       });
-      const diasDistintos = new Set(ingresosEstaSemana.map((r) => r.fechaHoraIngreso.toISOString().slice(0, 10)));
+      const diasDistintos = new Set(
+        ingresosEstaSemana.map((r) => aHoraLocal(r.fechaHoraIngreso, zonaHoraria).fechaSolo.toISOString().slice(0, 10)),
+      );
 
       if (diasDistintos.size >= plan.limiteDiasSemana) {
         return {
           allowed: false,
           reason: `El plan permite un máximo de ${plan.limiteDiasSemana} día(s) por semana, y ya se alcanzó ese límite esta semana.`,
+          clasesReservadasHoy,
         };
       }
     }
@@ -98,14 +142,15 @@ export class AsistenciaService {
         const inicioDate = new Date(plan.horaInicioAcceso);
         const finDate = new Date(plan.horaFinAcceso);
 
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const currentMinutes = local.minutosDelDia;
         const startMinutes = inicioDate.getUTCHours() * 60 + inicioDate.getUTCMinutes();
         const endMinutes = finDate.getUTCHours() * 60 + finDate.getUTCMinutes();
 
         if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
             return { 
                 allowed: false, 
-                reason: `El ingreso está fuera del horario permitido (${inicioDate.getUTCHours().toString().padStart(2,'0')}:${inicioDate.getUTCMinutes().toString().padStart(2,'0')} a ${finDate.getUTCHours().toString().padStart(2,'0')}:${finDate.getUTCMinutes().toString().padStart(2,'0')}).` 
+                reason: `El ingreso está fuera del horario permitido (${inicioDate.getUTCHours().toString().padStart(2,'0')}:${inicioDate.getUTCMinutes().toString().padStart(2,'0')} a ${finDate.getUTCHours().toString().padStart(2,'0')}:${finDate.getUTCMinutes().toString().padStart(2,'0')}).`,
+                clasesReservadasHoy,
             };
         }
     }
@@ -113,7 +158,7 @@ export class AsistenciaService {
     // 3. Validar Sesiones
     if (plan.tipoPlan === 'SESIONES') {
         if (!membresia.sesionesRestantes || membresia.sesionesRestantes <= 0) {
-            return { allowed: false, reason: 'El cliente ha agotado sus sesiones disponibles.' };
+            return { allowed: false, reason: 'El cliente ha agotado sus sesiones disponibles.', clasesReservadasHoy };
         }
     }
 
@@ -121,20 +166,17 @@ export class AsistenciaService {
     // exime quien tenga el permiso explícito asistencias:multiple_por_dia.
     const puedeMultiplesIngresos = user && (await this.tienePermiso(user, 'asistencias', 'multiple_por_dia'));
     if (user && !puedeMultiplesIngresos) {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        
         const ingresoHoy = await this.prisma.extendedClient.registroAsistencia.findFirst({
             where: {
                 clienteId,
                 fechaHoraIngreso: {
-                    gte: startOfDay
+                    gte: inicioHoy
                 }
             }
         });
 
         if (ingresoHoy) {
-            return { allowed: false, reason: 'El cliente ya registró un ingreso el día de hoy.' };
+            return { allowed: false, reason: 'El cliente ya registró un ingreso el día de hoy.', clasesReservadasHoy };
         }
     }
 
@@ -142,7 +184,8 @@ export class AsistenciaService {
         allowed: true, 
         membresiaId: membresia.id,
         tipoPlan: plan.tipoPlan,
-        sesionesRestantes: membresia.sesionesRestantes 
+        sesionesRestantes: membresia.sesionesRestantes,
+        clasesReservadasHoy,
     };
   }
 
@@ -150,9 +193,17 @@ export class AsistenciaService {
     let membresiaId = null;
     let descontarSesion = false;
     const userId = user.sub;
+    const esMiembro = !dto.tipoAsistencia || dto.tipoAsistencia === 'MIEMBRO';
 
-    if (dto.clienteId && (!dto.tipoAsistencia || dto.tipoAsistencia === 'MIEMBRO')) {
-        const validation = await this.validateAccess(dto.clienteId, user);
+    if (esMiembro && !dto.clienteId) {
+        throw new BadRequestException('Para registrar el ingreso de un miembro hay que seleccionar al cliente.');
+    }
+    if (!dto.clienteId && !dto.nombreVisitante?.trim()) {
+        throw new BadRequestException('Indica el nombre del visitante.');
+    }
+
+    if (dto.clienteId && esMiembro) {
+        const validation = await this.validateAccess(dto.clienteId, user, dto.sucursalId);
 
         if (!validation.allowed) {
             if (!dto.forzarIngreso) {
@@ -169,8 +220,16 @@ export class AsistenciaService {
         }
     }
 
+    // Reservas de clase que este ingreso cubre: clases de hoy en esta sucursal
+    // que empiezan dentro de la próxima hora o ya están en curso.
+    const reservasACubrir = dto.clienteId
+        ? (await this.reservasDeHoy(dto.clienteId, await this.zonaHoraria(user.organizacionId), dto.sucursalId)).filter(
+              (r) => r.clase.fechaHora.getTime() - MINUTOS_ANTES_CLASE * 60_000 <= Date.now(),
+          )
+        : [];
+
     // Transacción para registrar el acceso y descontar sesiones si aplica
-    return this.prisma.extendedClient.$transaction(async (tx) => {
+    const registro = await this.prisma.extendedClient.$transaction(async (tx) => {
         const registro = await tx.registroAsistencia.create({
             // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
             data: {
@@ -205,8 +264,17 @@ export class AsistenciaService {
             }
         }
 
+        if (reservasACubrir.length > 0) {
+            await tx.reservaClase.updateMany({
+                where: { id: { in: reservasACubrir.map((r) => r.id) } },
+                data: { estado: 'ASISTIO' },
+            });
+        }
+
         return registro;
     });
+
+    return { ...registro, clasesMarcadas: reservasACubrir.map((r) => r.clase.nombreClase) };
   }
 
   async checkOut(id: string) {
@@ -214,6 +282,7 @@ export class AsistenciaService {
         where: { id }
     });
     if (!registro) throw new NotFoundException('Registro no encontrado');
+    if (registro.fechaHoraSalida) throw new BadRequestException('Este ingreso ya tiene registrada la salida.');
 
     return this.prisma.extendedClient.registroAsistencia.update({
         where: { id },
@@ -221,10 +290,9 @@ export class AsistenciaService {
     });
   }
 
-  async findActivas(sucursalId: string) {
+  async findActivas(sucursalId: string, organizacionId?: string) {
     // Personas que tienen fechaHoraIngreso de hoy, pero no tienen fechaHoraSalida
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = inicioDelDiaLocal(new Date(), await this.zonaHoraria(organizacionId));
 
     return this.prisma.extendedClient.registroAsistencia.findMany({
         where: {
@@ -246,9 +314,8 @@ export class AsistenciaService {
     });
   }
 
-  async findHistorialHoy(sucursalId: string) {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+  async findHistorialHoy(sucursalId: string, organizacionId?: string) {
+    const startOfDay = inicioDelDiaLocal(new Date(), await this.zonaHoraria(organizacionId));
 
     return this.prisma.extendedClient.registroAsistencia.findMany({
         where: {
