@@ -319,8 +319,14 @@ function GlobalFormModalInner({
               ) : 'Cancelar'}
             </Button>
 
+            {/* `key` distinto en cada botón: sin él React reutiliza el mismo
+                <button> y solo cambia su `type`. Al pulsar "Siguiente" en el
+                penúltimo paso, el paso avanza antes de que el navegador
+                ejecute la acción por defecto del clic, que para entonces ve un
+                type="submit" y envía (y cierra) el formulario. */}
             {isLastStep ? (
               <Button
+                key="submit"
                 type="submit"
                 className="bg-indigo-600 hover:bg-indigo-500 text-white"
                 disabled={isPending}
@@ -328,7 +334,7 @@ function GlobalFormModalInner({
                 {isPending ? submitLabelPending : submitLabel}
               </Button>
             ) : (
-              <Button type="button" onClick={goNext}>
+              <Button key="next" type="button" onClick={goNext}>
                 Siguiente <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             )}
