@@ -21,6 +21,10 @@ export class ModulosConfigDto {
   @IsOptional()
   @IsBoolean()
   controlGastos?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  controlAcceso?: boolean;
 }
 
 export class RequerimientosClienteConfigDto {

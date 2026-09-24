@@ -11,6 +11,10 @@ export const MODULOS_POR_DEFECTO: Record<ModuloTenant, boolean> = {
   controlPersonal: false,
   reportesAvanzados: true,
   controlGastos: false,
+  // Activado por defecto: registrar ingresos es básico para cualquier
+  // gimnasio. Antes vivía dentro de controlPersonal (apagado por defecto), así
+  // que un gimnasio sin gestión de empleados no podía controlar el acceso.
+  controlAcceso: true,
 };
 
 // Lectura puntual del catálogo de módulos de una organización. Usado por

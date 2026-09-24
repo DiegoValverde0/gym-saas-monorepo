@@ -23,7 +23,8 @@ import {
   Calendar,
   LayoutDashboard,
   Receipt,
-  Truck
+  Truck,
+  ScanFace
 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useModulosActivos } from "@/hooks/use-modulos-activos";
@@ -66,6 +67,13 @@ export function CommandPalette() {
             <CommandItem onSelect={() => navigateTo('/dashboard/clientes')}>
               <Users className="mr-2 h-4 w-4" />
               <span>Clientes</span>
+            </CommandItem>
+          )}
+
+          {modulos.controlAcceso && hasPermission('asistencias:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/asistencias')}>
+              <ScanFace className="mr-2 h-4 w-4" />
+              <span>Control de Acceso</span>
             </CommandItem>
           )}
 

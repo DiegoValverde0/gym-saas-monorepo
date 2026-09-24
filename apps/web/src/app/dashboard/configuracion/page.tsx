@@ -30,6 +30,7 @@ const organizacionSchema = z.object({
       controlPersonal: z.boolean(),
       reportesAvanzados: z.boolean(),
       controlGastos: z.boolean(),
+      controlAcceso: z.boolean(),
     }),
     requerimientosCliente: z.object({
       exigirDni: z.boolean(),
@@ -78,6 +79,7 @@ export default function ConfiguracionPage() {
           controlPersonal: (organizacion as any).configuracion?.modulos?.controlPersonal ?? false,
           reportesAvanzados: (organizacion as any).configuracion?.modulos?.reportesAvanzados ?? true,
           controlGastos: (organizacion as any).configuracion?.modulos?.controlGastos ?? false,
+          controlAcceso: (organizacion as any).configuracion?.modulos?.controlAcceso ?? true,
         },
         requerimientosCliente: {
           exigirDni: (organizacion as any).configuracion?.requerimientosCliente?.exigirDni ?? false,
@@ -110,6 +112,7 @@ export default function ConfiguracionPage() {
           controlPersonal: false,
           reportesAvanzados: true,
           controlGastos: false,
+          controlAcceso: true,
         },
         requerimientosCliente: {
           exigirDni: false,
@@ -356,8 +359,20 @@ export default function ConfiguracionPage() {
 
                 <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                   <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Acceso</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Registra las entradas y salidas de miembros y visitantes, valida su membresía y marca la asistencia a clases reservadas.</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlAcceso')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlAcceso', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
                     <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Personal</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita la gestión de asistencias, turnos laborales y permisos para tus empleados.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios y turnos de trabajo, y la agenda de cobertura.</p>
                   </div>
                   <Switch 
                     checked={form.watch('configuracion.modulos.controlPersonal')} 

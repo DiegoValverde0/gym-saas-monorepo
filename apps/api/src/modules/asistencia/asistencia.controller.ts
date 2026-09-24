@@ -17,7 +17,9 @@ interface RequestWithUser extends ExpressRequest {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
-@RequiereModulo('controlPersonal')
+// Módulo propio: el control de acceso de clientes no depende de la gestión
+// de personal (turnos, equipo).
+@RequiereModulo('controlAcceso')
 @Controller('asistencias')
 export class AsistenciaController {
   constructor(private readonly asistenciaService: AsistenciaService) {}

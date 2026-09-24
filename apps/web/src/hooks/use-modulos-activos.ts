@@ -8,6 +8,7 @@ export interface ModulosConfig {
   controlPersonal: boolean;
   reportesAvanzados: boolean;
   controlGastos: boolean;
+  controlAcceso: boolean;
 }
 
 // Deben coincidir con los defaults del backend (ver modulo.util.ts).
@@ -17,6 +18,7 @@ const MODULOS_POR_DEFECTO: ModulosConfig = {
   controlPersonal: false,
   reportesAvanzados: true,
   controlGastos: false,
+  controlAcceso: true,
 };
 
 // Antes esta lógica vivía duplicada solo en dashboard/layout.tsx, así que el

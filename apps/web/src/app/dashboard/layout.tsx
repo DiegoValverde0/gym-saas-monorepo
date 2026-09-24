@@ -160,7 +160,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
           }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Personal', 'Turnos', 'Asistencias'].includes(item.name)) return modulos.controlPersonal;
+          if (['Personal', 'Turnos'].includes(item.name)) return modulos.controlPersonal;
+          if (item.name === 'Asistencias') return modulos.controlAcceso;
           if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
           if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
           return true;
