@@ -17,11 +17,12 @@ export class RolService {
   ) {}
 
   // El módulo 'organizaciones' (leer/crear/actualizar/eliminar/suspender el
-  // listado global de organizaciones) nunca es asignable a un rol vía esta
-  // API, para nadie -- ni siquiera para un superadmin editando roles. El
-  // único rol con esos permisos es SUPERADMIN, sembrado una vez y de solo
-  // lectura vía API (ver update()/remove() más abajo). Evita que un rol de
-  // tenant se autoescale a visibilidad/control de plataforma.
+  // listado global de organizaciones) nunca se asigna vía esta API, para
+  // nadie -- ni siquiera para un superadmin editando roles. Solo lo tienen
+  // los roles de sistema que ya lo traen del seed (SUPERADMIN, y ADMIN_GYM
+  // con organizaciones:actualizar); al editarlos se conservan tal cual (ver
+  // normalizarPermisosAlEditar). Evita que un rol se autoescale a
+  // visibilidad/control de plataforma.
   private async assertPermisosAsignables(permisosIds: string[] | undefined) {
     if (!permisosIds || permisosIds.length === 0) return;
     const permisos = await this.prisma.extendedClient.permiso.findMany({
@@ -29,9 +30,49 @@ export class RolService {
     });
     if (permisos.some((p) => p.modulo === 'organizaciones')) {
       throw new BadRequestException(
-        'Los permisos del módulo "organizaciones" no se pueden asignar a un rol; son exclusivos del rol de sistema SUPERADMIN.',
+        'Los permisos del módulo "organizaciones" no se pueden asignar a un rol nuevo; son exclusivos de los roles de sistema.',
       );
     }
+  }
+
+  // Al editar un rol, los permisos de 'organizaciones' (plataforma) no se
+  // agregan ni se quitan por API: se conservan los que el rol ya tiene. Así
+  // SUPERADMIN (organizaciones:crear/leer/suspender) y ADMIN_GYM
+  // (organizaciones:actualizar, para editar su propio gimnasio) se pueden
+  // editar con normalidad -- antes el formulario reenviaba esos permisos
+  // (ocultos en la UI) y assertPermisosAsignables rechazaba todo el guardado.
+  //
+  // Además, SUPERADMIN debe conservar roles:leer y roles:actualizar: sin
+  // ellos nadie podría volver a editar los roles del sistema desde la app.
+  private async normalizarPermisosAlEditar(
+    rol: { nombre: string; organizacionId: string | null; rolPermisos: { permisoId: string; permiso: { modulo: string } }[] },
+    permisosIds: string[] | undefined,
+  ): Promise<string[] | undefined> {
+    if (permisosIds === undefined) return undefined;
+
+    const permisosPlataformaActuales = rol.rolPermisos.filter((rp) => rp.permiso.modulo === 'organizaciones').map((rp) => rp.permisoId);
+    const pedidos = permisosIds.length
+      ? await this.prisma.extendedClient.permiso.findMany({ where: { id: { in: permisosIds } } })
+      : [];
+    const pedidosPlataforma = pedidos.filter((p: { modulo: string }) => p.modulo === 'organizaciones').map((p: { id: string }) => p.id);
+    if (pedidosPlataforma.some((id: string) => !permisosPlataformaActuales.includes(id))) {
+      throw new BadRequestException(
+        'Los permisos del módulo "organizaciones" no se pueden asignar a un rol; son exclusivos de los roles de sistema que ya los tienen.',
+      );
+    }
+    const finales = [...new Set([...permisosIds.filter((id) => !pedidosPlataforma.includes(id)), ...permisosPlataformaActuales])];
+
+    if (rol.organizacionId === null && rol.nombre === 'SUPERADMIN') {
+      const imprescindibles = await this.prisma.extendedClient.permiso.findMany({
+        where: { modulo: 'roles', accion: { in: ['leer', 'actualizar'] } },
+      });
+      if (imprescindibles.some((p: { id: string }) => !finales.includes(p.id))) {
+        throw new BadRequestException(
+          'El rol SUPERADMIN debe conservar "roles: leer" y "roles: actualizar"; sin ellos nadie podría volver a editar los roles del sistema.',
+        );
+      }
+    }
+    return finales;
   }
 
   async create(createRolDto: CreateRolDto) {
@@ -122,7 +163,7 @@ export class RolService {
       throw new ForbiddenException('El superadministrador no puede modificar roles de una organización específica.');
     }
 
-    await this.assertPermisosAsignables(permisosIds);
+    const permisosFinales = await this.normalizarPermisosAlEditar(existingRol, permisosIds);
 
     let result;
     try {
@@ -142,11 +183,11 @@ export class RolService {
 
           const rol = await tx.rol.update({ where: { id }, data: rolData });
 
-          if (permisosIds !== undefined) {
+          if (permisosFinales !== undefined) {
             await tx.rolPermiso.deleteMany({ where: { rolId: id } });
-            if (permisosIds.length > 0) {
+            if (permisosFinales.length > 0) {
               await tx.rolPermiso.createMany({
-                data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
+                data: permisosFinales.map((permisoId) => ({ rolId: id, permisoId })),
               });
             }
           }
@@ -157,11 +198,11 @@ export class RolService {
         result = await this.prisma.extendedClient.$transaction(async (tx) => {
           const rol = await tx.rol.update({ where: { id }, data: rolData });
 
-          if (permisosIds !== undefined) {
+          if (permisosFinales !== undefined) {
             await tx.rolPermiso.deleteMany({ where: { rolId: id } });
-            if (permisosIds.length > 0) {
+            if (permisosFinales.length > 0) {
               await tx.rolPermiso.createMany({
-                data: permisosIds.map((permisoId) => ({ rolId: id, permisoId })),
+                data: permisosFinales.map((permisoId) => ({ rolId: id, permisoId })),
               });
             }
           }
@@ -180,7 +221,7 @@ export class RolService {
     // rol. Para un rol global usamos el cliente crudo: el cambio afecta a
     // todas las organizaciones que lo usan, sin importar cuál tenga
     // seleccionada el superadmin en este momento (ver x-tenant-id).
-    if (permisosIds !== undefined) {
+    if (permisosFinales !== undefined) {
       const asignaciones = isGlobalRole
         ? await this.prisma.asignacionAcceso.findMany({ where: { rolId: id }, select: { usuarioId: true, organizacionId: true } })
         : await this.prisma.extendedClient.asignacionAcceso.findMany({ where: { rolId: id }, select: { usuarioId: true, organizacionId: true } });

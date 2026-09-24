@@ -17,10 +17,9 @@ import { Protect } from '@/components/ui/protect';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Shield, Plus, Edit, Trash2, ShieldCheck, CheckCircle2, Search, ArchiveRestore } from 'lucide-react';
+import { Plus, Edit, Trash2, ShieldCheck, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 
@@ -113,6 +112,8 @@ export default function RolesPage() {
   });
 
   const onSubmit = (values: RolFormValues) => {
+    const visibles = new Set((permisosCatalogo || []).map((p: any) => p.id));
+    values = { ...values, permisosIds: values.permisosIds.filter((id) => visibles.has(id)) };
     if (editingRol) {
       updateMutation.mutate({ id: editingRol.id, values });
     } else {
@@ -198,7 +199,11 @@ export default function RolesPage() {
             open={isSheetOpen}
             onOpenChange={setIsSheetOpen}
             title={editingRol ? 'Editar Rol' : 'Nuevo Rol'}
-            description="Asigna un nombre al rol y selecciona los permisos exactos que tendrá en el sistema."
+            description={
+              editingRol && !editingRol.organizacionId
+                ? 'Rol del sistema: el cambio se aplica a todas las organizaciones que lo usan. Los permisos de plataforma (organizaciones) no se muestran y se conservan tal cual.'
+                : 'Asigna un nombre al rol y selecciona los permisos exactos que tendrá en el sistema.'
+            }
             form={form as any}
             maxWidthClass="sm:max-w-xl"
             multiStep
@@ -357,44 +362,50 @@ export default function RolesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {!rol.esSistema && (
-                        showDeleted ? (
+                      {showDeleted ? (
+                        !rol.esSistema && (
                           <Protect permission="sistema:restaurar">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => restoreItem(rol.id)} 
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => restoreItem(rol.id)}
                               disabled={isRestoring}
                               className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 h-8 px-3"
                             >
                               <ArchiveRestore className="h-4 w-4 mr-2" /> Restaurar
                             </Button>
                           </Protect>
-                        ) : (
-                          <>
-                            <Protect permission="roles:actualizar" fallbackType="hide">
-                              {(() => {
-                                const isGlobalRole = !rol.organizacionId;
-                                const canEditRow = isSuperAdmin ? isGlobalRole : !isGlobalRole;
-                                const reason = !canEditRow
-                                  ? (isGlobalRole
-                                      ? 'Los roles globales del sistema solo los edita el superadmin'
-                                      : 'El superadmin no puede editar roles de una organización específica')
-                                  : undefined;
-                                return (
-                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(rol)} disabled={!canEditRow} title={reason} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                );
-                              })()}
-                            </Protect>
+                        )
+                      ) : (
+                        <>
+                          {/* Los roles de sistema se pueden EDITAR (el superadmin ajusta sus
+                              permisos para todas las organizaciones); lo que no se puede es
+                              eliminarlos. Antes todo este bloque estaba detrás de
+                              !rol.esSistema y el superadmin no veía el botón de editar. */}
+                          <Protect permission="roles:actualizar" fallbackType="hide">
+                            {(() => {
+                              const isGlobalRole = !rol.organizacionId;
+                              const canEditRow = isSuperAdmin ? isGlobalRole : !isGlobalRole;
+                              const reason = !canEditRow
+                                ? (isGlobalRole
+                                    ? 'Los roles globales del sistema solo los edita el superadmin'
+                                    : 'El superadmin no puede editar roles de una organización específica')
+                                : undefined;
+                              return (
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(rol)} disabled={!canEditRow} title={reason} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              );
+                            })()}
+                          </Protect>
+                          {!rol.esSistema && (
                             <Protect permission="roles:eliminar" fallbackType="hide">
                               <Button variant="ghost" size="icon" onClick={() => handleDelete(rol.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </Protect>
-                          </>
-                        )
+                          )}
+                        </>
                       )}
                     </div>
                   </TableCell>
