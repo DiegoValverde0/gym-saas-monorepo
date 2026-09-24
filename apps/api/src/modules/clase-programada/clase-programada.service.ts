@@ -6,6 +6,7 @@ import { CreateClaseProgramadaDto } from './dto/create-clase-programada.dto';
 import { UpdateClaseProgramadaDto } from './dto/update-clase-programada.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 
 const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
@@ -37,6 +38,16 @@ interface DatosDisponibilidad {
 export class ClaseProgramadaService {
   constructor(private readonly prisma: PrismaService, private readonly cls: ClsService) {}
 
+  private async zonaHorariaOrganizacion(): Promise<string | null> {
+    const organizacionId = this.cls.get('organizacionId');
+    if (!organizacionId) return null;
+    const org = await this.prisma.extendedClient.organizacion.findUnique({
+      where: { id: organizacionId },
+      select: { zonaHoraria: true },
+    });
+    return org?.zonaHoraria ?? null;
+  }
+
   // Busca, entre los turnos de trabajo del entrenador en esa sucursal y fecha,
   // uno cuyo rango horario cubra por completo el horario de la clase. Las
   // horas de TurnoTrabajo se guardan como @db.Time sobre la fecha base
@@ -48,19 +59,28 @@ export class ClaseProgramadaService {
       return { turnoId: null, disponible: true };
     }
 
-    const fechaHora = new Date(datos.fechaHora);
+    // `fechaHora` llega como instante UTC (el frontend convierte la hora local
+    // con toISOString()), pero los turnos guardan la hora "de reloj" local
+    // tal cual (06:00 se guarda como 06:00Z). Hay que llevar la clase a la
+    // hora local de la organización antes de comparar; si no, una clase a las
+    // 19:00 en UTC-4 se compara como 23:00 (o cae en el día siguiente).
+    const { fechaSolo, minutosDelDia: minutosInicioClase } = aHoraLocal(
+      new Date(datos.fechaHora),
+      await this.zonaHorariaOrganizacion(),
+    );
     const duracion = datos.duracionMinutos ?? 60;
-    const fechaSolo = new Date(Date.UTC(fechaHora.getUTCFullYear(), fechaHora.getUTCMonth(), fechaHora.getUTCDate()));
 
     const turnos = await this.prisma.extendedClient.turnoTrabajo.findMany({
       where: {
         staffId: datos.entrenadorId,
         sucursalId: datos.sucursalId,
         fecha: fechaSolo,
+        // Un turno marcado como ausente o cancelado es una excepción puntual:
+        // el entrenador no está disponible ese día aunque la fila exista.
+        estado: { notIn: ['AUSENTE', 'CANCELADO'] },
       },
     });
 
-    const minutosInicioClase = fechaHora.getUTCHours() * 60 + fechaHora.getUTCMinutes();
     const minutosFinClase = minutosInicioClase + duracion;
 
     const turnoQueCubre = turnos.find((turno) => {

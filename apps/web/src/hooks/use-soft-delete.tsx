@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { apiPost, apiDelete } from '@/lib/api-client';
 
 interface UseSoftDeleteOptions {
-  queryKey: unknown[];
+  queryKey: unknown[]; // key de la lista; su primer elemento es la entidad (ej. 'clientes')
   endpoint: string; // e.g., 'sucursales' or 'roles'
   modelName: string; // e.g., 'sucursal', 'rol'
   itemName?: string; // e.g., 'La sucursal'
@@ -14,10 +14,17 @@ export function useSoftDelete({ queryKey, endpoint, modelName, itemName = 'El re
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Se invalida por la raíz de la entidad (ej. ['clientes']) y no por la key
+  // exacta: la key de la lista incluye `showDeleted`, así que invalidar solo
+  // la vista actual dejaba la otra (lista normal o papelera) en caché con
+  // datos viejos hasta que venciera el staleTime. Así también se refrescan
+  // selects de otras pantallas que dependen de la misma entidad.
+  const invalidarEntidad = () => queryClient.invalidateQueries({ queryKey: [queryKey[0]] });
+
   const restoreMutation = useMutation({
     mutationFn: async (id: string) => apiPost(`/sistema/restaurar`, { modelo: modelName, id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
+      invalidarEntidad();
       toast({ 
         title: 'Acción deshecha', 
         description: `${itemName} ha sido restaurado con éxito.`, 
@@ -39,7 +46,7 @@ export function useSoftDelete({ queryKey, endpoint, modelName, itemName = 'El re
       return { id };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey });
+      invalidarEntidad();
       toast({ 
         title: 'Eliminado', 
         description: `${itemName} ha sido eliminado. Tienes 5 segundos para deshacer.`, 

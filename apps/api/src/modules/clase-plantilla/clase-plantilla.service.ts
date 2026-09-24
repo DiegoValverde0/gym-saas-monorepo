@@ -7,6 +7,7 @@ import { CreateClasePlantillaDto } from './dto/create-clase-plantilla.dto';
 import { UpdateClasePlantillaDto } from './dto/update-clase-plantilla.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de clases a
 // partir de las plantillas activas (mismo default que turno-plantilla.service.ts).
@@ -113,7 +114,9 @@ export class ClasePlantillaService {
     duracionMinutos: number,
   ): Promise<string | null> {
     const turnos = await this.prisma.turnoTrabajo.findMany({
-      where: { staffId: entrenadorId, sucursalId, fecha },
+      // Igual que en ClaseProgramadaService: un turno ausente o cancelado es
+      // una excepción puntual y no cubre la clase.
+      where: { staffId: entrenadorId, sucursalId, fecha, estado: { notIn: ['AUSENTE', 'CANCELADO'] } },
     });
 
     const minutosInicioClase = horaInicio.getUTCHours() * 60 + horaInicio.getUTCMinutes();
@@ -159,8 +162,9 @@ export class ClasePlantillaService {
 
     const org = await this.prisma.organizacion.findUnique({
       where: { id: organizacionId },
-      select: { configuracion: true },
+      select: { configuracion: true, zonaHoraria: true },
     });
+    const zonaHoraria = org?.zonaHoraria;
     const exigirTurno =
       (org?.configuracion as { requerimientosClase?: { exigirTurnoEntrenador?: boolean } } | null)?.requerimientosClase
         ?.exigirTurnoEntrenador === true;
@@ -171,12 +175,18 @@ export class ClasePlantillaService {
         organizacionId,
         clasePlantillaId: { in: plantillaIds },
         fechaHora: { gte: hoy, lte: finVentana },
-        deletedAt: null,
       },
       select: { clasePlantillaId: true, fechaHora: true },
     });
+    // Incluye a propósito las ocurrencias eliminadas (papelera), mismo motivo
+    // que turno-plantilla.service.ts: borrar una ocurrencia puntual de una
+    // clase recurrente no debe revertirse en la próxima corrida del cron.
+    // La clave usa la fecha LOCAL de la organización: una clase a las 20:30
+    // en UTC-4 cae al día siguiente en UTC y, con la fecha UTC, se duplicaría.
     const existentesSet = new Set(
-      existentes.map((c) => `${c.clasePlantillaId}|${c.fechaHora.toISOString().slice(0, 10)}`),
+      existentes.map(
+        (c) => `${c.clasePlantillaId}|${aHoraLocal(c.fechaHora, zonaHoraria).fechaSolo.toISOString().slice(0, 10)}`,
+      ),
     );
 
     const nuevas: Prisma.ClaseProgramadaCreateManyInput[] = [];
@@ -208,8 +218,13 @@ export class ClasePlantillaService {
           }
         }
 
-        const fechaHora = new Date(fecha);
-        fechaHora.setUTCHours(plantilla.horaInicio.getUTCHours(), plantilla.horaInicio.getUTCMinutes(), 0, 0);
+        // horaInicio es hora "de reloj" local; fechaHora debe ser el instante
+        // UTC real, o el frontend la mostraría corrida por el desfase horario.
+        const fechaHora = desdeHoraLocal(
+          new Date(fecha),
+          plantilla.horaInicio.getUTCHours() * 60 + plantilla.horaInicio.getUTCMinutes(),
+          zonaHoraria,
+        );
 
         nuevas.push({
           organizacionId,

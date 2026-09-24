@@ -125,12 +125,16 @@ export class TurnoPlantillaService {
     if (plantillas.length === 0) return { turnosCreados: 0 };
 
     const staffIds = [...new Set(plantillas.map((p) => p.staffId))];
+    // Incluye a propósito los turnos eliminados (papelera): borrar el turno
+    // proyectado de un día es una forma de registrar una excepción puntual
+    // (vacaciones, día libre). Si se ignoraran, el cron de la noche volvería
+    // a crear ese mismo turno y la excepción se perdería. Para recuperarlo,
+    // se restaura desde la papelera.
     const turnosExistentes = await this.prisma.turnoTrabajo.findMany({
       where: {
         organizacionId,
         staffId: { in: staffIds },
         fecha: { gte: hoy, lte: finVentana },
-        deletedAt: null,
       },
       select: { staffId: true, fecha: true },
     });
