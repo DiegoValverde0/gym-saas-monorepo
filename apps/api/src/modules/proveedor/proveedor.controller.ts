@@ -5,12 +5,15 @@ import { UpdateProveedorDto } from './dto/update-proveedor.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
+import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 // Reusa el módulo de permisos 'transacciones' (mismo catálogo RBAC ya
 // sembrado, sin tocar seed.ts -- ver nota en gasto-plantilla.controller.ts):
 // quien gestiona transacciones/gastos gestiona el catálogo de proveedores.
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
+@RequiereModulo('controlGastos')
 @Controller('proveedores')
 export class ProveedorController {
   constructor(private readonly proveedorService: ProveedorService) {}

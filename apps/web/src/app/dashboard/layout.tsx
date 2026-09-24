@@ -156,6 +156,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
           if (['Personal', 'Turnos', 'Asistencias'].includes(item.name)) return modulos.controlPersonal;
           if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
+          if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
           return true;
         })
       };

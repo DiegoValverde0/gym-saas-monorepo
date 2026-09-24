@@ -1,16 +1,32 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateTransaccionDto } from './dto/create-transaccion.dto';
 import { QueryTransaccionDto } from './dto/query-transaccion.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { CONCEPTOS_INGRESO, CONCEPTOS_EGRESO } from './tipo-concepto.util';
+import { moduloEstaActivo } from '../../common/utils/modulo.util';
 
 @Injectable()
 export class TransaccionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cls: ClsService,
+  ) {}
 
   async create(dto: CreateTransaccionDto, userId: string) {
+    // Un solo endpoint sirve tanto ventas (INGRESO) como gastos (EGRESO), así
+    // que a diferencia de GastoPlantillaController/ProveedorController no se
+    // puede gatear con @RequiereModulo a nivel de controller -- bloquearía
+    // también el punto de venta. El chequeo se hace acá, solo para EGRESO.
+    if (dto.tipo === 'EGRESO') {
+      const organizacionId = this.cls.get('organizacionId');
+      if (organizacionId && !(await moduloEstaActivo(this.prisma, organizacionId, 'controlGastos'))) {
+        throw new ForbiddenException('El módulo de Gastos no está activado para tu organización. Actívalo en Configuración.');
+      }
+    }
+
     // 1. Validaciones Matemáticas
     const sumaDetalles = dto.detalles.reduce((acc, curr) => acc + Number(curr.subtotal), 0);
     const sumaPagos = dto.pagos.reduce((acc, curr) => acc + Number(curr.monto), 0);

@@ -29,6 +29,7 @@ const organizacionSchema = z.object({
       clasesGrupales: z.boolean(),
       controlPersonal: z.boolean(),
       reportesAvanzados: z.boolean(),
+      controlGastos: z.boolean(),
     }),
     requerimientosCliente: z.object({
       exigirDni: z.boolean(),
@@ -76,6 +77,7 @@ export default function ConfiguracionPage() {
           clasesGrupales: (organizacion as any).configuracion?.modulos?.clasesGrupales ?? false,
           controlPersonal: (organizacion as any).configuracion?.modulos?.controlPersonal ?? false,
           reportesAvanzados: (organizacion as any).configuracion?.modulos?.reportesAvanzados ?? true,
+          controlGastos: (organizacion as any).configuracion?.modulos?.controlGastos ?? false,
         },
         requerimientosCliente: {
           exigirDni: (organizacion as any).configuracion?.requerimientosCliente?.exigirDni ?? false,
@@ -107,6 +109,7 @@ export default function ConfiguracionPage() {
           clasesGrupales: false,
           controlPersonal: false,
           reportesAvanzados: true,
+          controlGastos: false,
         },
         requerimientosCliente: {
           exigirDni: false,
@@ -368,9 +371,21 @@ export default function ConfiguracionPage() {
                     <Label className="text-base font-semibold text-slate-900 dark:text-white">Reportes Avanzados</Label>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Activa proyecciones financieras y métricas complejas en el panel de inicio.</p>
                   </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.reportesAvanzados')} 
+                  <Switch
+                    checked={form.watch('configuracion.modulos.reportesAvanzados')}
                     onCheckedChange={(c) => form.setValue('configuracion.modulos.reportesAvanzados', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Gastos</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el catálogo de proveedores y el registro de gastos puntuales y recurrentes (alquiler, nómina, servicios).</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlGastos')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlGastos', c, { shouldDirty: true })}
                     disabled={isLoading || updateMutation.isPending}
                   />
                 </div>

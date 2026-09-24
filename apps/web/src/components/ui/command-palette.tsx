@@ -11,17 +11,19 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { 
-  Users, 
-  Wallet, 
-  Settings, 
-  ShieldCheck, 
-  ClipboardList, 
-  UserCog, 
+import {
+  Users,
+  Wallet,
+  Settings,
+  ShieldCheck,
+  ClipboardList,
+  UserCog,
   CreditCard,
   Building2,
   Calendar,
-  LayoutDashboard
+  LayoutDashboard,
+  Receipt,
+  Truck
 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useModulosActivos } from "@/hooks/use-modulos-activos";
@@ -85,6 +87,20 @@ export function CommandPalette() {
             <CommandItem onSelect={() => navigateTo('/dashboard/clases')}>
               <Calendar className="mr-2 h-4 w-4" />
               <span>Clases Programadas</span>
+            </CommandItem>
+          )}
+
+          {modulos.controlGastos && hasPermission('transacciones:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/gastos')}>
+              <Receipt className="mr-2 h-4 w-4" />
+              <span>Gastos</span>
+            </CommandItem>
+          )}
+
+          {modulos.controlGastos && hasPermission('transacciones:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/proveedores')}>
+              <Truck className="mr-2 h-4 w-4" />
+              <span>Proveedores</span>
             </CommandItem>
           )}
         </CommandGroup>
