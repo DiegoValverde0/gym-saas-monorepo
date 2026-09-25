@@ -805,6 +805,8 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 
 ### Fase 6 · Experto avanzado (opcional, según demanda)
 - Solo si hay clientes que lo piden: DB-1 a DB-5 (sección 14), lista de espera, salas, PIN de marcaje.
+- **2026-09-25: el usuario pidió hacer los cinco cambios de base de datos** (DB-1 a DB-5), uno por commit. Se aplican con `pnpm db:push` (el proyecto no usa migraciones); todos son aditivos.
+- **DB-3 · Lista de espera: hecha.** **CAMBIO DE BASE DE DATOS: VALOR `EN_ESPERA` EN EL ENUM `ESTADORESERVA`.** Si la clase está llena, la reserva se puede anotar en espera (`listaEspera: true`); al cancelarse una reserva confirmada o al subir la capacidad de la sesión, sube sola la primera de la lista (`common/utils/lista-espera.util.ts`). Cancelar la sesión cancela también la lista de espera. En el detalle de la sesión se ve la posición ("En espera · 1°") y el aviso de quién subió.
 
 **Orden recomendado:** 0 → 1 → 2 → 3 → 4 → 5. Las fases 1 y 2 van primero porque todo lo demás (clases, jornadas, resto de módulos) se apoya en la sucursal predeterminada y en los modos.
 

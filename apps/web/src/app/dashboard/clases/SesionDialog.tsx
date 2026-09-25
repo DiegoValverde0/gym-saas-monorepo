@@ -20,6 +20,7 @@ const ESTADO_RESERVA: Record<string, { label: string; variant: 'success' | 'prim
   ASISTIO: { label: 'Asistió', variant: 'success' },
   NO_ASISTIO: { label: 'No asistió', variant: 'warning' },
   CANCELADA: { label: 'Cancelada', variant: 'default' },
+  EN_ESPERA: { label: 'En espera', variant: 'warning' },
 };
 
 interface Evaluacion { permitido: boolean; motivo: string | null }
@@ -85,7 +86,10 @@ export function SesionDialog({
     queryFn: async () => unwrapList<Cliente>(await apiGet(`/clientes?search=${encodeURIComponent(termino)}&limit=8`)),
     enabled: !!claseId && !candidato && termino.length >= 2,
   });
-  const yaReservados = new Set((clase?.reservas ?? []).filter((r) => OCUPA_CUPO(r.estado)).map((r) => r.clienteId));
+  const yaReservados = new Set((clase?.reservas ?? []).filter((r) => OCUPA_CUPO(r.estado) || r.estado === 'EN_ESPERA').map((r) => r.clienteId));
+  // Lista de espera (fase 6, DB-3): las reservas vienen ordenadas por fecha de reserva.
+  const enEspera = (clase?.reservas ?? []).filter((r) => r.estado === 'EN_ESPERA');
+  const llena = !!clase && (clase.reservas ?? []).filter((r) => OCUPA_CUPO(r.estado)).length >= clase.capacidadMaxima;
   const { data: evaluacion, isFetching: evaluando } = useQuery({
     queryKey: ['puede-reservar', claseId, candidato?.id],
     queryFn: async () => apiGet<Evaluacion>(`/reservas/puede-reservar?claseId=${claseId}&clienteId=${candidato!.id}`),
@@ -93,10 +97,15 @@ export function SesionDialog({
   });
 
   const reservar = useMutation({
-    mutationFn: async (forzar: boolean) => apiPost(forzar ? '/reservas/forzar' : '/reservas', { claseId, clienteId: candidato!.id }),
-    onSuccess: () => {
+    mutationFn: async (forzar: boolean) =>
+      apiPost<{ estado: string }>(forzar ? '/reservas/forzar' : '/reservas', { claseId, clienteId: candidato!.id, listaEspera: llena }),
+    onSuccess: (r) => {
       refrescar();
-      toast({ title: 'Reserva agregada', description: candidato?.nombre, variant: 'success' });
+      toast({
+        title: r.estado === 'EN_ESPERA' ? 'Anotado en la lista de espera' : 'Reserva agregada',
+        description: r.estado === 'EN_ESPERA' ? `${candidato?.nombre} sube solo si se libera un lugar.` : candidato?.nombre,
+        variant: 'success',
+      });
       setCandidato(null);
       setBusqueda('');
     },
@@ -108,8 +117,14 @@ export function SesionDialog({
     onError: (err: Error) => toast({ title: 'No se pudo marcar la asistencia', description: err.message, variant: 'destructive' }),
   });
   const cancelarReserva = useMutation({
-    mutationFn: async (id: string) => apiPatch(`/reservas/${id}/cancelar`),
-    onSuccess: () => { refrescar(); toast({ title: 'Reserva cancelada' }); },
+    mutationFn: async (id: string) => apiPatch<{ promovidos?: string[] }>(`/reservas/${id}/cancelar`),
+    onSuccess: (r) => {
+      refrescar();
+      toast({
+        title: 'Reserva cancelada',
+        description: r.promovidos?.length ? `Pasó de la lista de espera a la clase: ${r.promovidos.join(', ')}.` : undefined,
+      });
+    },
     onError: (err: Error) => toast({ title: 'No se pudo cancelar', description: err.message, variant: 'destructive' }),
   });
 
@@ -188,8 +203,19 @@ export function SesionDialog({
                         <p className="text-xs text-zinc-500">Revisando si puede reservar...</p>
                       ) : evaluacion.permitido ? (
                         <>
-                          <p className="text-sm text-emerald-800 dark:text-emerald-200">Puede reservar esta clase.</p>
-                          <Button size="sm" onClick={() => reservar.mutate(false)} disabled={reservar.isPending}>Reservar</Button>
+                          {llena ? (
+                            <>
+                              <p className="text-sm text-amber-800 dark:text-amber-200">
+                                La clase está llena{enEspera.length ? ` y hay ${enEspera.length} en espera` : ''}. Si alguien cancela, sube solo.
+                              </p>
+                              <Button size="sm" variant="outline" onClick={() => reservar.mutate(false)} disabled={reservar.isPending}>Anotar en lista de espera</Button>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm text-emerald-800 dark:text-emerald-200">Puede reservar esta clase.</p>
+                              <Button size="sm" onClick={() => reservar.mutate(false)} disabled={reservar.isPending}>Reservar</Button>
+                            </>
+                          )}
                         </>
                       ) : (
                         <>
@@ -235,8 +261,10 @@ export function SesionDialog({
                         <p className="text-xs text-slate-500">{r.cliente?.numeroDocumento}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={ESTADO_RESERVA[r.estado]?.variant ?? 'default'}>{ESTADO_RESERVA[r.estado]?.label ?? r.estado}</Badge>
-                        {r.estado !== 'CANCELADA' && (
+                        <Badge variant={ESTADO_RESERVA[r.estado]?.variant ?? 'default'}>
+                          {r.estado === 'EN_ESPERA' ? `En espera · ${enEspera.findIndex((e) => e.id === r.id) + 1}°` : ESTADO_RESERVA[r.estado]?.label ?? r.estado}
+                        </Badge>
+                        {r.estado !== 'CANCELADA' && r.estado !== 'EN_ESPERA' && (
                           <Protect permission="reservas:actualizar" fallbackType="hide">
                             <Button variant="ghost" size="icon" title="Asistió" className={`h-7 w-7 ${r.estado === 'ASISTIO' ? 'text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`} onClick={() => marcar.mutate({ id: r.id, estado: 'ASISTIO' })} disabled={marcar.isPending || r.estado === 'ASISTIO'}>
                               <CheckCircle className="h-3.5 w-3.5" />
@@ -246,9 +274,9 @@ export function SesionDialog({
                             </Button>
                           </Protect>
                         )}
-                        {r.estado === 'CONFIRMADA' && (
+                        {(r.estado === 'CONFIRMADA' || r.estado === 'EN_ESPERA') && (
                           <Protect permission="reservas:eliminar" fallbackType="hide">
-                            <Button variant="ghost" size="icon" title="Cancelar reserva" className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => cancelarReserva.mutate(r.id)} disabled={cancelarReserva.isPending}>
+                            <Button variant="ghost" size="icon" title={r.estado === 'EN_ESPERA' ? 'Quitar de la lista de espera' : 'Cancelar reserva'} className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => cancelarReserva.mutate(r.id)} disabled={cancelarReserva.isPending}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </Protect>

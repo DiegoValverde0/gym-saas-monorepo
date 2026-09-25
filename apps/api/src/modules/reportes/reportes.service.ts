@@ -136,7 +136,7 @@ export class ReportesService {
       const fila = porClase.get(s.nombreClase) ?? { clase: s.nombreClase, disciplina: s.disciplina?.nombre ?? null, sesiones: 0, cupos: 0, reservas: 0, asistieron: 0 };
       fila.sesiones++;
       fila.cupos += s.capacidadMaxima;
-      fila.reservas += s.reservas.filter((r) => r.estado !== 'CANCELADA').length;
+      fila.reservas += s.reservas.filter((r) => r.estado !== 'CANCELADA' && r.estado !== 'EN_ESPERA').length;
       fila.asistieron += s.reservas.filter((r) => r.estado === 'ASISTIO').length;
       porClase.set(s.nombreClase, fila);
     }

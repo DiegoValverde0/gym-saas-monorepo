@@ -155,6 +155,9 @@ enum EstadoReserva {
   CANCELADA
   ASISTIO
   NO_ASISTIO
+  // Fase 6 (DB-3): la clase estaba llena; sube sola a CONFIRMADA cuando se
+  // libera un cupo (ver common/utils/lista-espera.util.ts).
+  EN_ESPERA
 }
 
 enum EstadoTurno {

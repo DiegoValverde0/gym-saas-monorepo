@@ -10,6 +10,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 import { choqueDeSesion } from '../../common/utils/choques-clase.util';
+import { promoverListaEspera } from '../../common/utils/lista-espera.util';
 
 const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
@@ -247,7 +248,7 @@ export class ClaseProgramadaService {
     await this.findOne(id);
     return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
       const reservas = await tx.reservaClase.updateMany({
-        where: { claseId: id, estado: 'CONFIRMADA' },
+        where: { claseId: id, estado: { in: ['CONFIRMADA', 'EN_ESPERA'] } },
         data: { estado: 'CANCELADA' },
       });
       await tx.claseProgramada.update({ where: { id }, data: { estado: 'INACTIVO' } });
@@ -324,7 +325,12 @@ export class ClaseProgramadaService {
       where: { id },
       data: { ...updateClaseProgramadaDto, turnoId } as unknown as Prisma.ClaseProgramadaUncheckedUpdateInput,
     });
-    return { ...clase, disponibilidadEntrenador: disponible };
+    // Más cupos en esta sesión: sube la lista de espera (fase 6, DB-3).
+    const promovidos =
+      updateClaseProgramadaDto.capacidadMaxima && updateClaseProgramadaDto.capacidadMaxima > actual.capacidadMaxima
+        ? await this.prisma.extendedClient.$transaction((tx: Prisma.TransactionClient) => promoverListaEspera(tx, id))
+        : [];
+    return { ...clase, disponibilidadEntrenador: disponible, promovidos };
   }
 
   async remove(id: string) {

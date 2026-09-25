@@ -8,6 +8,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { descontarSesionEnClase, evaluarReserva } from '../../common/utils/acceso-clases.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
+import { promoverListaEspera } from '../../common/utils/lista-espera.util';
 
 const INCLUDE_RESERVA = {
   clase: { select: { nombreClase: true, fechaHora: true } },
@@ -95,23 +96,33 @@ export class ReservaClaseService {
       }
 
       const yaReservada = await tx.reservaClase.findFirst({
-        where: { claseId: createReservaClaseDto.claseId, clienteId: createReservaClaseDto.clienteId, estado: { in: ['CONFIRMADA', 'ASISTIO'] } },
-        select: { id: true },
+        where: { claseId: createReservaClaseDto.claseId, clienteId: createReservaClaseDto.clienteId, estado: { in: ['CONFIRMADA', 'ASISTIO', 'EN_ESPERA'] } },
+        select: { estado: true },
       });
-      if (yaReservada) throw new ConflictException('Este cliente ya tiene una reserva en esta clase.');
+      if (yaReservada) {
+        throw new ConflictException(
+          yaReservada.estado === 'EN_ESPERA' ? 'Este cliente ya está en la lista de espera de esta clase.' : 'Este cliente ya tiene una reserva en esta clase.',
+        );
+      }
 
       // ASISTIO también ocupa cupo: si no, marcar asistencia liberaba lugares
       // y permitía sobrevender la clase.
       const cuposOcupados = await tx.reservaClase.count({
         where: { claseId: createReservaClaseDto.claseId, estado: { in: ['CONFIRMADA', 'ASISTIO'] } },
       });
-      if (cuposOcupados >= clase.capacidadMaxima) {
-        throw new ConflictException('Esta clase ya alcanzó su capacidad máxima.');
+      const llena = cuposOcupados >= clase.capacidadMaxima;
+      if (llena && !createReservaClaseDto.listaEspera) {
+        throw new ConflictException('Esta clase está llena. Puedes anotar al cliente en la lista de espera.');
       }
 
       return tx.reservaClase.create({
         // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-        data: createReservaClaseDto as unknown as Prisma.ReservaClaseUncheckedCreateInput,
+        data: {
+          claseId: createReservaClaseDto.claseId,
+          clienteId: createReservaClaseDto.clienteId,
+          // Con cupo libre se confirma aunque se haya pedido la lista de espera.
+          estado: llena ? 'EN_ESPERA' : 'CONFIRMADA',
+        } as unknown as Prisma.ReservaClaseUncheckedCreateInput,
         include: INCLUDE_RESERVA,
       });
     });
@@ -144,6 +155,13 @@ export class ReservaClaseService {
 
   async update(id: string, updateReservaClaseDto: UpdateReservaClaseDto) {
     const actual = await this.findOne(id);
+    if (actual.estado === 'EN_ESPERA' && updateReservaClaseDto.estado !== 'CANCELADA') {
+      throw new BadRequestException('Esta persona está en la lista de espera: todavía no tiene lugar en la clase.');
+    }
+    if (updateReservaClaseDto.estado === 'EN_ESPERA') {
+      throw new BadRequestException('La lista de espera se asigna sola al reservar una clase llena.');
+    }
+    if (updateReservaClaseDto.estado === 'CANCELADA') return this.cancelar(id);
     const reserva = await this.prisma.extendedClient.reservaClase.update({
       where: { id },
       data: updateReservaClaseDto,
@@ -187,11 +205,14 @@ export class ReservaClaseService {
     }
   }
 
+  // Al cancelar una reserva confirmada se libera un cupo: sube el primero de
+  // la lista de espera (fase 6, DB-3).
   async cancelar(id: string) {
-    await this.findOne(id);
-    return this.prisma.extendedClient.reservaClase.update({
-      where: { id },
-      data: { estado: 'CANCELADA' },
+    const actual = await this.findOne(id);
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      const reserva = await tx.reservaClase.update({ where: { id }, data: { estado: 'CANCELADA' } });
+      const promovidos = actual.estado === 'CONFIRMADA' ? await promoverListaEspera(tx, actual.claseId) : [];
+      return { ...reserva, promovidos };
     });
   }
 }
