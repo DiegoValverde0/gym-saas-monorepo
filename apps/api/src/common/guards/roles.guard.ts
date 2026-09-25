@@ -4,6 +4,7 @@ import { RedisClientType } from 'redis';
 import { PERMISSIONS_KEY, PermissionRequirement } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatPermiso } from '../utils/permiso.util';
+import { obtenerAccesoVigente } from '../utils/acceso-vigente.util';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -39,47 +40,15 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Tenant no identificado en la sesión.');
     }
 
-    const cacheKey = `rbac:${user.sub}:${user.organizacionId ?? 'global'}`;
-    const userPermissionsStr = await this.redisClient.get(cacheKey);
-    let userPermissions: string[] = [];
-
-    if (userPermissionsStr) {
-      userPermissions = JSON.parse(userPermissionsStr);
-    } else {
-      // 1. Buscar el rol de este usuario: en su organización (usuario normal)
-      // o su asignación global (superadmin, organizacionId: null).
-      const asignacion = await this.prisma.asignacionAcceso.findFirst({
-        where: {
-          usuarioId: user.sub,
-          organizacionId: user.organizacionId ?? null,
-        },
-        include: {
-          rol: {
-            include: {
-              rolPermisos: {
-                include: {
-                  permiso: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!asignacion || !asignacion.rol) {
-        throw new ForbiddenException('El usuario no tiene un rol asignado en este tenant.');
-      }
-
-      // 2. Extraer permisos (Formato: "accion:modulo")
-      userPermissions = asignacion.rol.rolPermisos.map(
-        (rp) => formatPermiso(rp.permiso.modulo, rp.permiso.accion),
-      );
-
-      // 3. Guardar en Redis con TTL de 15 minutos (900 segundos)
-      await this.redisClient.setEx(cacheKey, 900, JSON.stringify(userPermissions));
+    // Permisos del acceso vigente (misma caché de Redis que usa JwtAuthGuard
+    // para el rol y la sucursal). Superadmin puro: asignación global.
+    const acceso = await obtenerAccesoVigente(this.prisma, this.redisClient, user.sub, user.organizacionId ?? null);
+    if (!acceso) {
+      throw new ForbiddenException('El usuario no tiene un rol asignado en este tenant.');
     }
+    const userPermissions = acceso.permisos;
 
-    // 4. Validar si el usuario tiene todos los permisos requeridos
+    // Validar si el usuario tiene todos los permisos requeridos
     const hasPermission = requiredPermissions.every((reqPerm) =>
       userPermissions.includes(formatPermiso(reqPerm.modulo, reqPerm.accion)),
     );

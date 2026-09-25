@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { CommandPalette } from '@/components/ui/command-palette';
+import { IndicadorAlcance, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 
 interface NavItem {
   name: string;
@@ -138,6 +139,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { activeTenantId, setActiveTenantId } = useTenantStore();
   const { hasPermission } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
+  useAvisoCambioAcceso(userData);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -369,12 +371,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       <span className="truncate max-w-[120px]">{userData.organizacionNombre}</span>
                     </div>
                   )}
-                  {userData.sucursalNombre && (
-                    <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-500/20 border border-indigo-100 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-md px-2.5 py-1 text-xs font-bold">
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span className="truncate max-w-[120px]">{userData.sucursalNombre}</span>
-                    </div>
-                  )}
+                  <IndicadorAlcance user={userData} />
                 </div>
               )
             )}

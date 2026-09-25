@@ -285,8 +285,15 @@ export class ClasePlantillaService {
   // esa ocurrencia puntual se omite en vez de crearse sin cobertura -- coherente
   // con lo que ya hace ClaseProgramadaService.create() para el alta manual.
   async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT) {
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    const org = await this.prisma.organizacion.findUnique({
+      where: { id: organizacionId },
+      select: { configuracion: true, zonaHoraria: true },
+    });
+    const zonaHoraria = org?.zonaHoraria;
+    // "Hoy" es la fecha LOCAL de la organización, como en turno-plantilla:
+    // con la fecha UTC, de noche (UTC-4, desde las 20:00) la ventana
+    // arrancaba un día tarde y no se generaba la clase de esa misma noche.
+    const hoy = aHoraLocal(new Date(), zonaHoraria).fechaSolo;
     const finVentana = new Date(hoy);
     finVentana.setUTCDate(finVentana.getUTCDate() + semanas * 7);
 
@@ -301,11 +308,6 @@ export class ClasePlantillaService {
     });
     if (plantillas.length === 0) return { clasesCreadas: 0, clasesOmitidas: 0 };
 
-    const org = await this.prisma.organizacion.findUnique({
-      where: { id: organizacionId },
-      select: { configuracion: true, zonaHoraria: true },
-    });
-    const zonaHoraria = org?.zonaHoraria;
     const exigirTurno =
       (org?.configuracion as { requerimientosClase?: { exigirTurnoEntrenador?: boolean } } | null)?.requerimientosClase
         ?.exigirTurnoEntrenador === true;
@@ -315,7 +317,9 @@ export class ClasePlantillaService {
       where: {
         organizacionId,
         clasePlantillaId: { in: plantillaIds },
-        fechaHora: { gte: hoy, lte: finVentana },
+        // fechaHora es un instante: la ventana va del inicio del día local de
+        // hoy al final del día local de finVentana.
+        fechaHora: { gte: desdeHoraLocal(hoy, 0, zonaHoraria), lt: desdeHoraLocal(finVentana, 24 * 60, zonaHoraria) },
       },
       select: { clasePlantillaId: true, fechaHora: true },
     });

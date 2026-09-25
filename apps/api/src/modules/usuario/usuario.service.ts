@@ -6,7 +6,8 @@ import { Prisma } from '@prisma/client';
 import { CreateEmpleadoDto } from './dto/create-empleado.dto';
 import { assertFound } from '../../common/utils/assert-found.util';
 import { hashContrasena } from '../../common/utils/contrasena.util';
-import { assertRolAsignableEnOrganizacion } from '../../common/utils/rol.util';
+import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
+import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 
 @Injectable()
 export class UsuarioService {
@@ -36,6 +37,7 @@ export class UsuarioService {
   }
 
   async registrarEmpleado(data: CreateEmpleadoDto) {
+    const sucursalId = (await assertSucursalAsignable(this.prisma, this.cls, data.sucursalId ?? undefined)) ?? this.cls.get('sucursalId');
     // 1. Hashear contraseña
     const contrasenaHash = await hashContrasena(data.contrasena);
 
@@ -68,8 +70,8 @@ export class UsuarioService {
           data: {
             usuarioId: usuario.id,
             rolId: data.rolId,
-            // sucursalId es opcional
-            ...(data.sucursalId && { sucursalId: data.sucursalId })
+            // sucursalId es opcional (sin valor = todas)
+            ...(sucursalId && { sucursalId })
           }
         });
 
@@ -85,13 +87,19 @@ export class UsuarioService {
 
   async updateAsignacion(asignacionId: string, nuevoRolId: string, sucursalId?: string | null) {
     // Verificar que la asignación existe y pertenece al tenant
-    assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+    const actual = assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
+    await assertSucursalAsignable(this.prisma, this.cls, sucursalId);
 
     // Verificar que el rol existe y pertenece al tenant
     assertRolAsignableEnOrganizacion(await this.prisma.extendedClient.rol.findUnique({ where: { id: nuevoRolId } }));
+
+    const sucursalFinal = sucursalId !== undefined ? sucursalId : actual.sucursalId;
+    if (sucursalFinal !== null || nuevoRolId !== actual.rolId) {
+      await assertQuedaOtroAdministrador(this.prisma.extendedClient as unknown as Prisma.TransactionClient, actual);
+    }
 
     // Actualizar la asignación (extendedClient valida que la asignación pertenece al tenant)
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.update({
@@ -102,29 +110,30 @@ export class UsuarioService {
       },
     });
 
-    // Invalidar caché de Redis
-    const cacheKey = `rbac:${asignacion.usuarioId}:${asignacion.organizacionId}`;
-    await this.redisClient.del(cacheKey);
+    // Invalidar el acceso vigente cacheado: aplica en su siguiente acción, sin cerrar sesión.
+    await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
 
     return asignacion;
   }
 
   async removerEmpleado(asignacionId: string) {
-    assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+    const actual = assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
+    await assertQuedaOtroAdministrador(this.prisma.extendedClient as unknown as Prisma.TransactionClient, actual);
 
     // Al eliminar la asignación, revocamos el acceso del usuario a este tenant, pero el usuario global se mantiene
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.delete({
       where: { id: asignacionId },
     });
 
-    // Invalidar caché de Redis y revocar sesión activa
-    const cacheKey = `rbac:${asignacion.usuarioId}:${asignacion.organizacionId}`;
-    await this.redisClient.del(cacheKey);
-    // Revocar sesión activa por 7 días (TTL del JWT)
-    await this.redisClient.setEx(`user:revoked:${asignacion.usuarioId}`, 604800, 'true');
+    // Invalidar el acceso vigente cacheado: sin asignación, su siguiente
+    // petición en esta organización responde 401 (JwtAuthGuard). Antes se
+    // marcaba además `user:revoked`, que es global: lo dejaba fuera también
+    // de los otros gimnasios donde trabaja, y 7 días aunque se le volviera a
+    // dar acceso.
+    await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
 
     return asignacion;
   }

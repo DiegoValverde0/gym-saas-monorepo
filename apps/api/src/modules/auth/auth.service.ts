@@ -1,7 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
-import { formatPermiso } from '../../common/utils/permiso.util';
+import { RedisClientType } from 'redis';
+import { obtenerAccesoVigente } from '../../common/utils/acceso-vigente.util';
 import { promisify } from 'util';
 import * as crypto from 'crypto';
 import { Inject } from '@nestjs/common';
@@ -53,7 +54,8 @@ export class AuthService {
             sucursal: true,
             rol: true
           }
-        }
+        },
+        perfilStaff: { select: { organizacionId: true, deletedAt: true } },
       }
     });
 
@@ -73,7 +75,13 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    if (!user.isSuperAdmin && (!user.asignacionesAcceso || user.asignacionesAcceso.length === 0)) {
+    // Si la persona fue dada de baja del equipo de un gimnasio, ese gimnasio
+    // deja de contar (mismo criterio que obtenerAccesoVigente).
+    const asignaciones = user.asignacionesAcceso.filter(
+      (a) => !(user.perfilStaff?.deletedAt && user.perfilStaff.organizacionId === a.organizacionId),
+    );
+
+    if (!user.isSuperAdmin && asignaciones.length === 0) {
         throw new UnauthorizedException('Usuario sin organización asignada');
     }
 
@@ -81,14 +89,14 @@ export class AuthService {
 
     if (!user.isSuperAdmin) {
       if (organizacionId) {
-        asignacionActiva = user.asignacionesAcceso.find(a => a.organizacionId === organizacionId);
+        asignacionActiva = asignaciones.find(a => a.organizacionId === organizacionId);
         if (!asignacionActiva) {
           throw new UnauthorizedException('No tienes acceso a la organización seleccionada');
         }
-      } else if (user.asignacionesAcceso.length > 1) {
+      } else if (asignaciones.length > 1) {
         return {
           requireTenantSelection: true,
-          tenants: user.asignacionesAcceso.map(a => ({
+          tenants: asignaciones.map(a => ({
             organizacionId: a.organizacion?.id,
             nombre: a.organizacion?.nombre,
             sucursalNombre: a.sucursal?.nombre,
@@ -96,17 +104,16 @@ export class AuthService {
           }))
         };
       } else {
-        asignacionActiva = user.asignacionesAcceso[0];
+        asignacionActiva = asignaciones[0];
       }
     }
 
+    // El token solo identifica a la persona y su organización. Rol y
+    // sucursal se resuelven en cada petición (JwtAuthGuard + acceso vigente)
+    // para que un cambio de acceso aplique sin volver a iniciar sesión.
     const payload = { 
         sub: user.id, 
         organizacionId: asignacionActiva?.organizacionId || null,
-        organizacionNombre: asignacionActiva?.organizacion?.nombre || null,
-        sucursalId: asignacionActiva?.sucursalId || null,
-        sucursalNombre: asignacionActiva?.sucursal?.nombre || null,
-        rolNombre: asignacionActiva?.rol?.nombre || null,
         is_superadmin: user.isSuperAdmin,
     };
     
@@ -121,10 +128,10 @@ export class AuthService {
     };
   }
 
-  // Datos del usuario para hidratar el cliente (GET /auth/me). El payload del
-  // JWT ya trae organizacionId/organizacionNombre/sucursalId/sucursalNombre/
-  // rolNombre/is_superadmin -- solo falta nombre/correo, que no viajan en el
-  // token para mantenerlo chico, así que se buscan acá.
+  // Datos del usuario para hidratar el cliente (GET /auth/me). Recibe
+  // `req.user`, que JwtAuthGuard ya completó con el acceso vigente (rol,
+  // sucursal y nombre de la organización al día, no los del token); solo
+  // faltan nombre/correo, que no viajan en el token, así que se buscan acá.
   async getMe(payload: {
     sub: string;
     organizacionId?: string;
@@ -160,25 +167,8 @@ export class AuthService {
     const orgIdParaBuscar = isSuperAdmin ? null : organizacionId;
     if (!isSuperAdmin && !organizacionId) return [];
 
-    const asignacion = await this.prisma.extendedClient.asignacionAcceso.findFirst({
-      where: {
-        usuarioId: userId,
-        organizacionId: orgIdParaBuscar,
-      },
-      include: {
-        rol: {
-          include: {
-            rolPermisos: {
-              include: { permiso: true }
-            }
-          }
-        }
-      }
-    });
-
-    if (!asignacion || !asignacion.rol) return [];
-
-    return asignacion.rol.rolPermisos.map(rp => formatPermiso(rp.permiso.modulo, rp.permiso.accion));
+    const acceso = await obtenerAccesoVigente(this.prisma, this.redisClient as unknown as RedisClientType, userId, orgIdParaBuscar ?? null);
+    return acceso?.permisos ?? [];
   }
 
   async logout(token: string, payload: { exp?: number; sub?: string; organizacionId?: string; is_superadmin?: boolean; }): Promise<void> {

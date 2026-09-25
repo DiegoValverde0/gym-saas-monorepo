@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Inject } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 import { RedisClientType } from 'redis';
@@ -10,7 +10,8 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { hashContrasena } from '../../common/utils/contrasena.util';
 import { TurnoPlantillaService } from '../turno-plantilla/turno-plantilla.service';
-import { assertRolAsignableEnOrganizacion } from '../../common/utils/rol.util';
+import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
+import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 
 // Además de SUPERADMIN (ver rol.util.ts), una persona del equipo tampoco
 // puede tener el rol CLIENTE: es el de las cuentas de clientes, no de empleados.
@@ -56,6 +57,23 @@ export class PersonalService {
     };
   }
 
+  // Un usuario limitado a una sucursal solo ve y gestiona al equipo de su
+  // sucursal o al que tiene acceso a todas (plan de simplificación, 6.4.1).
+  // Así lo que aparece en el listado siempre se puede editar: la asignación
+  // de acceso de los demás queda oculta por la extensión RLS y editarlos
+  // fallaba con "no tiene acceso a la organización".
+  private filtroAlcance(): Prisma.PerfilStaffWhereInput {
+    const miSucursalId = this.cls.get('sucursalId');
+    if (!miSucursalId) return {};
+    return {
+      usuario: {
+        asignacionesAcceso: {
+          some: { organizacionId: this.cls.get('organizacionId'), OR: [{ sucursalId: miSucursalId }, { sucursalId: null }] },
+        },
+      },
+    };
+  }
+
   async create(createPersonalDto: CreatePersonalDto) {
     const { disciplinaIds, ...staffData } = createPersonalDto;
 
@@ -97,7 +115,9 @@ export class PersonalService {
   // =========================================================================
 
   async crearMiembro(dto: CreateMiembroEquipoDto) {
-    const { nombreCompleto, correo, contrasena, telefono, rolId, sucursalId, disciplinaIds, horario, ...perfil } = dto;
+    const { nombreCompleto, correo, contrasena, telefono, rolId, sucursalId: sucursalPedida, disciplinaIds, horario, ...perfil } = dto;
+    // Quien está limitado a una sucursal da de alta en la suya.
+    const sucursalId = (await assertSucursalAsignable(this.prisma, this.cls, sucursalPedida ?? undefined)) ?? this.cls.get('sucursalId');
     // Se valida el horario antes de crear nada, para no dejar a la persona
     // creada a medias si el horario está mal armado.
     if (horario) this.turnoPlantillaService.validarHorario(horario);
@@ -147,7 +167,8 @@ export class PersonalService {
 
   async actualizarMiembro(id: string, dto: UpdateMiembroEquipoDto) {
     const actual = await this.findOne(id);
-    const { nombreCompleto, telefono, rolId, sucursalId, horario, ...perfil } = dto;
+    const { nombreCompleto, telefono, rolId, sucursalId: sucursalPedida, horario, ...perfil } = dto;
+    const sucursalId = await assertSucursalAsignable(this.prisma, this.cls, sucursalPedida);
     if (horario) this.turnoPlantillaService.validarHorario(horario);
     const organizacionId = this.cls.get('organizacionId');
     let cambioAcceso = false;
@@ -158,9 +179,15 @@ export class PersonalService {
       }
 
       if (rolId !== undefined || sucursalId !== undefined) {
-        if (rolId) assertRolDeEquipo(await tx.rol.findUnique({ where: { id: rolId } }));
-        const asignacion = await tx.asignacionAcceso.findFirst({ where: { usuarioId: actual.usuarioId, organizacionId } });
+        const nuevoRol = rolId ? await tx.rol.findUnique({ where: { id: rolId } }) : null;
+        if (rolId) assertRolDeEquipo(nuevoRol);
+        const asignacion = await tx.asignacionAcceso.findFirst({ where: { usuarioId: actual.usuarioId, organizacionId }, include: { rol: true } });
         if (!asignacion) throw new BadRequestException('Esta persona no tiene acceso a la organización.');
+        const sucursalFinal = sucursalId !== undefined ? sucursalId : asignacion.sucursalId;
+        const rolFinal = nuevoRol ?? asignacion.rol;
+        if (sucursalFinal !== null || rolFinal.id !== asignacion.rol.id) {
+          await assertQuedaOtroAdministrador(tx, asignacion);
+        }
         await tx.asignacionAcceso.update({
           where: { id: asignacion.id },
           data: { ...(rolId ? { rolId } : {}), ...(sucursalId !== undefined ? { sucursalId } : {}) },
@@ -172,8 +199,10 @@ export class PersonalService {
     // Perfil y disciplinas: misma lógica que el PATCH clásico.
     if (Object.keys(perfil).length > 0) await this.update(id, perfil);
 
-    // Mismo motivo que UsuarioService.updateAsignacion: los permisos se cachean en Redis.
-    if (cambioAcceso) await this.redisClient.del(`rbac:${actual.usuarioId}:${organizacionId}`);
+    // El acceso vigente (rol, sucursal y permisos) se cachea en Redis: se
+    // invalida para que el cambio aplique en la siguiente acción de esa
+    // persona, sin que tenga que cerrar sesión.
+    if (cambioAcceso) await invalidarAccesoVigente(this.redisClient, actual.usuarioId, organizacionId);
 
     const horarioResumen = horario ? await this.turnoPlantillaService.reemplazarHorarioStaff(id, horario) : null;
     return { ...(await this.findOne(id)), horarioResumen };
@@ -183,25 +212,43 @@ export class PersonalService {
     const { page, limit, skip, take } = resolverPaginacion(query);
     const [data, total] = await Promise.all([
       this.prisma.extendedClient.perfilStaff.findMany({
+        where: this.filtroAlcance(),
         include: this.includeStaff(),
         orderBy: { createdAt: 'desc' },
         skip,
         take,
       }),
-      this.prisma.extendedClient.perfilStaff.count(),
+      this.prisma.extendedClient.perfilStaff.count({ where: this.filtroAlcance() }),
     ]);
     return paginar(data, total, page, limit);
   }
 
   async findOne(id: string) {
-    const staff = await this.prisma.extendedClient.perfilStaff.findUnique({
-      where: { id },
+    const staff = await this.prisma.extendedClient.perfilStaff.findFirst({
+      where: { id, ...this.filtroAlcance() },
       include: this.includeStaff(),
     });
     if (!staff) {
+      await this.explicarFueraDeAlcance(id);
       throw new NotFoundException(`Perfil de staff con ID ${id} no encontrado`);
     }
     return staff;
+  }
+
+  // Si la persona existe pero está fuera del alcance de quien consulta, se
+  // explica por qué en vez de responder "no encontrado".
+  private async explicarFueraDeAlcance(id: string) {
+    const miSucursalId = this.cls.get('sucursalId');
+    if (!miSucursalId) return;
+    const [otro, mia] = await Promise.all([
+      this.prisma.extendedClient.perfilStaff.findUnique({ where: { id }, select: { usuario: { select: { nombreCompleto: true } } } }),
+      this.prisma.extendedClient.sucursal.findUnique({ where: { id: miSucursalId }, select: { nombre: true } }),
+    ]);
+    if (!otro) return;
+    throw new ForbiddenException(
+      `${otro.usuario.nombreCompleto} trabaja en otra sucursal y tu acceso está limitado a ${mia?.nombre ?? 'una sucursal'}. ` +
+        'Pide a un administrador con acceso a todas las sucursales que haga este cambio.',
+    );
   }
 
   async update(id: string, updatePersonalDto: UpdatePersonalDto) {
@@ -227,18 +274,30 @@ export class PersonalService {
     });
   }
 
+  // "Dar de baja": borra (soft delete) el perfil y con eso la persona pierde
+  // el acceso a esta organización -- obtenerAccesoVigente la trata como sin
+  // acceso y su siguiente petición responde 401, que en el frontend la lleva
+  // al login. La asignación de acceso se conserva para que "Deshacer"
+  // (restore) le devuelva el mismo rol y sucursal.
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.extendedClient.perfilStaff.delete({
-      where: { id },
+    const staff = await this.findOne(id);
+    const organizacionId = this.cls.get('organizacionId');
+    const eliminado = await this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      const asignacion = await tx.asignacionAcceso.findFirst({ where: { usuarioId: staff.usuarioId, organizacionId }, include: { rol: true } });
+      if (asignacion) await assertQuedaOtroAdministrador(tx, asignacion);
+      return tx.perfilStaff.delete({ where: { id } });
     });
+    await invalidarAccesoVigente(this.redisClient, staff.usuarioId, organizacionId);
+    return eliminado;
   }
 
   async restore(id: string) {
     // No usamos findOne porque está filtrado por deletedAt: null
-    return this.prisma.extendedClient.perfilStaff.update({
+    const restaurado = await this.prisma.extendedClient.perfilStaff.update({
       where: { id },
       data: { deletedAt: null },
     });
+    await invalidarAccesoVigente(this.redisClient, restaurado.usuarioId, this.cls.get('organizacionId'));
+    return restaurado;
   }
 }

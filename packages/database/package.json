@@ -7,7 +7,8 @@
     "db:generate": "dotenv -e ../../.env -- prisma generate",
     "db:push": "dotenv -e ../../.env -- prisma db push && dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
     "lint": "eslint \"src/**/*.ts\" --fix",
-    "db:corregir-horas-clases": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-horas-clases.ts"
+    "db:corregir-horas-clases": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-horas-clases.ts",
+    "db:corregir-acceso-administradores": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-acceso-administradores.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

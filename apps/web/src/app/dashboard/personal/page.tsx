@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
-import { useAuth } from '@/hooks/use-auth';
+import { refrescarAcceso, useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPatch, apiPost, unwrapList } from '@/lib/api-client';
 import { useForm, Controller, UseFormReturn, FieldValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -135,8 +135,11 @@ function resumirHorario(bloques: Staff['turnosPlantilla']): string[] {
 export default function PersonalPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
+  // Quien tiene acceso limitado a una sucursal solo puede dar acceso a esa
+  // (el backend lo exige igual): el selector de sucursal desaparece.
+  const miSucursalId = user?.sucursalId ?? null;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPersonal, setEditingPersonal] = useState<Staff | null>(null);
@@ -191,6 +194,7 @@ export default function PersonalPage() {
   const rolesAsignables = (roles || []).filter((r) => !ROLES_NO_ASIGNABLES.includes(r.nombre));
   const sucursalesList = sucursales || [];
   const nombreSucursal = (id?: string | null) => sucursalesList.find((s) => s.id === id)?.nombre;
+  const sucursalesAsignables = miSucursalId ? sucursalesList.filter((s) => s.id === miSucursalId) : sucursalesList;
 
   const describirResultado = (res: { horarioResumen?: ResumenHorario | null; usuarioExistente?: boolean }) => {
     const partes: string[] = [];
@@ -211,6 +215,9 @@ export default function PersonalPage() {
     queryClient.invalidateQueries({ queryKey: ['usuarios'] });
     queryClient.invalidateQueries({ queryKey: ['turnos'] });
     queryClient.invalidateQueries({ queryKey: ['turnos-plantilla'] });
+    // Si la persona editada es uno mismo, la barra superior y el menú se
+    // actualizan en el acto (useAvisoCambioAcceso muestra el aviso).
+    refrescarAcceso(queryClient);
   };
 
   const saveMutation = useMutation({
@@ -247,7 +254,7 @@ export default function PersonalPage() {
     // En edición el horario solo se envía si se tocó (guardarlo re-sincroniza los turnos futuros).
     const horarioTocado = !!form.formState.dirtyFields.dias || !!form.formState.dirtyFields.horarioSucursalId;
     const enviarHorario = editingPersonal ? horarioTocado : diasActivos.length > 0;
-    const horarioSucursalId = values.horarioSucursalId || sucursalesList[0]?.id;
+    const horarioSucursalId = values.horarioSucursalId || sucursalesAsignables[0]?.id;
 
     const base: Record<string, unknown> = {
       nombreCompleto: values.nombreCompleto.trim(),
@@ -262,13 +269,14 @@ export default function PersonalPage() {
     };
 
     if (editingPersonal) {
-      saveMutation.mutate({ ...base, sucursalId: values.sucursalAccesoId || null });
+      // Con acceso limitado no se puede cambiar la sucursal de acceso: no se envía.
+      saveMutation.mutate(miSucursalId ? base : { ...base, sucursalId: values.sucursalAccesoId || null });
     } else {
       saveMutation.mutate({
         ...base,
         correo: (values.correo ?? '').trim(),
         contrasena: values.contrasena,
-        sucursalId: values.sucursalAccesoId || undefined,
+        sucursalId: miSucursalId ?? (values.sucursalAccesoId || undefined),
       });
     }
   };
@@ -276,7 +284,7 @@ export default function PersonalPage() {
   const handleAddNew = () => {
     setEditingPersonal(null);
     const iniciales = valoresIniciales();
-    if (sucursalesList.length === 1) iniciales.horarioSucursalId = sucursalesList[0].id;
+    if (sucursalesAsignables.length === 1) iniciales.horarioSucursalId = sucursalesAsignables[0].id;
     form.reset(iniciales);
     setIsDialogOpen(true);
   };
@@ -301,7 +309,7 @@ export default function PersonalPage() {
       costoPorHora: Number(staff.costoPorHora) || 0,
       comisionPorcentaje: staff.comisionPorcentaje != null ? String(Number(staff.comisionPorcentaje)) : '',
       disciplinaIds: (staff.staffDisciplinas || []).map((sd) => sd.disciplinaId),
-      horarioSucursalId: staff.turnosPlantilla?.[0]?.sucursalId || (sucursalesList.length === 1 ? sucursalesList[0].id : ''),
+      horarioSucursalId: staff.turnosPlantilla?.[0]?.sucursalId || (sucursalesAsignables.length === 1 ? sucursalesAsignables[0].id : ''),
       dias,
     });
     setIsDialogOpen(true);
@@ -309,8 +317,8 @@ export default function PersonalPage() {
 
   const handleDelete = (staff: Staff) => {
     setConfirmConfig({
-      title: '¿Quitar del equipo?',
-      description: `Se eliminará el perfil de staff de ${staff.usuario?.nombreCompleto}. Podrás deshacerlo en los próximos segundos.`,
+      title: '¿Dar de baja?',
+      description: `${staff.usuario?.nombreCompleto} dejará de tener acceso al sistema y su sesión se cerrará en su siguiente acción. Podrás deshacerlo en los próximos segundos.`,
       onConfirm: () => deleteItem(staff.id),
     });
     setConfirmOpen(true);
@@ -550,12 +558,12 @@ export default function PersonalPage() {
                 options: rolesAsignables.map((r) => ({ value: r.id, label: r.nombre })),
                 description: 'Define qué puede hacer en el sistema.',
               },
-              ...(sucursalesList.length > 1
+              ...(sucursalesAsignables.length > 1
                 ? [{
                     name: 'sucursalAccesoId',
                     label: 'Acceso a sucursales',
                     type: 'select' as const,
-                    options: [{ value: '', label: 'Todas las sucursales' }, ...sucursalesList.map((s) => ({ value: s.id, label: `Solo ${s.nombre}` }))],
+                    options: [{ value: '', label: 'Todas las sucursales' }, ...sucursalesAsignables.map((s) => ({ value: s.id, label: `Solo ${s.nombre}` }))],
                   }]
                 : []),
             ],
@@ -616,13 +624,13 @@ export default function PersonalPage() {
           {
             title: 'Horario semanal',
             fields: [
-              ...(sucursalesList.length > 1
+              ...(sucursalesAsignables.length > 1
                 ? [{
                     name: 'horarioSucursalId',
                     label: 'Sucursal donde trabaja',
                     type: 'select' as const,
                     colSpan: 2 as const,
-                    options: sucursalesList.map((s) => ({ value: s.id, label: s.nombre })),
+                    options: sucursalesAsignables.map((s) => ({ value: s.id, label: s.nombre })),
                   }]
                 : []),
               { name: 'dias', label: '', type: 'custom', colSpan: 2, renderCustom: renderHorario },

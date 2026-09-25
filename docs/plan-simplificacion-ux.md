@@ -716,6 +716,7 @@ Recomendación: **no hacer ninguno hasta que un cliente real lo pida.** Las alte
 Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque no se haga la siguiente. Estimaciones en días de trabajo de una persona.
 
 ### Fase 0 · Bugs que bloquean y accesos siempre al día (2–3 días)
+- **Estado: hecha** (2026-09-24). Pendiente de la regla 6.4.4: que las clases futuras de alguien dado de baja queden "sin instructor" (pasa a la fase 3, con la Agenda).
 - 13.12 Administrador inicial con acceso a todas las sucursales + script de corrección de datos.
 - 13.2 Rol y sucursal resueltos en el servidor en cada petición + `/auth/me` al día + refresco en el frontend (6.6 a y b).
 - 13.1 / 13.5 Listado de equipo filtrado para usuarios limitados a una sucursal + mensaje claro.

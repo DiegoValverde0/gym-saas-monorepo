@@ -218,10 +218,11 @@ export class RolService {
     }
 
     // Auditoría: Invalidar caché de Redis para todos los usuarios con este
-    // rol. Para un rol global usamos el cliente crudo: el cambio afecta a
-    // todas las organizaciones que lo usan, sin importar cuál tenga
-    // seleccionada el superadmin en este momento (ver x-tenant-id).
-    if (permisosFinales !== undefined) {
+    // rol (guarda permisos y también el nombre del rol, así que un cambio de
+    // nombre invalida igual). Para un rol global usamos el cliente crudo: el
+    // cambio afecta a todas las organizaciones que lo usan, sin importar cuál
+    // tenga seleccionada el superadmin en este momento (ver x-tenant-id).
+    if (permisosFinales !== undefined || (rolData.nombre !== undefined && rolData.nombre !== existingRol.nombre)) {
       const asignaciones = isGlobalRole
         ? await this.prisma.asignacionAcceso.findMany({ where: { rolId: id }, select: { usuarioId: true, organizacionId: true } })
         : await this.prisma.extendedClient.asignacionAcceso.findMany({ where: { rolId: id }, select: { usuarioId: true, organizacionId: true } });
