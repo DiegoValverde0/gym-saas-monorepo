@@ -164,6 +164,23 @@ export class TransaccionService {
             }
         }
 
+        // Venta de productos (plan 11.5): descuenta el stock de la sucursal si
+        // el producto lleva inventario ahí. Sin fila de inventario (modo simple,
+        // "se vende sin controlar stock") no hace nada; un stock que queda
+        // negativo no se bloquea, igual que la caja: es un descuadre a revisar.
+        if (dto.tipo === 'INGRESO') {
+            for (const det of dto.detalles) {
+                if (det.tipoConcepto !== 'PRODUCTO' || !det.productoId) continue;
+                const producto = await tx.producto.findUnique({ where: { id: det.productoId }, select: { estado: true } });
+                if (!producto) throw new BadRequestException('El producto que se quiere vender no existe.');
+                if (producto.estado !== 'ACTIVO') throw new BadRequestException('El producto está inactivo en el catálogo.');
+                await tx.inventario.updateMany({
+                    where: { productoId: det.productoId, sucursalId },
+                    data: { cantidadActual: { decrement: det.cantidad ?? 1 } },
+                });
+            }
+        }
+
         // C. Crear Pagos (validar todos antes de escribir nada, igual que antes)
         for (const pago of dto.pagos) {
             if (!pago.cuentaBancariaId) {

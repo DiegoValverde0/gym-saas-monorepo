@@ -153,7 +153,7 @@ export class TurnoTrabajoService {
   private async encontrarStaffDelUsuario(usuarioId: string) {
     const staff = await this.prisma.extendedClient.perfilStaff.findUnique({ where: { usuarioId } });
     if (!staff) {
-      throw new NotFoundException('Tu usuario no tiene un perfil de staff asociado.');
+      throw new NotFoundException('Tu usuario no es parte del equipo de este gimnasio.');
     }
     return staff;
   }
@@ -175,7 +175,7 @@ export class TurnoTrabajoService {
       orderBy: { horaEntrada: 'asc' },
     });
     if (turnos.length === 0) {
-      throw new NotFoundException('No tienes un turno programado para hoy.');
+      throw new NotFoundException('No tienes una jornada de trabajo hoy.');
     }
     // Con turno partido hay varias jornadas: la que está en curso; si no, la
     // próxima sin marcar que todavía no terminó; si no, la última.
@@ -195,7 +195,7 @@ export class TurnoTrabajoService {
   async marcarIngreso(usuarioId: string) {
     const turno = await this.encontrarTurnoDeHoy(usuarioId);
     if (turno.horaIngresoReal) {
-      throw new BadRequestException('Ya marcaste tu ingreso de hoy.');
+      throw new BadRequestException('Ya marcaste tu entrada de hoy.');
     }
     return this.registrarIngreso(turno);
   }
@@ -203,7 +203,7 @@ export class TurnoTrabajoService {
   async marcarSalida(usuarioId: string) {
     const turno = await this.encontrarTurnoDeHoy(usuarioId);
     if (!turno.horaIngresoReal) {
-      throw new BadRequestException('Debes marcar tu ingreso antes de marcar la salida.');
+      throw new BadRequestException('Primero marca tu entrada; después, la salida.');
     }
     if (turno.horaSalidaReal) {
       throw new BadRequestException('Ya marcaste tu salida de hoy.');
