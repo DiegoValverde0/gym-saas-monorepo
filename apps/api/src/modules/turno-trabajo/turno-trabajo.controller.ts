@@ -3,6 +3,7 @@ import { Request as ExpressRequest } from 'express';
 import { TurnoTrabajoService } from './turno-trabajo.service';
 import { CreateTurnoTrabajoDto } from './dto/create-turno-trabajo.dto';
 import { UpdateTurnoTrabajoDto } from './dto/update-turno-trabajo.dto';
+import { AusenciaDto, JornadasHoyQueryDto, QuitarAusenciaDto, RangoAusenciasQueryDto } from './dto/ausencia.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
@@ -37,6 +38,51 @@ export class TurnoTrabajoController {
   @Post('mi-turno/marcar-salida')
   marcarSalida(@Req() req: RequestWithUser) {
     return this.turnoTrabajoService.marcarSalida(req.user.sub);
+  }
+
+  // Jornadas del equipo (plan 7.2). También antes de ':id'.
+  @Get('hoy')
+  @RequirePermissions({ accion: 'leer', modulo: 'turnos' })
+  hoy(@Query() query: JornadasHoyQueryDto) {
+    return this.turnoTrabajoService.hoy(query);
+  }
+
+  @Get('ausencias')
+  @RequirePermissions({ accion: 'leer', modulo: 'turnos' })
+  listarAusencias(@Query() query: RangoAusenciasQueryDto) {
+    return this.turnoTrabajoService.listarAusencias(query);
+  }
+
+  // Muestra el impacto (días y clases afectadas) antes de confirmar.
+  @Post('ausencias/vista-previa')
+  @RequirePermissions({ accion: 'leer', modulo: 'turnos' })
+  vistaPreviaAusencia(@Body() dto: AusenciaDto) {
+    return this.turnoTrabajoService.vistaPreviaAusencia(dto);
+  }
+
+  @Post('ausencias')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'turnos' })
+  registrarAusencia(@Body() dto: AusenciaDto) {
+    return this.turnoTrabajoService.registrarAusencia(dto);
+  }
+
+  @Post('ausencias/quitar')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'turnos' })
+  quitarAusencia(@Body() dto: QuitarAusenciaDto) {
+    return this.turnoTrabajoService.quitarAusencia(dto);
+  }
+
+  // Marcaje por otra persona (quien gestiona el equipo), solo jornadas de hoy.
+  @Post(':id/marcar-ingreso')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'turnos' })
+  marcarIngresoDe(@Param('id') id: string) {
+    return this.turnoTrabajoService.marcarIngresoDe(id);
+  }
+
+  @Post(':id/marcar-salida')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'turnos' })
+  marcarSalidaDe(@Param('id') id: string) {
+    return this.turnoTrabajoService.marcarSalidaDe(id);
   }
 
   @Post()

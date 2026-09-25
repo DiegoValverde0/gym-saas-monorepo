@@ -17,8 +17,9 @@ export class DiaHorarioDto {
   horaSalida: string;
 }
 
-// Horario semanal completo de una persona del equipo: un bloque por día, en
-// una sola sucursal. Guardarlo REEMPLAZA el horario anterior (ver
+// Horario semanal completo de una persona del equipo, en una sola sucursal.
+// Un día puede tener varios bloques no solapados (turno partido, 6–10 y
+// 16–20). Guardarlo REEMPLAZA el horario anterior (ver
 // TurnoPlantillaService.reemplazarHorarioStaff). `dias: []` deja a la persona
 // sin horario fijo.
 export class HorarioSemanalDto {
@@ -26,7 +27,7 @@ export class HorarioSemanalDto {
   sucursalId: string;
 
   @IsArray()
-  @ArrayMaxSize(7)
+  @ArrayMaxSize(21)
   @ValidateNested({ each: true })
   @Type(() => DiaHorarioDto)
   dias: DiaHorarioDto[];

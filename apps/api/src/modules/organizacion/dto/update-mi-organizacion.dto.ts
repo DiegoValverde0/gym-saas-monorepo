@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested, IsIn } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested, IsIn, IsInt, Min, Max } from 'class-validator';
 import { MODOS_USO, ModoUso } from '../../../common/utils/modo.util';
 import { Type } from 'class-transformer';
 
@@ -62,6 +62,16 @@ export class ClasesConfigDto {
   @IsOptional()
   @IsBoolean()
   descontarSesionEnClase?: boolean;
+}
+
+// Jornadas del equipo (plan 7.2): minutos de gracia antes de mostrar a
+// alguien como atrasado. Por defecto 10.
+export class JornadasConfigDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  toleranciaAtrasoMinutos?: number;
 }
 
 export class PreferenciasOperativasConfigDto {
@@ -141,6 +151,11 @@ export class ConfiguracionTenantDto {
   @ValidateNested()
   @Type(() => ClasesConfigDto)
   clases?: ClasesConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => JornadasConfigDto)
+  jornadas?: JornadasConfigDto;
 }
 
 // Asistente de inicio (plan 4.5): aplica modo y módulos elegidos, guarda las
