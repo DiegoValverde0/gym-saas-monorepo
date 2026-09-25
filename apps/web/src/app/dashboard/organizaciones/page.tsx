@@ -163,7 +163,7 @@ export default function OrganizacionesPage() {
   const handleSuspender = (id: string) => {
     setConfirmConfig({
       title: '¿Suspender Organización?',
-      description: 'Esta acción suspende temporalmente el acceso de esta organización y de todo su staff. Puedes reactivarla cuando quieras.',
+      description: 'Esta acción suspende temporalmente el acceso de esta organización y de todo su equipo. Puedes reactivarla cuando quieras.',
       isDestructive: true,
       onConfirm: () => suspenderMutation.mutate(id),
     });
@@ -204,7 +204,7 @@ export default function OrganizacionesPage() {
           open={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           title="Registrar Nuevo Cliente SaaS"
-          description="Creará la organización, la sede central y la cuenta de administrador automáticamente."
+          description="Creará la organización, su sucursal principal y la cuenta de administrador automáticamente."
           form={createForm as any}
           sections={[
             {

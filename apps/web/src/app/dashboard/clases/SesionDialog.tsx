@@ -1,5 +1,6 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -261,6 +262,7 @@ export function SesionDialog({
 
             {/* ---------------- Solo esta sesión ---------------- */}
             <TabsContent value="sesion" className="space-y-5 mt-4">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">Los cambios de acá valen solo para esta fecha. <Ayuda tema="sesion" /></p>
               {cancelada ? (
                 <p className="text-sm text-zinc-600 dark:text-zinc-300">Esta sesión está cancelada.</p>
               ) : (
@@ -279,7 +281,7 @@ export function SesionDialog({
                         <option value="">Sin instructor</option>
                         {entrenadores.map((e) => (
                           <option key={e.id} value={e.id}>
-                            {e.nombre}{e.disponible ? ' · tiene turno' : ''}{e.imparteDisciplina === false ? ' · no da esta disciplina' : ''}
+                            {e.nombre}{e.disponible ? ' · trabaja a esa hora' : ''}{e.imparteDisciplina === false ? ' · no da esta disciplina' : ''}
                           </option>
                         ))}
                       </select>

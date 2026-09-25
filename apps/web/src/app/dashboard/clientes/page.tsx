@@ -353,7 +353,7 @@ export default function ClientesPage() {
                             {cliente.nombre}
                           </button>
                         )}
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cliente.sucursalBaseId ? 'Sede local' : 'Global'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cliente.sucursalBaseId ? 'Con sucursal base' : 'Todas las sucursales'}</p>
                       </div>
                     </div>
                   </TableCell>

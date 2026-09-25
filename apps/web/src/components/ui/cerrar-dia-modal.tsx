@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost } from '@/lib/api-client';
 import { Lock } from 'lucide-react';
+import { Ayuda } from '@/components/ui/ayuda';
 
 interface ResumenDia {
   fecha: string;
@@ -97,7 +98,7 @@ export function CerrarDiaModal({ open, onOpenChange }: { open: boolean; onOpenCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[460px] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Cerrar el día</DialogTitle>
+          <DialogTitle>Cerrar el día <Ayuda tema="cierreDia" /></DialogTitle>
           <DialogDescription>{data ? `${data.sucursal.nombre} · cuenta el efectivo de la caja y compáralo con lo esperado.` : 'Cargando…'}</DialogDescription>
         </DialogHeader>
 

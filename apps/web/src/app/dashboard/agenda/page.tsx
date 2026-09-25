@@ -179,7 +179,7 @@ export default function AgendaPage() {
             <CalendarRange className="h-6 w-6 text-indigo-600 dark:text-indigo-400" /> Agenda
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Turnos del equipo y clases de la semana en un solo lugar.{puede?.crearClases ? ' Haz clic en un hueco para programar una clase.' : ''}
+            Jornadas del equipo y clases de la semana en un solo lugar.{puede?.crearClases ? ' Haz clic en un hueco para programar una clase.' : ''}
           </p>
         </div>
 
@@ -285,7 +285,7 @@ export default function AgendaPage() {
                               type="button"
                               key={c.id}
                               onClick={() => router.push(`/dashboard/clases?clase=${c.id}`)}
-                              title={`${c.nombreClase} · ${hhmm(c.inicio)} · ${c.entrenadorNombre ?? 'sin entrenador'}`}
+                              title={`${c.nombreClase} · ${hhmm(c.inicio)} · ${c.entrenadorNombre ?? 'sin instructor'}`}
                               className={`absolute rounded-md border px-1.5 py-1 text-left text-[11px] leading-tight shadow-sm overflow-hidden hover:z-20 hover:shadow-md transition-shadow ${ESTILO_COBERTURA[c.cobertura]}`}
                               style={{
                                 top,
@@ -297,7 +297,7 @@ export default function AgendaPage() {
                               <p className="font-semibold truncate">{hhmm(c.inicio)} {c.nombreClase}</p>
                               {altura > 34 && (
                                 <p className="truncate opacity-80 flex items-center gap-1">
-                                  {c.cobertura === 'sin_entrenador' ? <><UserX className="w-3 h-3 shrink-0" /> Sin entrenador</> : c.entrenadorNombre}
+                                  {c.cobertura === 'sin_entrenador' ? <><UserX className="w-3 h-3 shrink-0" /> Sin instructor</> : c.entrenadorNombre}
                                   {c.cobertura === 'sin_turno' && <AlertTriangle className="w-3 h-3 shrink-0" />}
                                 </p>
                               )}
@@ -321,10 +321,10 @@ export default function AgendaPage() {
           <aside className="space-y-4">
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 text-xs">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Cómo leer la agenda</p>
-              {puede?.verTurnos && <p className="text-slate-600 dark:text-slate-400">Las franjas de color a la izquierda de cada día son los turnos del equipo (rayadas = ausente o cancelado).</p>}
-              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.cubierta}`} /> Entrenador con turno</p>
-              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.sin_turno}`} /> Entrenador sin turno a esa hora</p>
-              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.sin_entrenador}`} /> Clase sin entrenador</p>
+              {puede?.verTurnos && <p className="text-slate-600 dark:text-slate-400">Las franjas de color a la izquierda de cada día son las jornadas del equipo (rayadas = ausente o cancelada).</p>}
+              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.cubierta}`} /> Instructor que trabaja a esa hora</p>
+              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.sin_turno}`} /> Instructor que no trabaja a esa hora</p>
+              <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><span className={`inline-block h-3 w-5 rounded border ${ESTILO_COBERTURA.sin_entrenador}`} /> Clase sin instructor</p>
             </div>
 
             {puede?.verClases && (
@@ -333,7 +333,7 @@ export default function AgendaPage() {
                   <AlertTriangle className="h-4 w-4 text-amber-500" /> Huecos de cobertura ({huecos.length})
                 </p>
                 {huecos.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Todas las clases de la semana tienen entrenador con turno.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Todas las clases de la semana tienen un instructor que trabaja a esa hora.</p>
                 ) : (
                   <ul className="mt-2 space-y-1.5 max-h-72 overflow-y-auto">
                     {huecos.map((c) => (
@@ -341,7 +341,7 @@ export default function AgendaPage() {
                         <button type="button" onClick={() => router.push(`/dashboard/clases?clase=${c.id}`)} className="w-full text-left rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
                           <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{etiquetaDia(c.fecha).semana} {etiquetaDia(c.fecha).numero} · {hhmm(c.inicio)} · {c.nombreClase}</p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {c.cobertura === 'sin_entrenador' ? 'Sin entrenador asignado' : `${c.entrenadorNombre} no tiene turno a esa hora`}
+                            {c.cobertura === 'sin_entrenador' ? 'Sin instructor asignado' : `${c.entrenadorNombre} no trabaja a esa hora`}
                           </p>
                         </button>
                       </li>
@@ -353,9 +353,9 @@ export default function AgendaPage() {
 
             {puede?.verTurnos && (
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Horas de turno esta semana</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Horas de trabajo esta semana</p>
                 {horasPorPersona.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Nadie tiene turnos esta semana en esta sucursal.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Nadie tiene jornadas esta semana en esta sucursal.</p>
                 ) : (
                   <ul className="mt-2 space-y-1">
                     {horasPorPersona.map(([id, p]) => (

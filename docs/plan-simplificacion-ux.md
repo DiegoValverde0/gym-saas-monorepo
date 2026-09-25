@@ -791,6 +791,14 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
   - **Dashboard ("Inicio")**: en simple, accesos directos, cobrado hoy, ingresos al gimnasio y cobrado del mes; en todos los modos, "Membresías por vencer esta semana" (sin contar a quien ya renovó) con botón "Avisar" por WhatsApp y acceso a la ficha. El código de país del WhatsApp se deduce de la moneda (BOB → 591) cuando el teléfono no lo trae.
   - **Configuración** en tres pestañas: Mi gimnasio, Modo y módulos, Reglas (desde intermedio). "Avanzado" queda para cuando existan el kiosco o el horizonte de generación.
   - Pendiente: reporte financiero completo y auditoría en experto.
+- **5c · Estado: hecha** (2026-09-25), sin cambios de base de datos:
+  - **Plantillas rápidas de planes** en el asistente (Mensual libre, Trimestral, 3 veces por semana, Paquete de 10 sesiones, Horario mañana, Pase de un día); las que usan restricciones de acceso solo desde intermedio.
+  - **Productos por modo:** simple = nombre y precio, sin pestaña de stock; intermedio = stock con "Avisar cuando queden"; experto = código, descripción, ubicación en bodega. **Hallazgo: no existía ninguna pantalla para vender productos** y la venta no descontaba stock. Ahora hay "Vender producto" (en Productos y en los accesos directos del modo simple) y el backend descuenta el inventario de la sucursal si el producto lo tiene registrado (sin bloquear si queda negativo, igual que la caja) y rechaza productos inactivos.
+  - **Disciplinas:** en simple no aparece en el menú; el asistente de clase permite "+ Nueva disciplina". Desde intermedio, la lista muestra instructores, clases y quién reserva.
+  - **Sucursales:** no se agregó "copiar planes, clases y horarios": los planes y promociones ya valen para todas las sucursales, y copiar clases u horarios con los mismos instructores choca con la regla de choques (8.3). El formulario de sucursal lo explica.
+  - **Glosario 12.1** aplicado en menú, títulos, avisos y mensajes del marcaje: Equipo, Instructor, Jornada, Control de acceso, Sucursal, Sesión. "Turno de caja" se mantiene porque es otro concepto (el turno de la caja registradora).
+  - **Ayuda contextual 12.3:** ícono "?" (`components/ui/ayuda.tsx`, textos en un solo lugar) que se abre al pasar el mouse o al tocarlo, en horario de trabajo, jornada, clase, sesión, quién reserva, modo, tolerancia y cierre del día.
+  - Pendiente: el recorrido de 3 pasos al entrar por primera vez a cada pantalla en modo simple (12.3).
 - Sección 11 completa: ficha 360 del cliente, plantillas de planes, venta en una pantalla y renovación en un clic, caja automática, gasto rápido, reportes por modo, reorganización de Configuración, Dashboard por modo.
 - Sección 12: glosario aplicado, patrones de pantalla, ayuda contextual.
 - **Criterio:** los flujos más frecuentes (vender, renovar, registrar ingreso, registrar gasto, cerrar el día) toman 3 pasos o menos en modo simple.

@@ -1,5 +1,6 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
@@ -162,7 +163,7 @@ export default function ClasesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Clases</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Clases <Ayuda tema="clase" /></h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Toca una sesión para ver sus reservas o cambiar solo esa fecha; toca un hueco para crear una clase.</p>
           </div>
           <Protect permission="clases:crear" fallbackType="hide">

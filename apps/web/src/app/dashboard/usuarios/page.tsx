@@ -268,7 +268,7 @@ export default function UsuariosPage() {
                       { label: 'Acceso Global (Todas)', value: 'global', className: 'font-semibold text-indigo-600 dark:text-indigo-400' },
                       ...((sucursales as any[] | undefined)?.map((s: any) => ({ label: s.nombre, value: s.id })) || [])
                     ],
-                    description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de dicha sede.',
+                    description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de esa sucursal.',
                     colSpan: 2
                   }
                 ]

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, apiPost, apiPatch, apiDelete, unwrapList } from '@/lib/api-client';
+import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -19,7 +19,7 @@ import { ClipboardList, Plus, Edit, Trash2, Search, ArchiveRestore } from 'lucid
 import { useToast } from '@/hooks/use-toast';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/hooks/use-permissions';
 
 interface DisciplinaFormValues {
   nombre: string;
@@ -34,6 +34,18 @@ interface Disciplina {
   estado: string;
 }
 
+type ModoAcceso = 'ABIERTA' | 'MIEMBROS' | 'PLANES';
+interface AccesoClases { porDefecto: ModoAcceso; porDisciplina: Record<string, { modo: ModoAcceso; planIds?: string[] }> }
+interface StaffConDisciplinas { id: string; usuario?: { nombreCompleto: string }; staffDisciplinas?: { disciplinaId: string }[] }
+interface Serie { disciplinaId?: string | null; nombreClase: string; sucursalId: string; activa?: boolean }
+
+// Mismos textos que el asistente "Nueva clase" (paso 4).
+const QUIEN_RESERVA: Record<ModoAcceso, string> = {
+  MIEMBROS: 'Cualquier cliente con membresía',
+  PLANES: 'Solo ciertos planes',
+  ABIERTA: 'Abierta a todos',
+};
+
 export default function DisciplinasPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -41,6 +53,33 @@ export default function DisciplinasPage() {
   const { activeTenantId } = useTenantStore();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Cada disciplina muestra sus instructores, sus clases y quién puede
+  // reservarla (plan 11.11). Cada dato depende de su propio permiso.
+  const { hasPermission } = usePermissions();
+  const { data: equipo } = useQuery({
+    queryKey: ['personal', activeTenantId],
+    queryFn: async () => unwrapList<StaffConDisciplinas>(await apiGet('/personal')),
+    enabled: !!token && hasPermission('staff:leer'),
+  });
+  const { data: series } = useQuery({
+    queryKey: ['clases-plantilla', 'disciplinas'],
+    queryFn: async () => unwrapList<Serie>(await apiGet('/clases-plantilla?limit=100')),
+    enabled: !!token && hasPermission('clases:leer'),
+  });
+  const { data: acceso } = useQuery({
+    queryKey: ['acceso-clases'],
+    queryFn: async () => apiGet<AccesoClases>('/acceso-clases'),
+    enabled: !!token && hasPermission('clases:leer'),
+  });
+  const instructoresDe = (id: string) =>
+    (equipo ?? []).filter((s) => s.staffDisciplinas?.some((sd) => sd.disciplinaId === id)).map((s) => s.usuario?.nombreCompleto?.split(' ')[0] ?? 'Sin nombre');
+  const clasesDe = (id: string) =>
+    new Set((series ?? []).filter((c) => c.disciplinaId === id && c.activa !== false).map((c) => `${c.nombreClase}|${c.sucursalId}`)).size;
+  const reservaDe = (id: string) => {
+    if (!acceso) return null;
+    return QUIEN_RESERVA[(acceso.porDisciplina[id]?.modo ?? acceso.porDefecto) as ModoAcceso];
+  };
   const [editingDisciplina, setEditingDisciplina] = useState<Disciplina | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
@@ -184,7 +223,9 @@ export default function DisciplinasPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Disciplina</TableHead>
-                <TableHead>Descripción</TableHead>
+                <TableHead>Instructores</TableHead>
+                <TableHead>Clases</TableHead>
+                <TableHead>Quién reserva</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -197,11 +238,24 @@ export default function DisciplinasPage() {
                       <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
                         <ClipboardList className="h-4 w-4" />
                       </div>
-                      <p className="font-semibold text-slate-900 dark:text-white text-sm">{d.nombre}</p>
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{d.nombre}</p>
+                        {d.descripcion && <p className="text-xs text-slate-500 dark:text-slate-400">{d.descripcion}</p>}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-slate-600 dark:text-slate-400">{d.descripcion || 'Sin descripción'}</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
+                      {equipo ? (instructoresDe(d.id).join(', ') || 'Nadie la imparte todavía') : '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
+                      {series ? (clasesDe(d.id) ? `${clasesDe(d.id)} ${clasesDe(d.id) === 1 ? 'clase' : 'clases'}` : 'Sin clases') : '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{reservaDe(d.id) ?? '—'}</span>
                   </TableCell>
                   <TableCell>
                     {d.estado === 'ACTIVO' ? <Badge variant="success">Activo</Badge> : <Badge variant="default">Inactivo</Badge>}

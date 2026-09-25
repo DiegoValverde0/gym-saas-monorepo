@@ -31,6 +31,19 @@ const planSchema = z.object({
 
 type PlanFormValues = z.infer<typeof planSchema>;
 
+// Plantillas rápidas al crear un plan (plan de simplificación, 11.2): cada
+// una prellena el formulario; el precio lo pone el gimnasio. Las que usan
+// restricciones de acceso solo se ofrecen desde intermedio, porque en simple
+// esos campos no se ven.
+const PLANTILLAS_PLAN: { etiqueta: string; modoMinimo?: 'intermedio'; valores: Partial<PlanFormValues> }[] = [
+  { etiqueta: 'Mensual libre', valores: { nombre: 'Mensual libre', tipoPlan: 'TIEMPO', duracionDias: 30 } },
+  { etiqueta: 'Trimestral', valores: { nombre: 'Trimestral', tipoPlan: 'TIEMPO', duracionDias: 90 } },
+  { etiqueta: '3 veces por semana', modoMinimo: 'intermedio', valores: { nombre: 'Mensual 3 veces por semana', tipoPlan: 'TIEMPO', duracionDias: 30, limiteDiasSemana: 3 } },
+  { etiqueta: 'Paquete de 10 sesiones', valores: { nombre: 'Paquete de 10 sesiones', tipoPlan: 'SESIONES', cantidadSesiones: 10, duracionDias: 60 } },
+  { etiqueta: 'Horario mañana', modoMinimo: 'intermedio', valores: { nombre: 'Mensual horario mañana', tipoPlan: 'TIEMPO', duracionDias: 30, horaInicioAcceso: '06:00', horaFinAcceso: '12:00' } },
+  { etiqueta: 'Pase de un día', valores: { nombre: 'Pase de un día', tipoPlan: 'VISITA', duracionDias: 1 } },
+];
+
 const DAYS_OF_WEEK = [
   { label: 'Lunes', value: 1 },
   { label: 'Martes', value: 2 },
@@ -56,7 +69,7 @@ interface PlanWizardModalProps {
 
 export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPending }: PlanWizardModalProps) {
   const [step, setStep] = useState(1);
-  const { modo, esExperto } = useModoUso();
+  const { modo, esExperto, alMenos } = useModoUso();
   const ultimoPaso = esExperto ? 3 : 2;
   const [masOpciones, setMasOpciones] = useState(false);
 
@@ -285,6 +298,31 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
 
             {/* Paso 1: Información Básica */}
             <div className={step === 1 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
+              {!initialData && (
+                <div className="mb-6 space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Empieza desde una plantilla</p>
+                  <div className="flex flex-wrap gap-2">
+                    {PLANTILLAS_PLAN.filter((pl) => !pl.modoMinimo || alMenos(pl.modoMinimo)).map((pl) => (
+                      <button
+                        key={pl.etiqueta}
+                        type="button"
+                        onClick={() => {
+                          const precio = form.getValues('precio');
+                          form.reset({
+                            nombre: '', tipoPlan: 'TIEMPO', duracionDias: 30, cantidadSesiones: '', limiteDiasSemana: '', diasPermitidos: [],
+                            horaInicioAcceso: '', horaFinAcceso: '', esRenovableAutomaticamente: false, precio, estado: 'ACTIVO',
+                            ...pl.valores,
+                          });
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-indigo-400 hover:text-indigo-700"
+                      >
+                        {pl.etiqueta}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500">Después solo ajusta el nombre y el precio.</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-2 space-y-2">
                   <Label>Nombre del Plan <span className="text-red-500">*</span></Label>

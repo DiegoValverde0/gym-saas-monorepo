@@ -176,7 +176,7 @@ export default function LoginPage() {
                               </span>
                               <span className="text-xs text-zinc-500 flex items-center">
                                 <span className="w-1 h-1 rounded-full bg-zinc-600 mx-1.5 inline-block"></span>
-                                {tenant.sucursalNombre || 'Sede Global'}
+                                {tenant.sucursalNombre || 'Todas las sucursales'}
                               </span>
                             </div>
                           </div>

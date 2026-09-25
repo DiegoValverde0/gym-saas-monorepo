@@ -94,7 +94,7 @@ export function CommandPalette() {
           {modulos.clasesGrupales && hasPermission('clases:leer') && (
             <CommandItem onSelect={() => navigateTo('/dashboard/clases')}>
               <Calendar className="mr-2 h-4 w-4" />
-              <span>Clases Programadas</span>
+              <span>Clases</span>
             </CommandItem>
           )}
 
@@ -119,7 +119,7 @@ export function CommandPalette() {
           {modulos.controlPersonal && hasPermission('staff:leer') && (
             <CommandItem onSelect={() => navigateTo('/dashboard/personal')}>
               <UserCog className="mr-2 h-4 w-4" />
-              <span>Personal (Staff)</span>
+              <span>Equipo</span>
             </CommandItem>
           )}
 

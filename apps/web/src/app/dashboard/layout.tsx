@@ -72,7 +72,7 @@ const navigationGroups: NavGroup[] = [
     baseHref: '/dashboard/clientes',
     items: [
       { name: 'Clientes', href: '/dashboard/clientes', icon: Users, permission: 'clientes:leer' },
-      { name: 'Asistencias', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
+      { name: 'Control de acceso', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
     ]
   },
   {
@@ -87,14 +87,15 @@ const navigationGroups: NavGroup[] = [
     ]
   },
   {
-    title: 'Personal',
+    title: 'Equipo',
     icon: Dumbbell,
     baseHref: '/dashboard/disciplinas',
     items: [
       // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
       { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
-      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
-      { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
+      // En simple no aparece: se crean desde el asistente de clase (plan 11.11).
+      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer', modoMinimo: 'intermedio' },
+      { name: 'Equipo', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
       { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
       { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
@@ -171,8 +172,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
           }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Personal', 'Jornadas'].includes(item.name)) return modulos.controlPersonal;
-          if (item.name === 'Asistencias') return modulos.controlAcceso;
+          if (['Equipo', 'Jornadas'].includes(item.name)) return modulos.controlPersonal;
+          if (item.name === 'Control de acceso') return modulos.controlAcceso;
           // Reportes: el resumen de hoy y del mes está en todos los modos; el
           // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
           if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;

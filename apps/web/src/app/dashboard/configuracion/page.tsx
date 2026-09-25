@@ -1,5 +1,6 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPut } from '@/lib/api-client';
@@ -230,7 +231,7 @@ export default function ConfiguracionPage() {
           <TabsContent value="modo" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
             <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg">¿Cuánto detalle quieres ver?</CardTitle>
+                <CardTitle className="text-lg">¿Cuánto detalle quieres ver? <Ayuda tema="modo" /></CardTitle>
                 <CardDescription>
                   El modo decide cuántas opciones muestra el sistema. Cambiarlo no borra datos ni reglas: lo que ya configuraste sigue ahí, solo se oculta o se vuelve a mostrar.
                 </CardDescription>
@@ -285,7 +286,7 @@ export default function ConfiguracionPage() {
                 <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                   <div className="space-y-0.5">
                     <Label className="text-base font-semibold text-slate-900 dark:text-white">Clases Grupales y Disciplinas</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, entrenadores y capacidad para clases de zumba, spinning, etc.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, instructores y cupos para clases de zumba, spinning, etc.</p>
                   </div>
                   <Switch 
                     checked={form.watch('configuracion.modulos.clasesGrupales')} 
@@ -308,8 +309,8 @@ export default function ConfiguracionPage() {
 
                 <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                   <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Personal</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios y turnos de trabajo, y la agenda de cobertura.</p>
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Equipo y jornadas</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios de trabajo, las jornadas y la agenda de cobertura.</p>
                   </div>
                   <Switch 
                     checked={form.watch('configuracion.modulos.controlPersonal')} 
@@ -566,7 +567,7 @@ export default function ConfiguracionPage() {
                     className="mt-1"
                   />
                   <div className="space-y-1">
-                    <Label className="font-medium text-slate-900 dark:text-white">Exigir turno registrado para programar una clase</Label>
+                    <Label className="font-medium text-slate-900 dark:text-white">Exigir que el instructor trabaje a esa hora para programar una clase</Label>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Si está inactivo (recomendado para gimnasios pequeños), solo se muestra una advertencia cuando el entrenador
                       no tiene turno en ese horario, pero la clase se puede guardar igual. Actívalo en franquicias donde la cobertura
@@ -587,7 +588,7 @@ export default function ConfiguracionPage() {
                       className="w-20 shrink-0"
                     />
                     <div className="space-y-1">
-                      <Label htmlFor="toleranciaAtraso" className="font-medium text-slate-900 dark:text-white">Minutos de tolerancia para llegar</Label>
+                      <Label htmlFor="toleranciaAtraso" className="font-medium text-slate-900 dark:text-white">Minutos de tolerancia para llegar</Label> <Ayuda tema="tolerancia" />
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         En Jornadas, alguien aparece como atrasado si no marcó su entrada pasados estos minutos desde su hora de inicio.
                       </p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -9,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useModoUso } from '@/hooks/use-modo-uso';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { usePermissions } from '@/hooks/use-permissions';
 import { apiGet, apiPost, apiPut, unwrapList } from '@/lib/api-client';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
@@ -166,6 +168,21 @@ export function NuevaClaseWizard({
     setModoAcceso(regla.modo);
     setPlanesAcceso(regla.modo === 'PLANES' ? regla.planIds ?? [] : []);
   }, [acceso, disciplinaId, accesoTocado]);
+
+  // "Nueva disciplina" sin salir del asistente (plan 11.11): en modo simple
+  // no existe la pantalla de Disciplinas.
+  const { hasPermission } = usePermissions();
+  const [nuevaDisciplina, setNuevaDisciplina] = useState<string | null>(null);
+  const crearDisciplina = useMutation({
+    mutationFn: async (nombreDisciplina: string) => apiPost<Disciplina>('/disciplinas', { nombre: nombreDisciplina }),
+    onSuccess: async (d) => {
+      await queryClient.invalidateQueries({ queryKey: ['disciplinas'] });
+      setNuevaDisciplina(null);
+      setDisciplinaId(d.id);
+      if (!nombre) setNombre(d.nombre);
+    },
+    onError: (err: Error) => toast({ title: 'No se pudo crear la disciplina', description: err.message, variant: 'destructive' }),
+  });
 
   const elegirDisciplina = (id: string) => {
     setDisciplinaId(id);
@@ -339,10 +356,25 @@ export function NuevaClaseWizard({
     <div className="space-y-4">
       <div className="space-y-2">
         <label className={etiqueta} htmlFor="clase-disciplina">Disciplina</label>
-        <select id="clase-disciplina" value={disciplinaId} onChange={(e) => elegirDisciplina(e.target.value)} className={dateInputClass}>
-          <option value="">Sin disciplina</option>
-          {disciplinas.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-        </select>
+        {nuevaDisciplina === null ? (
+          <>
+            <select id="clase-disciplina" value={disciplinaId} onChange={(e) => elegirDisciplina(e.target.value)} className={dateInputClass}>
+              <option value="">Sin disciplina</option>
+              {disciplinas.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+            </select>
+            {hasPermission('disciplinas:crear') && (
+              <button type="button" onClick={() => setNuevaDisciplina('')} className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+                + Nueva disciplina
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="flex gap-2">
+            <Input autoFocus value={nuevaDisciplina} onChange={(e) => setNuevaDisciplina(e.target.value)} placeholder="Ej. Spinning" aria-label="Nombre de la nueva disciplina" />
+            <Button type="button" onClick={() => crearDisciplina.mutate(nuevaDisciplina.trim())} disabled={nuevaDisciplina.trim().length < 2 || crearDisciplina.isPending}>Crear</Button>
+            <Button type="button" variant="ghost" onClick={() => setNuevaDisciplina(null)}>Cancelar</Button>
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         <label className={etiqueta} htmlFor="clase-nombre">Nombre</label>
@@ -483,6 +515,7 @@ export function NuevaClaseWizard({
   const planesActivos = planes.filter((p) => p.estado === 'ACTIVO');
   const paso4 = (
     <div className="space-y-3">
+      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">¿Quién puede reservar? <Ayuda tema="quienReserva" /></p>
       {!disciplinaId ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           La clase no tiene disciplina, así que usa la regla general: puede reservar cualquier cliente con membresía activa.

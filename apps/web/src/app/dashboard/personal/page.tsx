@@ -1,5 +1,6 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
@@ -346,7 +347,7 @@ export default function PersonalPage() {
     queryKey: ['personal', activeTenantId, showDeleted],
     endpoint: 'personal',
     modelName: 'perfilStaff',
-    itemName: 'El perfil de staff',
+    itemName: 'La persona del equipo',
   });
 
   const onSubmit = (values: MiembroFormValues) => {
@@ -524,7 +525,7 @@ export default function PersonalPage() {
           <button type="button" className={chip} onClick={() => aplicarPlantilla(null)}>Sin horario fijo</button>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Días y horas de trabajo</p>
+          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Días y horas de trabajo <Ayuda tema="horario" /></p>
           <Button type="button" variant="ghost" size="sm" onClick={copiarPrimerDia} className="text-indigo-600 dark:text-indigo-400">
             <Copy className="w-3.5 h-3.5 mr-1.5" /> Copiar el primer horario a los días marcados
           </Button>
@@ -594,7 +595,7 @@ export default function PersonalPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Personal</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Equipo</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Entrenadores y personal: su acceso al sistema, disciplinas y horario semanal.</p>
           </div>
 
