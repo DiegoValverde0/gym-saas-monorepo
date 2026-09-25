@@ -26,6 +26,12 @@ export class ClientesController {
     return this.clientesService.findAll(query);
   }
 
+  @Get(':id/ficha')
+  @RequirePermissions({ accion: 'leer', modulo: 'clientes' })
+  async ficha(@Param('id') id: string) {
+    return this.clientesService.ficha(id);
+  }
+
   @Get(':id')
   @RequirePermissions({ accion: 'leer', modulo: 'clientes' })
   async findOne(@Param('id') id: string) {

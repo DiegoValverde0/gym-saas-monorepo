@@ -89,7 +89,7 @@ export class AsistenciaService {
     });
 
     if (!membresia) {
-      return { allowed: false, reason: 'El cliente no tiene una membresía ACTIVA.', clasesReservadasHoy };
+      return { allowed: false, codigo: 'SIN_MEMBRESIA', reason: 'El cliente no tiene una membresía ACTIVA.', clasesReservadasHoy };
     }
 
     const { plan } = membresia;
@@ -158,7 +158,7 @@ export class AsistenciaService {
     // 3. Validar Sesiones
     if (plan.tipoPlan === 'SESIONES') {
         if (!membresia.sesionesRestantes || membresia.sesionesRestantes <= 0) {
-            return { allowed: false, reason: 'El cliente ha agotado sus sesiones disponibles.', clasesReservadasHoy };
+            return { allowed: false, codigo: 'SESIONES_AGOTADAS', reason: 'El cliente ha agotado sus sesiones disponibles.', clasesReservadasHoy };
         }
     }
 

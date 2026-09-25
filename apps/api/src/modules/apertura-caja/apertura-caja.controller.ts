@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Req, UseGuards } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { AperturaCajaService } from './apertura-caja.service';
 import { CreateAperturaCajaDto } from './dto/create-apertura-caja.dto';
 import { CloseAperturaCajaDto } from './dto/close-apertura-caja.dto';
+import { CerrarDiaDto, ResumenDiaQueryDto } from './dto/cierre-dia.dto';
+import { CierreDiaService } from './cierre-dia.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -21,7 +23,24 @@ interface RequestWithUser extends ExpressRequest {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('apertura-caja')
 export class AperturaCajaController {
-  constructor(private readonly aperturaCajaService: AperturaCajaService) {}
+  constructor(
+    private readonly aperturaCajaService: AperturaCajaService,
+    private readonly cierreDiaService: CierreDiaService,
+  ) {}
+
+  // "Cerrar el día" del modo simple (plan 11.6): resumen de cobros y gastos
+  // de hoy en la sucursal, y el cierre con el efectivo contado.
+  @Get('dia')
+  @RequirePermissions({ accion: 'leer', modulo: 'aperturas_caja' })
+  resumenDia(@Query() query: ResumenDiaQueryDto) {
+    return this.cierreDiaService.resumen(query.sucursalId);
+  }
+
+  @Post('cerrar-dia')
+  @RequirePermissions({ accion: 'crear', modulo: 'aperturas_caja' })
+  cerrarDia(@Body() dto: CerrarDiaDto, @Req() req: RequestWithUser) {
+    return this.cierreDiaService.cerrar(dto, req.user.sub);
+  }
 
   @Post('abrir')
   @RequirePermissions({ accion: 'crear', modulo: 'aperturas_caja' })

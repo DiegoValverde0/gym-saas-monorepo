@@ -70,6 +70,14 @@ export class MembresiaService {
       }
     }
 
+    if (createMembresiaDto.descuentoManual) {
+      if (promocionId) throw new BadRequestException('Elige una promoción o un descuento manual, no los dos.');
+      if (createMembresiaDto.descuentoManual > Number(plan.precio)) {
+        throw new BadRequestException('El descuento no puede ser mayor que el precio del plan.');
+      }
+      descuentoAplicado = createMembresiaDto.descuentoManual;
+    }
+
     const montoBase = Number(plan.precio);
     let montoFinal = montoBase - descuentoAplicado;
     if (montoFinal < 0) montoFinal = 0;

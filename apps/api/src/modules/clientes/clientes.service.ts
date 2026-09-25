@@ -100,6 +100,89 @@ export class ClientesService {
     return { ...rest, segmento: calcularSegmentoCliente(membresias) };
   }
 
+  // Ficha 360 del cliente (plan 11.1): membresía actual y días que le
+  // quedan, lo necesario para "Renovar" con el mismo plan y forma de pago,
+  // últimas asistencias, reservas próximas y últimos pagos.
+  async ficha(id: string) {
+    const db = this.prisma.extendedClient;
+    const cliente = await this.findOne(id);
+    const hoy = new Date();
+    hoy.setUTCHours(0, 0, 0, 0);
+
+    const [membresias, asistencias, reservas, transacciones] = await Promise.all([
+      db.membresia.findMany({
+        where: { clienteId: id, estado: { in: ['ACTIVA', 'EN_ESPERA', 'CONGELADA', 'VENCIDA'] } },
+        include: { plan: { select: { id: true, nombre: true, tipoPlan: true, estado: true } } },
+        orderBy: { fechaInicio: 'desc' },
+        take: 5,
+      }),
+      db.registroAsistencia.findMany({
+        where: { clienteId: id },
+        select: { fechaHoraIngreso: true, sucursal: { select: { nombre: true } } },
+        orderBy: { fechaHoraIngreso: 'desc' },
+        take: 5,
+      }),
+      db.reservaClase.findMany({
+        where: { clienteId: id, estado: 'CONFIRMADA', clase: { fechaHora: { gte: new Date() }, estado: 'ACTIVO' } },
+        select: { id: true, clase: { select: { nombreClase: true, fechaHora: true, sucursal: { select: { nombre: true } } } } },
+        orderBy: { clase: { fechaHora: 'asc' } },
+        take: 5,
+      }),
+      db.transaccion.findMany({
+        where: { clienteId: id, tipo: 'INGRESO' },
+        select: {
+          fechaHora: true,
+          montoTotal: true,
+          pagos: { select: { metodoPago: true } },
+          detalles: { select: { tipoConcepto: true, descripcionLibre: true, membresia: { select: { plan: { select: { nombre: true } } } } } },
+        },
+        orderBy: { fechaHora: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    type M = (typeof membresias)[number];
+    const vigente = membresias.find((m: M) => m.estado === 'ACTIVA' && m.fechaInicio <= hoy && (!m.fechaFin || m.fechaFin >= hoy));
+    const enEspera = membresias.filter((m: M) => m.estado === 'EN_ESPERA').sort((a: M, b: M) => a.fechaInicio.getTime() - b.fechaInicio.getTime())[0];
+    const actual = vigente ?? enEspera ?? null;
+    const ultima = membresias[0] ?? null;
+    const diasRestantes = actual?.fechaFin ? Math.max(0, Math.round((actual.fechaFin.getTime() - hoy.getTime()) / 86_400_000)) : null;
+
+    const describirMembresia = (m: M) => ({
+      id: m.id,
+      estado: m.estado,
+      planId: m.plan.id,
+      planNombre: m.plan.nombre,
+      tipoPlan: m.plan.tipoPlan,
+      fechaInicio: m.fechaInicio.toISOString().slice(0, 10),
+      fechaFin: m.fechaFin ? m.fechaFin.toISOString().slice(0, 10) : null,
+      sesionesRestantes: m.sesionesRestantes,
+    });
+
+    return {
+      cliente,
+      membresiaActual: actual ? { ...describirMembresia(actual), diasRestantes } : null,
+      // "Renovar": mismo plan de la última membresía (si sigue activo) y la
+      // forma de pago del último cobro.
+      renovacion: ultima && ultima.plan.estado === 'ACTIVO'
+        ? { planId: ultima.plan.id, planNombre: ultima.plan.nombre, formaPago: transacciones[0]?.pagos[0]?.metodoPago ?? 'EFECTIVO' }
+        : null,
+      asistencias: asistencias.map((a: { fechaHoraIngreso: Date; sucursal: { nombre: string } }) => ({ fechaHora: a.fechaHoraIngreso, sucursal: a.sucursal.nombre })),
+      reservas: reservas.map((r: { id: string; clase: { nombreClase: string; fechaHora: Date; sucursal: { nombre: string } } }) => ({
+        id: r.id,
+        clase: r.clase.nombreClase,
+        fechaHora: r.clase.fechaHora,
+        sucursal: r.clase.sucursal.nombre,
+      })),
+      pagos: transacciones.map((t: { fechaHora: Date; montoTotal: unknown; pagos: { metodoPago: string }[]; detalles: { tipoConcepto: string; descripcionLibre: string | null; membresia: { plan: { nombre: string } } | null }[] }) => ({
+        fechaHora: t.fechaHora,
+        monto: Number(t.montoTotal),
+        formaPago: t.pagos.map((p) => p.metodoPago).join(' + '),
+        concepto: t.detalles.map((d) => d.descripcionLibre || (d.membresia ? `Membresía ${d.membresia.plan.nombre}` : d.tipoConcepto)).join(', '),
+      })),
+    };
+  }
+
   async update(id: string, updateData: Prisma.ClienteUpdateInput) {
     // Primero verificamos si existe (y si pertenece al tenant gracias a RLS implícito)
     const actual = await this.findOne(id);
