@@ -296,6 +296,11 @@ export class ClaseProgramadaService {
   }
 
   async create(createClaseProgramadaDto: CreateClaseProgramadaDto) {
+    // Fase 6 (DB-1): los planes de una clase se guardan en la serie; una
+    // sesión suelta solo puede ser abierta o para miembros.
+    if (createClaseProgramadaDto.acceso === 'PLANES') {
+      throw new BadRequestException('Una sesión suelta no puede limitarse a ciertos planes: créala como clase recurrente o usa la regla de su disciplina.');
+    }
     await this.assertSinChoqueDeInstructor(createClaseProgramadaDto);
     const { turnoId, disponible } = await this.resolverTurnoParaClase(createClaseProgramadaDto);
     await this.assertDisponibilidadSiEsEstricta(createClaseProgramadaDto.entrenadorId, disponible);

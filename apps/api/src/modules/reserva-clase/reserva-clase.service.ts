@@ -41,7 +41,7 @@ export class ReservaClaseService {
   async puedeReservar(claseId: string, clienteId: string) {
     const clase = await this.prisma.extendedClient.claseProgramada.findUnique({
       where: { id: claseId },
-      select: { disciplinaId: true, fechaHora: true, nombreClase: true, disciplina: { select: { nombre: true } } },
+      select: { id: true, disciplinaId: true, fechaHora: true, nombreClase: true, disciplina: { select: { nombre: true } } },
     });
     if (!clase) throw new NotFoundException('La clase no existe.');
     const { configuracion, zonaHoraria } = await this.datosOrganizacion();

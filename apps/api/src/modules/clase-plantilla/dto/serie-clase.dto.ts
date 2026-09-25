@@ -1,5 +1,5 @@
 import { OmitType } from '@nestjs/mapped-types';
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsInt, IsUUID, Matches, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsInt, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
 import { CreateClasePlantillaDto } from './create-clase-plantilla.dto';
 
 // Una "clase recurrente" (ej. Spinning Mar/Jue 18:00) = una ClasePlantilla por
@@ -18,6 +18,12 @@ export class SerieClaseDto extends OmitType(CreateClasePlantillaDto, ['diaSemana
 
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'horaInicio debe tener formato HH:MM' })
   horaInicio: string;
+
+  // Fase 6 (DB-1): planes que pueden reservar cuando acceso = PLANES.
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  planIds?: string[];
 }
 
 export class ActualizarSerieClaseDto extends SerieClaseDto {

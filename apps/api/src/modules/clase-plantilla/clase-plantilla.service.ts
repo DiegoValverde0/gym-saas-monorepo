@@ -19,6 +19,7 @@ const INCLUDE_PLANTILLA = {
   disciplina: { select: { nombre: true } },
   entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
   sucursal: { select: { nombre: true } },
+  planesAcceso: { select: { planId: true } },
 } as const;
 
 @Injectable()
@@ -100,12 +101,16 @@ export class ClasePlantillaService {
 
   // Crea la serie y genera sus clases de las próximas semanas en el acto.
   async crearSerie(dto: SerieClaseDto) {
-    const { diasSemana, ...base } = dto;
+    const { diasSemana, planIds, ...base } = dto;
     await this.assertSinChoqueDeInstructor(dto);
+    this.assertAcceso(dto);
     const data = this.normalizarHoras(base);
-    await this.prisma.extendedClient.clasePlantilla.createMany({
-      data: diasSemana.map((diaSemana) => ({ ...data, diaSemana })),
-    });
+    const creadas: string[] = [];
+    for (const diaSemana of diasSemana) {
+      const p = await this.prisma.extendedClient.clasePlantilla.create({ data: { ...data, diaSemana }, select: { id: true } });
+      creadas.push(p.id);
+    }
+    await this.guardarPlanesAcceso(creadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
     const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
     return { plantillasCreadas: diasSemana.length, ...generacion };
   }
@@ -114,9 +119,10 @@ export class ClasePlantillaService {
   // los que ya no están, y deja las clases futuras ya generadas coherentes
   // con el cambio (ver sincronizarClasesFuturas).
   async actualizarSerie(dto: ActualizarSerieClaseDto) {
-    const { ids, diasSemana, ...base } = dto;
+    const { ids, diasSemana, planIds, ...base } = dto;
     const db = this.prisma.extendedClient;
     await this.assertSinChoqueDeInstructor(dto, ids);
+    this.assertAcceso(dto);
     const actuales: Array<{ id: string; diaSemana: number }> = await db.clasePlantilla.findMany({ where: { id: { in: ids } } });
     if (actuales.length !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
 
@@ -130,10 +136,12 @@ export class ClasePlantillaService {
         await db.clasePlantilla.update({ where: { id: existente.id }, data });
         actualizadas.push(existente.id);
       } else {
-        await db.clasePlantilla.create({ data: { ...data, diaSemana } });
+        const nueva = await db.clasePlantilla.create({ data: { ...data, diaSemana }, select: { id: true } });
+        actualizadas.push(nueva.id);
         plantillasCreadas++;
       }
     }
+    await this.guardarPlanesAcceso(actualizadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
     const quitadas = actuales.filter((p) => !actualizadas.includes(p.id)).map((p) => p.id);
     if (quitadas.length > 0) await db.clasePlantilla.deleteMany({ where: { id: { in: quitadas } } });
 
@@ -160,6 +168,23 @@ export class ClasePlantillaService {
       const sala = await db.sala.findUnique({ where: { id: dto.salaId }, select: { sucursalId: true } });
       if (!sala || sala.sucursalId !== dto.sucursalId) throw new BadRequestException('La sala elegida no es de esa sucursal.');
     }
+  }
+
+  // Fase 6 (DB-1): regla propia de la clase. Con PLANES hay que elegir al
+  // menos uno.
+  private assertAcceso(dto: SerieClaseDto) {
+    if (dto.acceso === 'PLANES' && !(dto.planIds?.length)) {
+      throw new BadRequestException('Elige al menos un plan que pueda reservar esta clase.');
+    }
+  }
+
+  private async guardarPlanesAcceso(plantillaIds: string[], planIds: string[]) {
+    const db = this.prisma.extendedClient;
+    await db.clasePlantillaPlan.deleteMany({ where: { clasePlantillaId: { in: plantillaIds } } });
+    if (planIds.length === 0) return;
+    await db.clasePlantillaPlan.createMany({
+      data: plantillaIds.flatMap((clasePlantillaId) => planIds.map((planId) => ({ clasePlantillaId, planId }))),
+    });
   }
 
   // Borra la serie y sus clases futuras sin reservas (las que tienen reservas
@@ -200,6 +225,7 @@ export class ClasePlantillaService {
       descripcion: string | null;
       capacidadMaxima: number;
       salaId: string | null;
+      acceso: 'ABIERTA' | 'MIEMBROS' | 'PLANES' | null;
     }> = actualizadas.length ? await db.clasePlantilla.findMany({ where: { id: { in: actualizadas } } }) : [];
     const porId = new Map(plantillas.map((p) => [p.id, p]));
 
@@ -245,6 +271,7 @@ export class ClasePlantillaService {
           entrenadorId: plantilla.entrenadorId,
           sucursalId: plantilla.sucursalId,
           salaId: plantilla.salaId,
+          acceso: plantilla.acceso,
           capacidadMaxima: plantilla.capacidadMaxima,
           duracionMinutos: plantilla.duracionMinutos,
           fechaHora: desdeHoraLocal(fechaLocal, minutosInicio, zonaHoraria),
@@ -404,6 +431,7 @@ export class ClasePlantillaService {
           clasePlantillaId: plantilla.id,
           turnoId,
           salaId: plantilla.salaId,
+          acceso: plantilla.acceso,
           nombreClase: plantilla.nombreClase,
           descripcion: plantilla.descripcion,
           capacidadMaxima: plantilla.capacidadMaxima,

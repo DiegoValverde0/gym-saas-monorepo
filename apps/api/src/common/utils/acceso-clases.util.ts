@@ -48,14 +48,27 @@ export interface EvaluacionReserva {
  * claro si no puede ("El plan Mensual Básico de Juan no incluye Spinning").
  * `db` es el cliente con RLS (extendedClient o su transacción).
  */
+// Fase 6 (DB-1): regla propia de una sesión (copiada de su clase), con los
+// planes de la clase. null si la sesión usa la regla de su disciplina.
+export async function reglaPropiaDeSesion(db: Prisma.TransactionClient, claseId: string): Promise<ReglaAccesoClase | null> {
+  const sesion = await db.claseProgramada.findUnique({ where: { id: claseId }, select: { acceso: true, clasePlantillaId: true } });
+  if (!sesion?.acceso) return null;
+  if (sesion.acceso !== 'PLANES') return { modo: sesion.acceso };
+  const planes = sesion.clasePlantillaId
+    ? await db.clasePlantillaPlan.findMany({ where: { clasePlantillaId: sesion.clasePlantillaId }, select: { planId: true } })
+    : [];
+  return { modo: 'PLANES', planIds: planes.map((p) => p.planId) };
+}
+
 export async function evaluarReserva(
   db: Prisma.TransactionClient,
   clienteId: string,
-  clase: { disciplinaId: string | null; fechaHora: Date; disciplina?: { nombre: string } | null; nombreClase: string },
+  clase: { id?: string; disciplinaId: string | null; fechaHora: Date; disciplina?: { nombre: string } | null; nombreClase: string },
   configuracion: unknown,
   zonaHoraria: string | null | undefined,
 ): Promise<EvaluacionReserva> {
-  const regla = reglaDeDisciplina(leerAccesoClases(configuracion), clase.disciplinaId);
+  const propia = clase.id ? await reglaPropiaDeSesion(db, clase.id) : null;
+  const regla = propia ?? reglaDeDisciplina(leerAccesoClases(configuracion), clase.disciplinaId);
   if (regla.modo === 'ABIERTA') return { permitido: true, motivo: null, membresiaId: null };
 
   const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true } });
@@ -85,7 +98,7 @@ export async function evaluarReserva(
   const permitidos = new Set(regla.planIds ?? []);
   const valida = membresias.find((m) => permitidos.has(m.planId));
   if (valida) return { permitido: true, motivo: null, membresiaId: valida.id };
-  const clasesDe = clase.disciplina?.nombre ?? clase.nombreClase;
+  const clasesDe = propia ? clase.nombreClase : clase.disciplina?.nombre ?? clase.nombreClase;
   const planes = [...new Set(membresias.map((m) => m.plan.nombre))].join(' ni el plan ');
   return { permitido: false, motivo: `El plan ${planes} de ${nombre} no incluye ${clasesDe}.`, membresiaId: null };
 }

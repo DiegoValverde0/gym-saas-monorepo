@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsNotEmpty, IsOptional, IsEnum, IsInt, Min, IsDateString } from 'class-validator';
+import { IsUUID, IsString, IsNotEmpty, IsOptional, IsEnum, IsInt, Min, IsDateString, IsIn } from 'class-validator';
 import { EstadoGeneral } from '@prisma/client';
 
 export class CreateClaseProgramadaDto {
@@ -17,6 +17,12 @@ export class CreateClaseProgramadaDto {
   @IsUUID()
   @IsOptional()
   salaId?: string | null;
+
+  // Fase 6 (DB-1): quién puede reservar esta clase; sin valor, la regla de su
+  // disciplina.
+  @IsIn(['ABIERTA', 'MIEMBROS', 'PLANES'])
+  @IsOptional()
+  acceso?: 'ABIERTA' | 'MIEMBROS' | 'PLANES' | null;
 
   @IsString()
   @IsNotEmpty()

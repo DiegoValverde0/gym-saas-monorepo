@@ -161,6 +161,14 @@ enum EstadoReserva {
   EN_ESPERA
 }
 
+// Fase 6 (DB-1): quién puede reservar una clase concreta. Sin valor, vale la
+// regla de su disciplina (Organizacion.configuracion.accesoClases).
+enum AccesoClase {
+  ABIERTA
+  MIEMBROS
+  PLANES
+}
+
 enum EstadoTurno {
   PROGRAMADO
   COMPLETADO
@@ -233,6 +241,7 @@ model Organizacion {
   clientes            Cliente[]
   promociones         Promocion[]
   planes              Plan[]
+  clasesPlantillaPlanes ClasePlantillaPlan[]
   membresias          Membresia[]
   pausasMembresia     PausaMembresia[]
   registrosAsistencia RegistroAsistencia[]
@@ -563,6 +572,21 @@ model Sala {
   @@map("salas")
 }
 
+// Fase 6 (DB-1): planes que pueden reservar una clase con acceso = PLANES.
+model ClasePlantillaPlan {
+  organizacionId   String @map("organizacion_id") @db.Uuid
+  clasePlantillaId String @map("clase_plantilla_id") @db.Uuid
+  planId           String @map("plan_id") @db.Uuid
+
+  organizacion   Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  clasePlantilla ClasePlantilla @relation(fields: [clasePlantillaId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  plan           Plan           @relation(fields: [planId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+
+  @@id([clasePlantillaId, planId])
+  @@index([organizacionId])
+  @@map("clases_plantilla_planes")
+}
+
 model ClaseProgramada {
   id               String        @id @default(uuid()) @db.Uuid
   organizacionId   String        @map("organizacion_id") @db.Uuid
@@ -581,6 +605,9 @@ model ClaseProgramada {
   clasePlantillaId String?       @map("clase_plantilla_id") @db.Uuid
   // Fase 6 (DB-2): sala de esta sesión (se copia de la clase al generarla).
   salaId           String?       @map("sala_id") @db.Uuid
+  // Fase 6 (DB-1): regla propia (se copia de la clase; los planes se leen de
+  // ClasePlantillaPlan). null = la de su disciplina.
+  acceso           AccesoClase?
   nombreClase      String        @map("nombre_clase") @db.VarChar(100)
   descripcion      String?       @db.Text
   capacidadMaxima  Int           @default(20) @map("capacidad_maxima")
@@ -638,6 +665,8 @@ model ClasePlantilla {
   activa          Boolean   @default(true)
   // Fase 6 (DB-2): sala opcional; dos clases no pueden usar la misma sala a la vez.
   salaId          String?   @map("sala_id") @db.Uuid
+  // Fase 6 (DB-1): regla propia de esta clase; null = la de su disciplina.
+  acceso          AccesoClase?
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -650,6 +679,7 @@ model ClasePlantilla {
   // Restrict por el mismo motivo que disciplina/entrenador (FK compuesta).
   sala            Sala?             @relation(fields: [salaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   clasesGeneradas ClaseProgramada[]
+  planesAcceso    ClasePlantillaPlan[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId, sucursalId])
@@ -764,6 +794,7 @@ model Plan {
 
   organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   membresias   Membresia[]
+  clasesPlantilla ClasePlantillaPlan[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId])

@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, IsDateString, IsBoolean } from 'class-validator';
+import { IsUUID, IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, IsDateString, IsBoolean, IsIn } from 'class-validator';
 
 export class CreateClasePlantillaDto {
   @IsUUID()
@@ -16,6 +16,12 @@ export class CreateClasePlantillaDto {
   @IsUUID()
   @IsOptional()
   salaId?: string | null;
+
+  // Fase 6 (DB-1): quién puede reservar esta clase; sin valor, la regla de su
+  // disciplina.
+  @IsIn(['ABIERTA', 'MIEMBROS', 'PLANES'])
+  @IsOptional()
+  acceso?: 'ABIERTA' | 'MIEMBROS' | 'PLANES' | null;
 
   @IsString()
   @IsNotEmpty()

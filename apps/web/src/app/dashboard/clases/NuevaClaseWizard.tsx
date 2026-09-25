@@ -97,6 +97,9 @@ export function NuevaClaseWizard({
   const [modoAcceso, setModoAcceso] = useState<ModoAcceso>('MIEMBROS');
   const [planesAcceso, setPlanesAcceso] = useState<string[]>([]);
   const [accesoTocado, setAccesoTocado] = useState(false);
+  // Fase 6 (DB-1, experto): la regla vale solo para esta clase y no para toda la disciplina.
+  const [soloEstaClase, setSoloEstaClase] = useState(false);
+  const reglaPropia = modo === 'experto' && soloEstaClase;
 
   const { data: disciplinas = [] } = useQuery({
     queryKey: ['disciplinas', 'asistente'],
@@ -136,6 +139,11 @@ export function NuevaClaseWizard({
       setSucursalId(b.sucursalId);
       setEntrenadorId(b.entrenadorId ?? '');
       setSalaId(b.salaId ?? '');
+      setSoloEstaClase(!!b.acceso);
+      if (b.acceso) {
+        setModoAcceso(b.acceso);
+        setPlanesAcceso((b.planesAcceso ?? []).map((x) => x.planId));
+      }
       setEsUnica(false);
       setSelecciones(editarSerie.dias.map((dia) => ({ dia, inicio: minutosDeHora(horaDe(b.horaInicio)) })));
       setVigenciaDesde(fechaDe(b.vigenciaDesde));
@@ -150,6 +158,7 @@ export function NuevaClaseWizard({
     setSucursalId(inicio?.sucursalId || sucursalActiva || '');
     setEntrenadorId('');
     setSalaId('');
+    setSoloEstaClase(false);
     setEsUnica(false);
     setFechaUnica('');
     setVigenciaDesde(hoyISO());
@@ -167,11 +176,11 @@ export function NuevaClaseWizard({
 
   // Regla de quién reserva de la disciplina elegida.
   useEffect(() => {
-    if (!acceso || accesoTocado) return;
+    if (!acceso || accesoTocado || soloEstaClase) return;
     const regla = (disciplinaId && acceso.porDisciplina[disciplinaId]) || { modo: acceso.porDefecto };
     setModoAcceso(regla.modo);
     setPlanesAcceso(regla.modo === 'PLANES' ? regla.planIds ?? [] : []);
-  }, [acceso, disciplinaId, accesoTocado]);
+  }, [acceso, disciplinaId, accesoTocado, soloEstaClase]);
 
   // "Nueva disciplina" sin salir del asistente (plan 11.11): en modo simple
   // no existe la pantalla de Disciplinas.
@@ -290,6 +299,7 @@ export function NuevaClaseWizard({
       if (!esUnica && selecciones.length === 0) return 'Marca en la grilla al menos un día y hora.';
     }
     if (p === 4 && modoAcceso === 'PLANES' && planesAcceso.length === 0) return 'Elige al menos un plan.';
+    if (p === 4 && reglaPropia && esUnica && modoAcceso === 'PLANES') return 'Una clase única no puede limitarse a ciertos planes: usa la regla de la disciplina o créala como recurrente.';
     return null;
   };
 
@@ -300,18 +310,19 @@ export function NuevaClaseWizard({
         disciplinaId: disciplinaId || null,
         entrenadorId: entrenadorId || null,
         salaId: salaId || null,
+        acceso: reglaPropia ? modoAcceso : null,
         nombreClase: nombre.trim(),
         capacidadMaxima: Number(cupo),
         duracionMinutos: Number(duracion),
       };
       let sesiones = 0;
       if (esUnica) {
-        await apiPost('/clases', { ...base, disciplinaId: base.disciplinaId ?? undefined, entrenadorId: base.entrenadorId ?? undefined, salaId: base.salaId ?? undefined, fechaHora: new Date(fechaUnica).toISOString() });
+        await apiPost('/clases', { ...base, disciplinaId: base.disciplinaId ?? undefined, entrenadorId: base.entrenadorId ?? undefined, salaId: base.salaId ?? undefined, acceso: base.acceso ?? undefined, fechaHora: new Date(fechaUnica).toISOString() });
         sesiones = 1;
       } else {
         const serieBase = { ...base, vigenciaDesde, vigenciaHasta: vigenciaHasta || null, activa: editarSerie ? editarSerie.base.activa : true };
         for (const [i, [ini, dias]] of grupos.entries()) {
-          const cuerpo = { ...serieBase, horaInicio: hhmm(ini), diasSemana: dias };
+          const cuerpo = { ...serieBase, horaInicio: hhmm(ini), diasSemana: dias, planIds: reglaPropia && modoAcceso === 'PLANES' ? planesAcceso : [] };
           const r =
             editarSerie && i === 0
               ? await apiPut<{ clasesCreadas?: number }>('/clases-plantilla/serie', { ...cuerpo, ids: editarSerie.ids })
@@ -319,8 +330,9 @@ export function NuevaClaseWizard({
           sesiones += r?.clasesCreadas ?? 0;
         }
       }
-      // Quién puede reservar: es la regla de la disciplina (vale para todas sus clases).
-      if (accesoTocado && disciplinaId) {
+      // Quién puede reservar: la regla de la disciplina (vale para todas sus
+      // clases), salvo que en experto se haya elegido "solo esta clase".
+      if (accesoTocado && disciplinaId && !reglaPropia) {
         await apiPut(`/acceso-clases/disciplinas/${disciplinaId}`, modoAcceso === 'PLANES' ? { modo: modoAcceso, planIds: planesAcceso } : { modo: modoAcceso });
       }
       return sesiones;
@@ -543,10 +555,52 @@ export function NuevaClaseWizard({
   );
 
   const planesActivos = planes.filter((p) => p.estado === 'ACTIVO');
+  const opcionesAcceso = (
+    <>
+      {([
+        ['MIEMBROS', 'Cualquier cliente con membresía activa'],
+        ['PLANES', 'Solo ciertos planes'],
+        ['ABIERTA', 'Abierta a todos, incluso sin membresía (clase de prueba, evento)'],
+      ] as [ModoAcceso, string][]).map(([valor, texto]) => (
+        <button key={valor} type="button" className={`w-full text-left ${botonOpcion(modoAcceso === valor)}`} onClick={() => { setModoAcceso(valor); setAccesoTocado(true); }}>{texto}</button>
+      ))}
+      {modoAcceso === 'PLANES' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-2">
+          {planesActivos.map((p) => (
+            <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={planesAcceso.includes(p.id)}
+                onCheckedChange={(c) => { setAccesoTocado(true); setPlanesAcceso(c ? [...planesAcceso, p.id] : planesAcceso.filter((x) => x !== p.id)); }}
+              />
+              {p.nombre}
+            </label>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   const paso4 = (
     <div className="space-y-3">
       <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">¿Quién puede reservar? <Ayuda tema="quienReserva" /></p>
-      {!disciplinaId ? (
+      {modo === 'experto' && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="A qué se aplica la regla">
+          {disciplinaId && (
+            <button type="button" className={botonOpcion(!soloEstaClase)} onClick={() => { setSoloEstaClase(false); setAccesoTocado(false); }}>
+              Toda la disciplina {disciplinaElegida?.nombre}
+            </button>
+          )}
+          <button type="button" className={botonOpcion(reglaPropia)} onClick={() => { setSoloEstaClase(true); setAccesoTocado(true); }}>
+            Solo esta clase
+          </button>
+        </div>
+      )}
+      {reglaPropia ? (
+        <>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Esta regla vale solo para esta clase; el resto de las clases de la disciplina siguen con la suya.</p>
+          {opcionesAcceso}
+        </>
+      ) : !disciplinaId ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           La clase no tiene disciplina, así que usa la regla general: puede reservar cualquier cliente con membresía activa.
         </p>
@@ -555,26 +609,7 @@ export function NuevaClaseWizard({
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             Esta regla es de la disciplina <span className="font-semibold">{disciplinaElegida?.nombre}</span>: vale para todas sus clases. También se puede cambiar desde cada plan.
           </p>
-          {([
-            ['MIEMBROS', 'Cualquier cliente con membresía activa'],
-            ['PLANES', 'Solo ciertos planes'],
-            ['ABIERTA', 'Abierta a todos, incluso sin membresía (clase de prueba, evento)'],
-          ] as [ModoAcceso, string][]).map(([valor, texto]) => (
-            <button key={valor} type="button" className={`w-full text-left ${botonOpcion(modoAcceso === valor)}`} onClick={() => { setModoAcceso(valor); setAccesoTocado(true); }}>{texto}</button>
-          ))}
-          {modoAcceso === 'PLANES' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-2">
-              {planesActivos.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={planesAcceso.includes(p.id)}
-                    onCheckedChange={(c) => { setAccesoTocado(true); setPlanesAcceso(c ? [...planesAcceso, p.id] : planesAcceso.filter((x) => x !== p.id)); }}
-                  />
-                  {p.nombre}
-                </label>
-              ))}
-            </div>
-          )}
+          {opcionesAcceso}
         </>
       )}
     </div>
@@ -593,7 +628,7 @@ export function NuevaClaseWizard({
       </p>
       <p>{resumenHorario} · {duracion} min · {cupo} cupos.</p>
       {!esUnica && <p className="text-xs text-zinc-500">Las siguientes se crean solas cada semana.</p>}
-      {disciplinaId && modo !== 'simple' && (
+      {(reglaPropia || disciplinaId) && modo !== 'simple' && (
         <p className="text-xs text-zinc-500">
           Reservan: {modoAcceso === 'ABIERTA' ? 'todos, incluso sin membresía' : modoAcceso === 'MIEMBROS' ? 'cualquier cliente con membresía activa' : `solo ${planesActivos.filter((p) => planesAcceso.includes(p.id)).map((p) => p.nombre).join(', ')}`}.
         </p>
