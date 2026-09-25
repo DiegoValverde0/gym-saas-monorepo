@@ -17,6 +17,8 @@ export interface AuthUser {
   sucursalNombre?: string | null;
   rolNombre?: string | null;
   is_superadmin?: boolean;
+  // Fase 6 (DB-5): sucursal elegida en la barra superior, guardada en el servidor.
+  sucursalPreferidaId?: string | null;
 }
 
 interface UseAuthOptions {

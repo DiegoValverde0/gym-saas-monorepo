@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useTenantStore } from '@/store/use-tenant-store';
-import { apiGet, unwrapList } from '@/lib/api-client';
-import { useAuth } from './use-auth';
+import { apiGet, apiPut, unwrapList } from '@/lib/api-client';
+import { AuthUser, useAuth } from './use-auth';
 
 export interface SucursalBasica {
   id: string;
@@ -51,6 +51,7 @@ export function useSucursalActiva() {
   const organizacionId = (user?.is_superadmin ? activeTenantId : user?.organizacionId) ?? null;
   const elegidaPorOrg = useSucursalElegidaStore((s) => s.elegidaPorOrg);
   const elegir = useSucursalElegidaStore((s) => s.elegir);
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     // Misma clave que usan las pantallas para la lista de sucursales.
@@ -65,6 +66,10 @@ export function useSucursalActiva() {
   const sucursalId = useMemo(() => {
     if (sucursalFija) return sucursalFija;
     if (sucursales.length === 0) return null;
+    // Fase 6 (DB-5): la preferencia guardada en el servidor manda, así la
+    // última elección se respeta en cualquier dispositivo.
+    const preferida = user?.sucursalPreferidaId;
+    if (preferida && sucursales.some((s) => s.id === preferida)) return preferida;
     let elegida = organizacionId ? elegidaPorOrg[organizacionId] : undefined;
     if (!elegida) {
       try {
@@ -73,7 +78,7 @@ export function useSucursalActiva() {
     }
     if (elegida && sucursales.some((s) => s.id === elegida)) return elegida;
     return (sucursales.find((s) => s.esPrincipal) ?? sucursales[0]).id;
-  }, [sucursalFija, sucursales, organizacionId, elegidaPorOrg]);
+  }, [sucursalFija, sucursales, organizacionId, elegidaPorOrg, user?.sucursalPreferidaId]);
 
   // Se fija la elección migrada de las claves antiguas para no depender más de ellas.
   useEffect(() => {
@@ -94,7 +99,12 @@ export function useSucursalActiva() {
     variasSucursales: sucursales.length > 1,
     cargando: isLoading,
     cambiar: (id: string) => {
-      if (organizacionId && !sucursalFija) elegir(organizacionId, id);
+      if (!organizacionId || sucursalFija) return;
+      elegir(organizacionId, id);
+      // Se guarda también en el servidor (otros dispositivos). Se actualiza
+      // antes la copia local de /auth/me para no volver a la anterior.
+      queryClient.setQueryData<AuthUser>(['auth-me'], (u) => (u ? { ...u, sucursalPreferidaId: id } : u));
+      apiPut('/auth/me/sucursal-preferida', { sucursalId: id }).catch(() => undefined);
     },
   };
 }

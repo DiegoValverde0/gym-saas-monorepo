@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
@@ -143,8 +143,12 @@ export class AuthService {
   }) {
     const usuario = await this.prisma.extendedClient.usuario.findUnique({
       where: { id: payload.sub },
-      select: { nombreCompleto: true, correo: true },
+      select: { nombreCompleto: true, correo: true, sucursalPreferida: { select: { id: true, organizacionId: true, deletedAt: true } } },
     });
+    // Fase 6 (DB-5): solo si la sucursal preferida es de esta organización.
+    const preferida = usuario?.sucursalPreferida;
+    const sucursalPreferidaId =
+      preferida && !preferida.deletedAt && preferida.organizacionId === payload.organizacionId ? preferida.id : null;
 
     return {
       sub: payload.sub,
@@ -156,7 +160,22 @@ export class AuthService {
       sucursalNombre: payload.sucursalNombre ?? null,
       rolNombre: payload.rolNombre ?? null,
       is_superadmin: !!payload.is_superadmin,
+      sucursalPreferidaId,
     };
+  }
+
+  // Fase 6 (DB-5): la sucursal tiene que ser de la organización con la que
+  // se trabaja, y solo la elige quien tiene acceso a todas.
+  async guardarSucursalPreferida(payload: { sub: string; organizacionId?: string; sucursalId?: string }, sucursalId: string) {
+    if (!payload.organizacionId) throw new BadRequestException('Elige primero una organización.');
+    if (payload.sucursalId) throw new BadRequestException('Tu acceso está limitado a una sucursal: no puedes elegir otra.');
+    const sucursal = await this.prisma.extendedClient.sucursal.findFirst({
+      where: { id: sucursalId, organizacionId: payload.organizacionId },
+      select: { id: true },
+    });
+    if (!sucursal) throw new BadRequestException('Esa sucursal no es de tu organización.');
+    await this.prisma.extendedClient.usuario.update({ where: { id: payload.sub }, data: { sucursalPreferidaId: sucursalId } });
+    return { sucursalPreferidaId: sucursalId };
   }
 
   async getPermisos(userId: string, organizacionId: string | undefined, isSuperAdmin: boolean): Promise<string[]> {

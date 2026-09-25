@@ -277,6 +277,7 @@ model Sucursal {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  usuariosQueLaPrefieren Usuario[]         @relation("SucursalPreferida")
   cajasRegistradoras  CajaRegistradora[]
   asignacionesAcceso  AsignacionAcceso[]
   turnosTrabajo       TurnoTrabajo[]
@@ -334,6 +335,10 @@ model Usuario {
   fechaNacimiento DateTime?      @map("fecha_nacimiento") @db.Date
   estado          EstadoUsuario  @default(ACTIVO)
   isSuperAdmin    Boolean        @default(false) @map("is_superadmin")
+  // Fase 6 (DB-5): última sucursal elegida en la barra superior, para que la
+  // preferencia viaje entre dispositivos. Solo se usa si es de la
+  // organización con la que se trabaja (una persona puede estar en varias).
+  sucursalPreferidaId String?    @map("sucursal_preferida_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -341,6 +346,7 @@ model Usuario {
 
   asignacionesAcceso      AsignacionAcceso[]
   perfilStaff             PerfilStaff?
+  sucursalPreferida       Sucursal?          @relation("SucursalPreferida", fields: [sucursalPreferidaId], references: [id], onDelete: SetNull)
   aperturasCaja           AperturaCaja[]
   auditorias              Auditoria[]
   notificacionesRecibidas Notificacion[]
