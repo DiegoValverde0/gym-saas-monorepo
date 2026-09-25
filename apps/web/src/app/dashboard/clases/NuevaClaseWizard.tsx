@@ -86,6 +86,8 @@ export function NuevaClaseWizard({
   const [cupo, setCupo] = useState(20);
   const [sucursalId, setSucursalId] = useState('');
   const [entrenadorId, setEntrenadorId] = useState('');
+  // Fase 6 (DB-2): sala opcional; el selector solo aparece si la sucursal tiene salas.
+  const [salaId, setSalaId] = useState('');
   const [esUnica, setEsUnica] = useState(false);
   const [fechaUnica, setFechaUnica] = useState('');
   const [selecciones, setSelecciones] = useState<Seleccion[]>([]);
@@ -133,6 +135,7 @@ export function NuevaClaseWizard({
       setCupo(b.capacidadMaxima);
       setSucursalId(b.sucursalId);
       setEntrenadorId(b.entrenadorId ?? '');
+      setSalaId(b.salaId ?? '');
       setEsUnica(false);
       setSelecciones(editarSerie.dias.map((dia) => ({ dia, inicio: minutosDeHora(horaDe(b.horaInicio)) })));
       setVigenciaDesde(fechaDe(b.vigenciaDesde));
@@ -146,6 +149,7 @@ export function NuevaClaseWizard({
     setCupo(20);
     setSucursalId(inicio?.sucursalId || sucursalActiva || '');
     setEntrenadorId('');
+    setSalaId('');
     setEsUnica(false);
     setFechaUnica('');
     setVigenciaDesde(hoyISO());
@@ -203,15 +207,21 @@ export function NuevaClaseWizard({
   });
   const entrenadoresDeLaDisciplina = disciplinaId ? entrenadores.filter((e) => e.imparteDisciplina) : entrenadores;
   const listaEntrenadores = entrenadoresDeLaDisciplina.length > 0 ? entrenadoresDeLaDisciplina : entrenadores;
+  const { data: salas = [] } = useQuery({
+    queryKey: ['salas', sucursalId],
+    queryFn: async () => apiGet<{ id: string; nombre: string; capacidad: number | null }[]>(`/salas?sucursalId=${sucursalId}`),
+    enabled: open && !!sucursalId,
+  });
 
   // ---- Paso 3: grilla
   const { data: horarios } = useQuery({
-    queryKey: ['clases-horarios', sucursalId, entrenadorId, editarSerie?.ids.join(',')],
+    queryKey: ['clases-horarios', sucursalId, entrenadorId, salaId, editarSerie?.ids.join(',')],
     queryFn: async () =>
       apiGet<Horarios>(
         `/clases/horarios-disponibles?${new URLSearchParams({
           sucursalId,
           ...(entrenadorId ? { entrenadorId } : {}),
+          ...(salaId ? { salaId } : {}),
           ...(editarSerie ? { excluirIds: editarSerie.ids.join(',') } : {}),
         })}`,
       ),
@@ -238,7 +248,7 @@ export function NuevaClaseWizard({
     const estado = estadoCelda(dia, ini);
     if (estado === 'rojo') {
       const choque = horarios?.ocupado.find((t) => solapa(t, dia, ini));
-      toast({ title: 'Horario ocupado', description: `Ese horario choca con ${choque?.nombre ?? 'otra clase'} del instructor.`, variant: 'destructive' });
+      toast({ title: 'Horario ocupado', description: `Ese horario choca con ${choque?.nombre ?? 'otra clase'}${choque?.sucursal ? ` (${choque.sucursal})` : ''}.`, variant: 'destructive' });
       return;
     }
     if (estado === 'amarillo' && reglaEstricta) {
@@ -289,13 +299,14 @@ export function NuevaClaseWizard({
         sucursalId,
         disciplinaId: disciplinaId || null,
         entrenadorId: entrenadorId || null,
+        salaId: salaId || null,
         nombreClase: nombre.trim(),
         capacidadMaxima: Number(cupo),
         duracionMinutos: Number(duracion),
       };
       let sesiones = 0;
       if (esUnica) {
-        await apiPost('/clases', { ...base, disciplinaId: base.disciplinaId ?? undefined, entrenadorId: base.entrenadorId ?? undefined, fechaHora: new Date(fechaUnica).toISOString() });
+        await apiPost('/clases', { ...base, disciplinaId: base.disciplinaId ?? undefined, entrenadorId: base.entrenadorId ?? undefined, salaId: base.salaId ?? undefined, fechaHora: new Date(fechaUnica).toISOString() });
         sesiones = 1;
       } else {
         const serieBase = { ...base, vigenciaDesde, vigenciaHasta: vigenciaHasta || null, activa: editarSerie ? editarSerie.base.activa : true };
@@ -404,13 +415,32 @@ export function NuevaClaseWizard({
       {puedeElegir && !inicio?.sucursalFija && !editarSerie ? (
         <div className="space-y-2">
           <label className={etiqueta} htmlFor="clase-sucursal">Sucursal</label>
-          <select id="clase-sucursal" value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setEntrenadorId(''); }} className={dateInputClass}>
+          <select id="clase-sucursal" value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setEntrenadorId(''); setSalaId(''); }} className={dateInputClass}>
             {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
         </div>
       ) : sucursales.length > 1 && sucursalElegida ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-300">Sucursal: <span className="font-semibold">{sucursalElegida.nombre}</span></p>
       ) : null}
+      {salas.length > 0 && (
+        <div className="space-y-2">
+          <label className={etiqueta} htmlFor="clase-sala">Sala</label>
+          <select
+            id="clase-sala"
+            value={salaId}
+            onChange={(e) => {
+              setSalaId(e.target.value);
+              const sala = salas.find((s) => s.id === e.target.value);
+              if (sala?.capacidad && !editarSerie) setCupo(sala.capacidad);
+            }}
+            className={dateInputClass}
+          >
+            <option value="">Sin sala</option>
+            {salas.map((s) => <option key={s.id} value={s.id}>{s.nombre}{s.capacidad ? ` (${s.capacidad} personas)` : ''}</option>)}
+          </select>
+          <p className="text-xs text-zinc-500">Si eliges una sala, la grilla marca en rojo los horarios en que ya tiene otra clase.</p>
+        </div>
+      )}
       <div className="space-y-2">
         <p className={etiqueta}>Instructor</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -558,6 +588,7 @@ export function NuevaClaseWizard({
         <span className="font-semibold">{esUnica ? '1 sesión' : `${sesionesPrevistas} sesiones`}</span> de <span className="font-semibold">{nombre}</span>
         {esUnica ? '' : ` en las próximas ${SEMANAS_PROYECCION} semanas`}
         {sucursalElegida ? <> en <span className="font-semibold">{sucursalElegida.nombre}</span></> : null}
+        {salas.find((s) => s.id === salaId) ? <> ({salas.find((s) => s.id === salaId)?.nombre})</> : null}
         {entrenadorElegido ? <> con <span className="font-semibold">{entrenadorElegido.nombre}</span></> : ' sin instructor por ahora'}.
       </p>
       <p>{resumenHorario} · {duracion} min · {cupo} cupos.</p>

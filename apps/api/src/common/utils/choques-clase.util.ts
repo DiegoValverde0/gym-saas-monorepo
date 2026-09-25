@@ -89,3 +89,75 @@ export async function choqueDeSesion(
   const dia = local.fechaSolo.toISOString().slice(5, 10).split('-').reverse().join('/');
   return `${await nombreInstructor(db, datos.entrenadorId)} ya da ${choque.nombreClase} el ${dia} de ${hhmm(local.minutosDelDia)} a ${hhmm(local.minutosDelDia + choque.duracionMinutos)}.`;
 }
+
+// ---------------------------------------------------------------------------
+// Choques de sala (fase 6, DB-2): dos clases no pueden usar la misma sala a
+// la vez, sea cual sea el instructor.
+// ---------------------------------------------------------------------------
+
+async function nombreSala(db: Db, salaId: string) {
+  const sala = await db.sala.findUnique({ where: { id: salaId }, select: { nombre: true } });
+  return sala?.nombre ?? 'La sala';
+}
+
+/** Serie semanal: ¿otra clase recurrente usa esa sala en esos días y horario? */
+export async function choqueDeSalaSerie(
+  db: Db,
+  datos: {
+    salaId?: string | null;
+    diasSemana: number[];
+    horaInicio: string; // "HH:MM"
+    duracionMinutos?: number | null;
+    vigenciaDesde: string | Date;
+    vigenciaHasta?: string | Date | null;
+    excluirIds?: string[];
+  },
+): Promise<string | null> {
+  if (!datos.salaId) return null;
+  const inicio = Number(datos.horaInicio.slice(0, 2)) * 60 + Number(datos.horaInicio.slice(3, 5));
+  const duracion = datos.duracionMinutos ?? 60;
+  const desde = new Date(datos.vigenciaDesde);
+  const hasta = datos.vigenciaHasta ? new Date(datos.vigenciaHasta) : null;
+
+  const otras = await db.clasePlantilla.findMany({
+    where: {
+      salaId: datos.salaId,
+      activa: true,
+      diaSemana: { in: datos.diasSemana },
+      ...(datos.excluirIds?.length ? { id: { notIn: datos.excluirIds } } : {}),
+      ...(hasta ? { vigenciaDesde: { lte: hasta } } : {}),
+      OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: desde } }],
+    },
+    select: { diaSemana: true, horaInicio: true, duracionMinutos: true, nombreClase: true },
+    orderBy: { diaSemana: 'asc' },
+  });
+  const choque = otras.find((o) => seSolapan(inicio, duracion, minutosDe(o.horaInicio), o.duracionMinutos));
+  if (!choque) return null;
+  const ini = minutosDe(choque.horaInicio);
+  return `${await nombreSala(db, datos.salaId)} ya tiene ${choque.nombreClase} los ${DIAS_PLURAL[choque.diaSemana]} de ${hhmm(ini)} a ${hhmm(ini + choque.duracionMinutos)}.`;
+}
+
+/** Sesión puntual: ¿otra sesión activa usa esa sala a esa hora? */
+export async function choqueDeSalaSesion(
+  db: Db,
+  datos: { salaId?: string | null; fechaHora: string | Date; duracionMinutos?: number | null; excluirClaseId?: string },
+  zonaHoraria: string | null | undefined,
+): Promise<string | null> {
+  if (!datos.salaId) return null;
+  const inicio = new Date(datos.fechaHora);
+  const fin = new Date(inicio.getTime() + (datos.duracionMinutos ?? 60) * 60_000);
+  const candidatas = await db.claseProgramada.findMany({
+    where: {
+      salaId: datos.salaId,
+      estado: 'ACTIVO',
+      fechaHora: { gte: new Date(inicio.getTime() - 24 * 3600_000), lt: fin },
+      ...(datos.excluirClaseId ? { id: { not: datos.excluirClaseId } } : {}),
+    },
+    select: { fechaHora: true, duracionMinutos: true, nombreClase: true },
+  });
+  const choque = candidatas.find((c) => c.fechaHora.getTime() + c.duracionMinutos * 60_000 > inicio.getTime());
+  if (!choque) return null;
+  const local = aHoraLocal(choque.fechaHora, zonaHoraria);
+  const dia = local.fechaSolo.toISOString().slice(5, 10).split('-').reverse().join('/');
+  return `${await nombreSala(db, datos.salaId)} ya tiene ${choque.nombreClase} el ${dia} de ${hhmm(local.minutosDelDia)} a ${hhmm(local.minutosDelDia + choque.duracionMinutos)}.`;
+}

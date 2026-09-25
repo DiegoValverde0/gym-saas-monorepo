@@ -15,10 +15,12 @@ import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { Protect } from '@/components/ui/protect';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
-import { Building2, Plus, Edit, Trash2, Search, ArchiveRestore } from 'lucide-react';
+import { Building2, Plus, Edit, Trash2, Search, ArchiveRestore, DoorOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { useModoUso } from '@/hooks/use-modo-uso';
+import { SalasDialog } from './SalasDialog';
 
 const sucursalSchema = z.object({
   nombre: z.string({ message: "El nombre es obligatorio" }).min(3, "El nombre es obligatorio"),
@@ -35,6 +37,8 @@ export default function SucursalesPage() {
   const { toast } = useToast();
   const { token } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [sucursalSalas, setSucursalSalas] = useState<{ id: string; nombre: string } | null>(null);
+  const { alMenos } = useModoUso();
   const [editingSucursal, setEditingSucursal] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
@@ -269,6 +273,14 @@ export default function SucursalesPage() {
                         </Protect>
                       ) : (
                         <>
+                          {/* Salas (fase 6, DB-2): desde intermedio. */}
+                          {alMenos('intermedio') && (
+                            <Protect permission="sucursales:actualizar">
+                              <Button variant="ghost" size="sm" onClick={() => setSucursalSalas(sucursal)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 h-8 px-2">
+                                <DoorOpen className="h-4 w-4 mr-1" /> Salas
+                              </Button>
+                            </Protect>
+                          )}
                           <Protect permission="sucursales:actualizar">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(sucursal)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                               <Edit className="h-4 w-4" />
@@ -289,6 +301,8 @@ export default function SucursalesPage() {
           </Table>
         )}
         
+        <SalasDialog sucursal={sucursalSalas} onClose={() => setSucursalSalas(null)} />
+
         <GlobalConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}

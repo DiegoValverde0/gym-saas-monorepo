@@ -9,13 +9,14 @@ import { HorariosDisponiblesDto } from './dto/horarios-disponibles.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
-import { choqueDeSesion } from '../../common/utils/choques-clase.util';
+import { choqueDeSalaSesion, choqueDeSesion } from '../../common/utils/choques-clase.util';
 import { promoverListaEspera } from '../../common/utils/lista-espera.util';
 
 const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
   entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
   sucursal: { select: { nombre: true } },
+  sala: { select: { nombre: true } },
   // Solo se listan las que ocupan cupo (CONFIRMADA o ASISTIO); el frontend
   // usa reservas.length contra capacidadMaxima.
   reservas: { where: { estado: { in: ['CONFIRMADA' as const, 'ASISTIO' as const] } }, select: { id: true } },
@@ -23,6 +24,7 @@ const INCLUDE_RESUMEN = {
 
 const INCLUDE_DETALLE = {
   disciplina: true,
+  sala: { select: { nombre: true } },
   entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
   sucursal: { select: { nombre: true } },
   reservas: {
@@ -223,15 +225,33 @@ export class ClaseProgramadaService {
       }),
     ]);
 
+    // Clases de otros instructores que ya usan la sala elegida (fase 6, DB-2):
+    // también bloquean ese horario.
+    const enSala: Array<{ diaSemana: number; horaInicio: Date; duracionMinutos: number; nombreClase: string; sala: { nombre: string } | null }> = q.salaId
+      ? await db.clasePlantilla.findMany({
+          where: { ...vigente, salaId: q.salaId, id: { notIn: excluir }, ...(q.entrenadorId ? { entrenadorId: { not: q.entrenadorId } } : {}) },
+          select: { diaSemana: true, horaInicio: true, duracionMinutos: true, nombreClase: true, sala: { select: { nombre: true } } },
+        })
+      : [];
+
     return {
       trabajo: trabajo.map((t) => ({ diaSemana: t.diaSemana, desde: minutos(t.horaEntrada), hasta: minutos(t.horaSalida) })),
-      ocupado: ocupado.map((c) => ({
+      ocupado: [
+        ...enSala.map((c) => ({
+          diaSemana: c.diaSemana,
+          desde: minutos(c.horaInicio),
+          hasta: minutos(c.horaInicio) + c.duracionMinutos,
+          nombre: c.nombreClase,
+          sucursal: c.sala?.nombre ?? 'Sala',
+        })),
+        ...ocupado.map((c) => ({
         diaSemana: c.diaSemana,
         desde: minutos(c.horaInicio),
         hasta: minutos(c.horaInicio) + c.duracionMinutos,
         nombre: c.nombreClase,
         sucursal: c.sucursal.nombre,
       })),
+      ],
       sucursal: sucursal.map((c) => ({
         diaSemana: c.diaSemana,
         desde: minutos(c.horaInicio),
@@ -261,13 +281,18 @@ export class ClaseProgramadaService {
   }
 
   // Plan 8.3: el instructor no puede tener otra sesión que se solape.
-  private async assertSinChoqueDeInstructor(datos: DatosDisponibilidad, excluirClaseId?: string) {
-    const choque = await choqueDeSesion(
-      this.prisma.extendedClient as unknown as Prisma.TransactionClient,
-      { ...datos, excluirClaseId },
-      await this.zonaHorariaOrganizacion(),
-    );
+  // Fase 6 (DB-2): también la sala, si la sesión tiene una.
+  private async assertSinChoqueDeInstructor(datos: DatosDisponibilidad & { salaId?: string | null }, excluirClaseId?: string) {
+    const db = this.prisma.extendedClient as unknown as Prisma.TransactionClient;
+    const zonaHoraria = await this.zonaHorariaOrganizacion();
+    const choque =
+      (await choqueDeSesion(db, { ...datos, excluirClaseId }, zonaHoraria)) ??
+      (await choqueDeSalaSesion(db, { ...datos, excluirClaseId }, zonaHoraria));
     if (choque) throw new BadRequestException(choque);
+    if (datos.salaId) {
+      const sala = await db.sala.findUnique({ where: { id: datos.salaId }, select: { sucursalId: true } });
+      if (!sala || sala.sucursalId !== datos.sucursalId) throw new BadRequestException('La sala elegida no es de esa sucursal.');
+    }
   }
 
   async create(createClaseProgramadaDto: CreateClaseProgramadaDto) {
@@ -311,7 +336,8 @@ export class ClaseProgramadaService {
   async update(id: string, updateClaseProgramadaDto: UpdateClaseProgramadaDto) {
     const actual = await this.findOne(id);
 
-    const datosParaValidar: DatosDisponibilidad = {
+    const datosParaValidar: DatosDisponibilidad & { salaId?: string | null } = {
+      salaId: 'salaId' in updateClaseProgramadaDto ? updateClaseProgramadaDto.salaId : actual.salaId,
       entrenadorId: 'entrenadorId' in updateClaseProgramadaDto ? updateClaseProgramadaDto.entrenadorId : actual.entrenadorId,
       sucursalId: updateClaseProgramadaDto.sucursalId ?? actual.sucursalId,
       fechaHora: updateClaseProgramadaDto.fechaHora ?? actual.fechaHora,

@@ -9,7 +9,7 @@ import { ActualizarSerieClaseDto, SerieClaseDto } from './dto/serie-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
-import { choqueDeSerie } from '../../common/utils/choques-clase.util';
+import { choqueDeSalaSerie, choqueDeSerie } from '../../common/utils/choques-clase.util';
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de clases a
 // partir de las plantillas activas (mismo default que turno-plantilla.service.ts).
@@ -143,17 +143,23 @@ export class ClasePlantillaService {
   }
 
   // Plan 8.3: un instructor no puede dar dos clases recurrentes que se solapan.
+  // Fase 6 (DB-2): tampoco puede haber dos clases en la misma sala a la vez.
   private async assertSinChoqueDeInstructor(dto: SerieClaseDto, excluirIds: string[] = []) {
-    const choque = await choqueDeSerie(this.prisma.extendedClient as unknown as Prisma.TransactionClient, {
-      entrenadorId: dto.entrenadorId,
+    const db = this.prisma.extendedClient as unknown as Prisma.TransactionClient;
+    const datos = {
       diasSemana: dto.diasSemana,
       horaInicio: dto.horaInicio,
       duracionMinutos: dto.duracionMinutos,
       vigenciaDesde: `${dto.vigenciaDesde}T00:00:00Z`,
       vigenciaHasta: dto.vigenciaHasta ? `${dto.vigenciaHasta}T00:00:00Z` : null,
       excluirIds,
-    });
+    };
+    const choque = (await choqueDeSerie(db, { ...datos, entrenadorId: dto.entrenadorId })) ?? (await choqueDeSalaSerie(db, { ...datos, salaId: dto.salaId }));
     if (choque) throw new BadRequestException(choque);
+    if (dto.salaId) {
+      const sala = await db.sala.findUnique({ where: { id: dto.salaId }, select: { sucursalId: true } });
+      if (!sala || sala.sucursalId !== dto.sucursalId) throw new BadRequestException('La sala elegida no es de esa sucursal.');
+    }
   }
 
   // Borra la serie y sus clases futuras sin reservas (las que tienen reservas
@@ -193,6 +199,7 @@ export class ClasePlantillaService {
       nombreClase: string;
       descripcion: string | null;
       capacidadMaxima: number;
+      salaId: string | null;
     }> = actualizadas.length ? await db.clasePlantilla.findMany({ where: { id: { in: actualizadas } } }) : [];
     const porId = new Map(plantillas.map((p) => [p.id, p]));
 
@@ -237,6 +244,7 @@ export class ClasePlantillaService {
           disciplinaId: plantilla.disciplinaId,
           entrenadorId: plantilla.entrenadorId,
           sucursalId: plantilla.sucursalId,
+          salaId: plantilla.salaId,
           capacidadMaxima: plantilla.capacidadMaxima,
           duracionMinutos: plantilla.duracionMinutos,
           fechaHora: desdeHoraLocal(fechaLocal, minutosInicio, zonaHoraria),
@@ -395,6 +403,7 @@ export class ClasePlantillaService {
           entrenadorId: plantilla.entrenadorId,
           clasePlantillaId: plantilla.id,
           turnoId,
+          salaId: plantilla.salaId,
           nombreClase: plantilla.nombreClase,
           descripcion: plantilla.descripcion,
           capacidadMaxima: plantilla.capacidadMaxima,

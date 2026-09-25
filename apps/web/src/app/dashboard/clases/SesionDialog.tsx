@@ -168,7 +168,7 @@ export function SesionDialog({
           <DialogTitle>{clase?.nombreClase ?? 'Clase'}</DialogTitle>
           <DialogDescription>
             {clase
-              ? `${fechaTexto} · ${clase.entrenador?.usuario?.nombreCompleto ?? 'Sin instructor'} · ${reservasActivas}/${clase.capacidadMaxima} cupos${cancelada ? ' · CANCELADA' : ''}`
+              ? `${fechaTexto} · ${clase.entrenador?.usuario?.nombreCompleto ?? 'Sin instructor'}${clase.sala ? ` · ${clase.sala.nombre}` : ''} · ${reservasActivas}/${clase.capacidadMaxima} cupos${cancelada ? ' · CANCELADA' : ''}`
               : 'Cargando...'}
           </DialogDescription>
         </DialogHeader>

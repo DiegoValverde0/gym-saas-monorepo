@@ -32,6 +32,7 @@ interface ClaseAgenda {
   entrenadorId: string | null;
   entrenadorNombre: string | null;
   disciplina: string | null;
+  sala?: string | null;
   recurrente: boolean;
   cobertura: Cobertura;
 }
@@ -285,7 +286,7 @@ export default function AgendaPage() {
                               type="button"
                               key={c.id}
                               onClick={() => router.push(`/dashboard/clases?clase=${c.id}`)}
-                              title={`${c.nombreClase} · ${hhmm(c.inicio)} · ${c.entrenadorNombre ?? 'sin instructor'}`}
+                              title={`${c.nombreClase} · ${hhmm(c.inicio)} · ${c.entrenadorNombre ?? 'sin instructor'}${c.sala ? ` · ${c.sala}` : ''}`}
                               className={`absolute rounded-md border px-1.5 py-1 text-left text-[11px] leading-tight shadow-sm overflow-hidden hover:z-20 hover:shadow-md transition-shadow ${ESTILO_COBERTURA[c.cobertura]}`}
                               style={{
                                 top,

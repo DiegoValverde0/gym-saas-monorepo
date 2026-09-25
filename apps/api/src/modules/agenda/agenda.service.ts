@@ -96,6 +96,7 @@ export class AgendaService {
         clasePlantillaId: string | null;
         entrenador: { deletedAt: Date | null; usuario: { nombreCompleto: string } | null } | null;
         disciplina: { nombre: string } | null;
+        sala: { nombre: string } | null;
         _count: { reservas: number };
       }> = await db.claseProgramada.findMany({
         where: {
@@ -106,6 +107,7 @@ export class AgendaService {
         include: {
           entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
           disciplina: { select: { nombre: true } },
+          sala: { select: { nombre: true } },
           _count: { select: { reservas: { where: { estado: { in: ['CONFIRMADA', 'ASISTIO'] } } } } },
         },
         orderBy: { fechaHora: 'asc' },
@@ -137,6 +139,7 @@ export class AgendaService {
           entrenadorId: deBaja ? null : c.entrenadorId,
           entrenadorNombre: deBaja ? null : c.entrenador?.usuario?.nombreCompleto ?? null,
           disciplina: c.disciplina?.nombre ?? null,
+          sala: c.sala?.nombre ?? null,
           recurrente: !!c.clasePlantillaId,
           cobertura,
         };

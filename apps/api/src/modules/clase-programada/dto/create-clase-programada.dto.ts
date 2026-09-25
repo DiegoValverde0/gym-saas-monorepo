@@ -13,6 +13,11 @@ export class CreateClaseProgramadaDto {
   @IsOptional()
   entrenadorId?: string;
 
+  // Fase 6 (DB-2): sala opcional de la sucursal.
+  @IsUUID()
+  @IsOptional()
+  salaId?: string | null;
+
   @IsString()
   @IsNotEmpty()
   nombreClase: string;

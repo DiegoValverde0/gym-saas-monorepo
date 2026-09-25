@@ -17,6 +17,7 @@ export interface Reserva {
 export interface Clase {
   id: string;
   nombreClase: string;
+  sala?: { nombre: string } | null;
   descripcion?: string | null;
   capacidadMaxima: number;
   duracionMinutos: number;
@@ -49,6 +50,8 @@ export interface ClasePlantilla {
   disciplina?: Disciplina;
   entrenador?: Entrenador;
   sucursal?: Sucursal;
+  // Fase 6 (DB-2): sala opcional.
+  salaId?: string | null;
 }
 
 // Una clase recurrente = varias ClasePlantilla (una por día) con los mismos datos.
@@ -78,7 +81,7 @@ export function agruparSeries(plantillas: ClasePlantilla[]): SerieClase[] {
   const grupos = new Map<string, SerieClase>();
   for (const p of plantillas) {
     const clave = [
-      p.sucursalId, p.disciplinaId ?? '', p.entrenadorId ?? '', p.nombreClase, p.descripcion ?? '', p.capacidadMaxima,
+      p.sucursalId, p.salaId ?? '', p.disciplinaId ?? '', p.entrenadorId ?? '', p.nombreClase, p.descripcion ?? '', p.capacidadMaxima,
       horaDe(p.horaInicio), p.duracionMinutos, fechaDe(p.vigenciaDesde), fechaDe(p.vigenciaHasta), p.activa,
     ].join('|');
     const serie = grupos.get(clave) ?? { clave, ids: [], dias: [], base: p };

@@ -217,6 +217,7 @@ model Organizacion {
 
   // Relaciones
   sucursales          Sucursal[]
+  salas               Sala[]
   cajasRegistradoras  CajaRegistradora[]
   roles               Rol[]
   asignacionesAcceso  AsignacionAcceso[]
@@ -272,6 +273,7 @@ model Sucursal {
   turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
   clasesPlantilla     ClasePlantilla[]
+  salas               Sala[]
   clientesBase        Cliente[]
   registrosAsistencia RegistroAsistencia[]
   transacciones       Transaccion[]
@@ -531,6 +533,31 @@ model TurnoPlantilla {
   @@map("turnos_plantilla")
 }
 
+// Fase 6 (DB-2): salas de una sucursal, para detectar choques de horario por
+// sala (dos clases a la misma hora en la misma sala). Opcional: sin salas,
+// todo funciona como antes.
+model Sala {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  sucursalId     String        @map("sucursal_id") @db.Uuid
+  nombre         String        @db.VarChar(80)
+  capacidad      Int?
+  estado         EstadoGeneral @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion      Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal          Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  clasesPlantilla   ClasePlantilla[]
+  clasesProgramadas ClaseProgramada[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@map("salas")
+}
+
 model ClaseProgramada {
   id               String        @id @default(uuid()) @db.Uuid
   organizacionId   String        @map("organizacion_id") @db.Uuid
@@ -547,6 +574,8 @@ model ClaseProgramada {
   // ClasePlantillaService.generarParaOrganizacion). Null en clases creadas
   // manualmente, una por una, como antes.
   clasePlantillaId String?       @map("clase_plantilla_id") @db.Uuid
+  // Fase 6 (DB-2): sala de esta sesión (se copia de la clase al generarla).
+  salaId           String?       @map("sala_id") @db.Uuid
   nombreClase      String        @map("nombre_clase") @db.VarChar(100)
   descripcion      String?       @db.Text
   capacidadMaxima  Int           @default(20) @map("capacidad_maxima")
@@ -572,6 +601,7 @@ model ClaseProgramada {
   turno          TurnoTrabajo?   @relation(fields: [turnoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   // Mismo motivo de Restrict que arriba (FK compuesta + organizacionId NOT NULL).
   clasePlantilla ClasePlantilla? @relation(fields: [clasePlantillaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  sala           Sala?           @relation(fields: [salaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   reservas       ReservaClase[]
 
   @@unique([id, organizacionId])
@@ -601,6 +631,8 @@ model ClasePlantilla {
   vigenciaDesde   DateTime  @map("vigencia_desde") @db.Date
   vigenciaHasta   DateTime? @map("vigencia_hasta") @db.Date
   activa          Boolean   @default(true)
+  // Fase 6 (DB-2): sala opcional; dos clases no pueden usar la misma sala a la vez.
+  salaId          String?   @map("sala_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -610,6 +642,8 @@ model ClasePlantilla {
   sucursal        Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
   disciplina      Disciplina?       @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   entrenador      PerfilStaff?      @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  // Restrict por el mismo motivo que disciplina/entrenador (FK compuesta).
+  sala            Sala?             @relation(fields: [salaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   clasesGeneradas ClaseProgramada[]
 
   @@unique([id, organizacionId])
