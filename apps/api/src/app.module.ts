@@ -36,6 +36,7 @@ import { ReservaClaseModule } from './modules/reserva-clase/reserva-clase.module
 import { AccesoClasesModule } from './modules/acceso-clases/acceso-clases.module';
 import { SistemaModule } from './modules/sistema/sistema.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
+import { ReportesModule } from './modules/reportes/reportes.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -82,6 +83,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AccesoClasesModule,
     SistemaModule,
     AgendaModule,
+    ReportesModule,
     ScheduleModule.forRoot()
   ],
   controllers: [],

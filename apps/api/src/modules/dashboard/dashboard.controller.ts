@@ -37,6 +37,14 @@ export class DashboardController {
     return this.dashboardService.getRecentActivity(sucursalId);
   }
 
+  // Membresías que vencen en los próximos 7 días y todavía no se renovaron
+  // (Dashboard del modo simple, plan 11.13, con botón para avisar por WhatsApp).
+  @Get('por-vencer')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
+  async getPorVencer(@Req() req: RequestWithUser) {
+    return this.dashboardService.getPorVencer(req.user.sucursalId);
+  }
+
   @Get('segmentacion-clientes')
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getSegmentacionClientes(@Req() req: RequestWithUser) {
