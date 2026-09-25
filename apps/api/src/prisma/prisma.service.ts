@@ -215,7 +215,10 @@ function withSoftDeleteAndRLS(cls: ClsService, extendedClientGetter: () => unkno
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly cls: ClsService) {
-    super();
+    // El hash del PIN de marcaje (fase 6, DB-4) no sale en ninguna consulta
+    // salvo que se pida con `select: { pinHash: true }`: muchos endpoints
+    // devuelven el perfil del equipo completo.
+    super({ omit: { perfilStaff: { pinHash: true } } });
   }
 
   private _extendedClient: unknown;

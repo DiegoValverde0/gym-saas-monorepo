@@ -97,6 +97,8 @@ const navigationGroups: NavGroup[] = [
       { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer', modoMinimo: 'intermedio' },
       { name: 'Equipo', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
       { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
+      // Tablet de recepción para marcar con PIN (fase 6, DB-4).
+      { name: 'Tablet de marcaje', href: '/dashboard/marcaje', icon: Clock, permission: 'asistencias:crear', modoMinimo: 'intermedio' },
       { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
   },
@@ -172,7 +174,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
           }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Equipo', 'Jornadas'].includes(item.name)) return modulos.controlPersonal;
+          if (['Equipo', 'Jornadas', 'Tablet de marcaje'].includes(item.name)) return modulos.controlPersonal;
           if (item.name === 'Control de acceso') return modulos.controlAcceso;
           // Reportes: el resumen de hoy y del mes está en todos los modos; el
           // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).

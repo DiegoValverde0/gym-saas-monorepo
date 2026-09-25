@@ -4,6 +4,7 @@ import { PersonalService } from './personal.service';
 import { CreatePersonalDto } from './dto/create-personal.dto';
 import { UpdatePersonalDto } from './dto/update-personal.dto';
 import { CreateMiembroEquipoDto, UpdateMiembroEquipoDto } from './dto/miembro-equipo.dto';
+import { PinDto } from './dto/pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -49,6 +50,19 @@ export class PersonalController {
   @RequirePermissions({ accion: 'actualizar', modulo: 'staff' }, { accion: 'actualizar', modulo: 'usuarios' })
   restablecerContrasena(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
     return this.personalService.restablecerContrasena(id, req.user.sub);
+  }
+
+  // PIN de marcaje en la tablet (fase 6, DB-4).
+  @Post(':id/pin')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'staff' })
+  asignarPin(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PinDto) {
+    return this.personalService.asignarPin(id, dto.pin);
+  }
+
+  @Delete(':id/pin')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'staff' })
+  quitarPin(@Param('id', ParseUUIDPipe) id: string) {
+    return this.personalService.quitarPin(id);
   }
 
   @Get()

@@ -4,6 +4,7 @@ import { TurnoTrabajoService } from './turno-trabajo.service';
 import { CreateTurnoTrabajoDto } from './dto/create-turno-trabajo.dto';
 import { UpdateTurnoTrabajoDto } from './dto/update-turno-trabajo.dto';
 import { AusenciaDto, JornadasHoyQueryDto, QuitarAusenciaDto, RangoAusenciasQueryDto } from './dto/ausencia.dto';
+import { PinDto } from '../personal/dto/pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
@@ -25,6 +26,14 @@ export class TurnoTrabajoController {
   // las rutas ':id' a propósito, y sin @RequirePermissions: ver el comentario
   // en turno-trabajo.service.ts sobre por qué esto no depende del permiso
   // de gestión de turnos.
+  // Tablet de recepción (fase 6, DB-4): la persona teclea su PIN. Lo usa la
+  // sesión abierta en la tablet, con el permiso de registrar ingresos.
+  @Post('marcar-con-pin')
+  @RequirePermissions({ accion: 'crear', modulo: 'asistencias' })
+  marcarConPin(@Body() dto: PinDto, @Req() req: RequestWithUser) {
+    return this.turnoTrabajoService.marcarConPin(dto.pin, req.user.sub);
+  }
+
   @Get('mi-turno/hoy')
   miTurnoDeHoy(@Req() req: RequestWithUser) {
     return this.turnoTrabajoService.miTurnoDeHoy(req.user.sub);

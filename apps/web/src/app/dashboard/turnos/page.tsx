@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Protect } from '@/components/ui/protect';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Ayuda } from '@/components/ui/ayuda';
-import { UserX } from 'lucide-react';
+import { Tablet, UserX } from 'lucide-react';
+import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { StaffBasico } from './compartido';
 import { VistaHoy } from './VistaHoy';
 import { VistaSemana } from './VistaSemana';
@@ -55,11 +57,18 @@ export default function JornadasPage() {
               Quién trabaja hoy, quién llegó y quién falta. Las jornadas salen solas del horario semanal de cada persona (en Equipo).
             </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+          <Protect permission="asistencias:crear">
+            <Link href="/dashboard/marcaje" className={buttonVariants({ variant: 'outline' })}>
+              <Tablet className="mr-2 h-4 w-4" /> Tablet de marcaje
+            </Link>
+          </Protect>
           <Protect permission="turnos:actualizar">
             <Button onClick={() => setAusencia({ abierto: true, staffId: null })} className="bg-indigo-600 hover:bg-indigo-700 text-white">
               <UserX className="mr-2 h-4 w-4" /> Registrar ausencia
             </Button>
           </Protect>
+          </div>
         </div>
 
         <Tabs value={vista} onValueChange={setVista}>

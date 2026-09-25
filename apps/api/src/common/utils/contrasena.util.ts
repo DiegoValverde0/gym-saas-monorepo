@@ -14,6 +14,14 @@ export function generarContrasenaTemporal(): string {
 }
 
 // Formato "salt:hash" (scrypt, 64 bytes) -- el mismo que verifica AuthService al iniciar sesión.
+export async function verificarHash(texto: string, guardado: string): Promise<boolean> {
+  const [salt, hash] = guardado.split(':');
+  if (!salt || !hash) return false;
+  const derivado = (await scryptAsync(texto, salt, 64)) as Buffer;
+  const esperado = Buffer.from(hash, 'hex');
+  return esperado.length === derivado.length && crypto.timingSafeEqual(esperado, derivado);
+}
+
 export async function hashContrasena(contrasena: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
   const derivedKey = (await scryptAsync(contrasena, salt, 64)) as Buffer;

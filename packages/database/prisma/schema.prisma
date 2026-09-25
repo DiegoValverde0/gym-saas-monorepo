@@ -30,7 +30,8 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["relationJoins"]
+  // omitApi: PerfilStaff.pinHash se omite en todas las consultas (ver PrismaService).
+  previewFeatures = ["relationJoins", "omitApi"]
 }
 
 datasource db {
@@ -439,6 +440,10 @@ model PerfilStaff {
   costoPorHora       Decimal               @default(0.00) @map("costo_por_hora") @db.Decimal(10, 2)
   comisionPorcentaje Decimal?              @map("comision_porcentaje") @db.Decimal(5, 2) // para entrenadores independientes
   estado             EstadoGeneral         @default(ACTIVO)
+  // Fase 6 (DB-4): PIN para marcar entrada/salida en la tablet de recepción
+  // ("salt:hash" scrypt). Nunca sale en las respuestas: omitido de forma
+  // global en PrismaService.
+  pinHash            String?               @map("pin_hash") @db.VarChar(200)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -9,6 +10,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 import { choqueDeSesion } from '../../common/utils/choques-clase.util';
+import { buscarStaffPorPin } from '../../common/utils/pin.util';
 
 const INCLUDE_TURNO = {
   staff: { include: { usuario: { select: { nombreCompleto: true } } } },
@@ -26,6 +28,9 @@ const TOLERANCIA_ATRASO_DEFAULT = 10;
 const MAX_DIAS_AUSENCIA = 366;
 const VENTANA_AUSENCIAS_PASADAS_DIAS = 60;
 const VENTANA_AUSENCIAS_FUTURAS_DIAS = 180;
+
+const MAX_INTENTOS_PIN = 5;
+const BLOQUEO_PIN_SEGUNDOS = 5 * 60;
 
 const NOMBRE_MOTIVO: Record<MotivoAusencia, string> = {
   VACACIONES: 'Vacaciones',
@@ -64,6 +69,7 @@ export class TurnoTrabajoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cls: ClsService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
   ) {}
 
   // Las horas se guardan como Date (@db.Time) pero el DTO las maneja como
@@ -159,8 +165,10 @@ export class TurnoTrabajoService {
   }
 
   private async encontrarTurnoDeHoy(usuarioId: string) {
-    const staff = await this.encontrarStaffDelUsuario(usuarioId);
+    return this.turnoDeHoyDe(await this.encontrarStaffDelUsuario(usuarioId));
+  }
 
+  private async turnoDeHoyDe(staff: { id: string; organizacionId: string }) {
     // "Hoy" en la zona horaria de la organización: con la fecha UTC, después
     // de las 20:00 en La Paz ya se buscaba el turno de mañana.
     const org = await this.prisma.extendedClient.organizacion.findUnique({
@@ -186,6 +194,49 @@ export class TurnoTrabajoService {
       sinEntrada[sinEntrada.length - 1] ??
       turnos[turnos.length - 1]
     );
+  }
+
+  // =========================================================================
+  // MARCAJE CON PIN EN LA TABLET (fase 6, DB-4)
+  // =========================================================================
+  // El PIN identifica a la persona; con su jornada de hoy se marca la entrada
+  // o, si ya entró, la salida. Tras 5 PIN incorrectos seguidos desde la misma
+  // sesión se bloquea 5 minutos (un PIN de 4 dígitos se puede adivinar).
+  async marcarConPin(pin: string, usuarioTablet: string) {
+    const organizacionId = this.cls.get('organizacionId');
+    if (!organizacionId) throw new ForbiddenException('Selecciona una organización.');
+    const clave = `pin:intentos:${organizacionId}:${usuarioTablet}`;
+    const intentos = Number((await this.redisClient.get(clave)) ?? 0);
+    if (intentos >= MAX_INTENTOS_PIN) {
+      throw new HttpException('Demasiados PIN incorrectos. Espera 5 minutos o pide ayuda en recepción.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const staff = await buscarStaffPorPin(this.prisma.extendedClient, pin);
+    if (!staff) {
+      await this.redisClient.multi().incr(clave).expire(clave, BLOQUEO_PIN_SEGUNDOS).exec();
+      throw new BadRequestException('PIN incorrecto.');
+    }
+    await this.redisClient.del(clave);
+
+    const turno = await this.turnoDeHoyDe(staff);
+    const nombre = staff.usuario.nombreCompleto.split(' ')[0];
+    let accion: 'entrada' | 'salida';
+    if (!turno.horaIngresoReal) {
+      await this.registrarIngreso(turno);
+      accion = 'entrada';
+    } else if (!turno.horaSalidaReal) {
+      await this.registrarSalida(turno);
+      accion = 'salida';
+    } else {
+      throw new BadRequestException(`${nombre}, ya marcaste la entrada y la salida de hoy.`);
+    }
+    const { zonaHoraria } = await this.contextoOrganizacion();
+    return {
+      persona: nombre,
+      accion,
+      hora: aHoraLocal(new Date(), zonaHoraria).minutosDelDia,
+      horario: `${hhmm(minutosDe(turno.horaEntrada))}–${hhmm(minutosDe(turno.horaSalida))}`,
+    };
   }
 
   async miTurnoDeHoy(usuarioId: string) {

@@ -24,7 +24,8 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy, Wand2, KeyRound, LogOut, X } from 'lucide-react';
+import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy, Wand2, KeyRound, LogOut, X, Hash } from 'lucide-react';
+import { PinDialog } from './PinDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
@@ -84,6 +85,7 @@ interface Staff {
   comisionPorcentaje?: number | string | null;
   estado: string;
   ultimaActividad?: string | null;
+  tienePin?: boolean;
   usuario?: {
     nombreCompleto: string;
     correo: string;
@@ -207,6 +209,7 @@ export default function PersonalPage() {
   const { modo } = useModoUso();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [pinDe, setPinDe] = useState<{ id: string; nombre: string; tienePin: boolean } | null>(null);
   const [editingPersonal, setEditingPersonal] = useState<Staff | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
@@ -710,6 +713,21 @@ export default function PersonalPage() {
                                 <LogOut className="h-4 w-4" />
                               </Button>
                             </Protect>
+                            {/* PIN de marcaje en la tablet (fase 6, DB-4). */}
+                            {modulos.controlPersonal && (
+                              <Protect permission="staff:actualizar" fallbackType="hide">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={p.tienePin ? 'PIN de marcaje (tiene uno)' : 'Asignar PIN de marcaje'}
+                                  aria-label="PIN de marcaje"
+                                  onClick={() => setPinDe({ id: p.id, nombre: p.usuario?.nombreCompleto?.split(' ')[0] ?? 'esta persona', tienePin: !!p.tienePin })}
+                                  className={p.tienePin ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'}
+                                >
+                                  <Hash className="h-4 w-4" />
+                                </Button>
+                              </Protect>
+                            )}
                             <Protect permission="usuarios:actualizar" fallbackType="hide">
                               <Button variant="ghost" size="icon" title="Restablecer contraseña" aria-label="Restablecer contraseña" onClick={() => confirmarSoporte(p, 'contrasena')} className="text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400">
                                 <KeyRound className="h-4 w-4" />
@@ -887,6 +905,8 @@ export default function PersonalPage() {
         isPending={saveMutation.isPending}
         submitLabel={editingPersonal ? 'Guardar cambios' : 'Agregar al equipo'}
       />
+
+      <PinDialog persona={pinDe} onClose={() => setPinDe(null)} />
 
       <Dialog open={!!contrasenaTemporal} onOpenChange={(abierto) => !abierto && setContrasenaTemporal(null)}>
         <DialogContent className="sm:max-w-[440px]">

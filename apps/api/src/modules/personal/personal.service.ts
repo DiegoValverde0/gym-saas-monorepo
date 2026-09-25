@@ -9,6 +9,7 @@ import { CreateMiembroEquipoDto, UpdateMiembroEquipoDto } from './dto/miembro-eq
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { generarContrasenaTemporal, hashContrasena } from '../../common/utils/contrasena.util';
+import { buscarStaffPorPin } from '../../common/utils/pin.util';
 import { TurnoPlantillaService } from '../turno-plantilla/turno-plantilla.service';
 import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
 import { assertSucursalAsignable, cerrarSesiones, cuentaSoloDeEstaOrganizacion, invalidarAccesoVigente, ultimasActividades } from '../../common/utils/acceso-vigente.util';
@@ -225,7 +226,34 @@ export class PersonalService {
     const actividad = await ultimasActividades(this.redisClient, data.map((p) => p.usuarioId), this.cls.get('organizacionId')).catch(
       () => new Map<string, string | null>(),
     );
-    return paginar(data.map((p) => ({ ...p, ultimaActividad: actividad.get(p.usuarioId) ?? null })), total, page, limit);
+    // PIN de marcaje (fase 6, DB-4): solo si tiene uno, nunca el hash.
+    const conPin: { id: string }[] = await this.prisma.extendedClient.perfilStaff.findMany({
+      where: { id: { in: data.map((p: { id: string }) => p.id) }, pinHash: { not: null } },
+      select: { id: true },
+    });
+    const tienenPin = new Set(conPin.map((p) => p.id));
+    return paginar(
+      data.map((p) => ({ ...p, ultimaActividad: actividad.get(p.usuarioId) ?? null, tienePin: tienenPin.has(p.id) })),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  // PIN para marcar entrada y salida en la tablet de recepción (fase 6,
+  // DB-4). Único dentro de la organización, porque es lo único que se teclea.
+  async asignarPin(id: string, pin: string) {
+    await this.findOne(id);
+    const otro = await buscarStaffPorPin(this.prisma.extendedClient, pin, id);
+    if (otro) throw new ConflictException('Ese PIN ya lo usa otra persona del equipo. Elige otro.');
+    await this.prisma.extendedClient.perfilStaff.update({ where: { id }, data: { pinHash: await hashContrasena(pin) } });
+    return { tienePin: true };
+  }
+
+  async quitarPin(id: string) {
+    await this.findOne(id);
+    await this.prisma.extendedClient.perfilStaff.update({ where: { id }, data: { pinHash: null } });
+    return { tienePin: false };
   }
 
   // =========================================================================
