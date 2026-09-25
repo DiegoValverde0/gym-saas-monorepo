@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, UserCheck, UserX, Clock, Ban, CheckCircle2, Play, Info, CalendarCheck, UserPlus, History, Briefcase, MapPin } from 'lucide-react';
+import { Search, UserCheck, UserX, Clock, Ban, CheckCircle2, Play, Info, CalendarCheck, UserPlus, History, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
@@ -49,15 +49,6 @@ interface RegistroAsistencia {
   registradoPor?: { nombreCompleto: string } | null;
 }
 
-interface MiTurno {
-  id: string;
-  horaEntrada: string;
-  horaSalida: string;
-  horaIngresoReal?: string | null;
-  horaSalidaReal?: string | null;
-  sucursal?: { nombre: string } | null;
-}
-
 const TIPO_ASISTENCIA_LABEL: Record<string, string> = {
   MIEMBRO: 'Miembro',
   INVITADO: 'Invitado',
@@ -76,14 +67,12 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 const hora = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-// Las horas de turno vienen como @db.Time (1970-01-01THH:MM:00Z): se muestran tal cual, sin convertir de zona.
-const horaReloj = (iso: string) => new Date(iso).toISOString().substring(11, 16);
 
 export default function AsistenciasPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { activeTenantId } = useTenantStore();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   // Sucursal de trabajo: la activa de la barra superior (se elige ahí, no acá).
   const { sucursalId, sucursal, variasSucursales } = useSucursalActiva();
@@ -122,25 +111,6 @@ export default function AsistenciasPage() {
     queryClient.invalidateQueries({ queryKey: ['asistencias_activas'] });
     queryClient.invalidateQueries({ queryKey: ['asistencias_historial'] });
   };
-
-  // ---------------------------------------------------------------------
-  // Mi turno (para el propio staff que atiende recepción)
-  // ---------------------------------------------------------------------
-  const { data: miTurno } = useQuery({
-    queryKey: ['mi-turno-hoy', user?.sub],
-    queryFn: async () => apiGet<MiTurno>('/turnos/mi-turno/hoy'),
-    enabled: !!token && !user?.is_superadmin,
-    retry: false, // 404 = no es staff o no tiene turno hoy: simplemente no se muestra la tarjeta
-  });
-
-  const marcarTurnoMutation = useMutation({
-    mutationFn: async (accion: 'ingreso' | 'salida') => apiPost(`/turnos/mi-turno/marcar-${accion}`),
-    onSuccess: (_, accion) => {
-      toast({ title: accion === 'ingreso' ? 'Entrada de turno registrada' : 'Salida de turno registrada', variant: 'success' });
-      queryClient.invalidateQueries({ queryKey: ['mi-turno-hoy'] });
-    },
-    onError: (err: Error) => toast({ title: 'No se pudo marcar', description: err.message, variant: 'destructive' }),
-  });
 
   // ---------------------------------------------------------------------
   // Validación + ingreso de miembros
@@ -267,23 +237,6 @@ export default function AsistenciasPage() {
               <span className="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                 <MapPin className="w-4 h-4 text-zinc-400" /> {sucursal.nombre}
               </span>
-            )}
-
-            {/* Mi turno de hoy */}
-            {miTurno && (
-              <div className="flex items-center gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-                <Briefcase className="w-4 h-4 text-zinc-400" />
-                <span className="text-zinc-600 dark:text-zinc-400">
-                  Mi turno: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{horaReloj(miTurno.horaEntrada)}–{horaReloj(miTurno.horaSalida)}</span>
-                </span>
-                {!miTurno.horaIngresoReal ? (
-                  <Button size="sm" onClick={() => marcarTurnoMutation.mutate('ingreso')} disabled={marcarTurnoMutation.isPending}>Marcar entrada</Button>
-                ) : !miTurno.horaSalidaReal ? (
-                  <Button size="sm" variant="outline" onClick={() => marcarTurnoMutation.mutate('salida')} disabled={marcarTurnoMutation.isPending}>Marcar salida</Button>
-                ) : (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Completado</span>
-                )}
-              </div>
             )}
           </div>
         </div>

@@ -23,7 +23,7 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy, Wand2, KeyRound, LogOut } from 'lucide-react';
+import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy, Wand2, KeyRound, LogOut, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
@@ -114,7 +114,15 @@ function haceCuanto(iso?: string | null): string {
 
 const horaDe = (iso: string) => new Date(iso).toISOString().substring(11, 16);
 
-const diaSchema = z.object({ activo: z.boolean(), entrada: z.string(), salida: z.string() });
+// Un día admite un segundo bloque (turno partido, 6–10 y 16–20; plan 13.8).
+const diaSchema = z.object({
+  activo: z.boolean(),
+  entrada: z.string(),
+  salida: z.string(),
+  partido: z.boolean(),
+  entrada2: z.string(),
+  salida2: z.string(),
+});
 
 const miembroSchema = z
   .object({
@@ -153,20 +161,33 @@ const miembroSchema = z
       if (!d.entrada || !d.salida || d.salida <= d.entrada) {
         ctx.addIssue({ code: 'custom', path: ['dias', i, 'salida'], message: 'La salida debe ser posterior a la entrada' });
       }
+      if (d.partido) {
+        if (!d.entrada2 || !d.salida2 || d.salida2 <= d.entrada2) {
+          ctx.addIssue({ code: 'custom', path: ['dias', i, 'salida2'], message: 'En el segundo horario, la salida debe ser posterior a la entrada' });
+        } else if (d.entrada2 < d.salida) {
+          ctx.addIssue({ code: 'custom', path: ['dias', i, 'salida2'], message: 'El segundo horario debe empezar después de que termine el primero' });
+        }
+      }
     });
   });
 
 type MiembroFormValues = z.infer<typeof miembroSchema>;
 
-const diasVacios = () => Array.from({ length: 7 }, () => ({ activo: false, entrada: '08:00', salida: '16:00' }));
+const diasVacios = () =>
+  Array.from({ length: 7 }, () => ({ activo: false, entrada: '08:00', salida: '16:00', partido: false, entrada2: '16:00', salida2: '20:00' }));
 
-// "Lun, Mié, Vie · 06:00–14:00" (agrupa días con el mismo horario).
+// "Lun, Mié, Vie · 06:00–14:00" (agrupa días con el mismo horario; un turno
+// partido se muestra "06:00–10:00 y 16:00–20:00").
 function resumirHorario(bloques: Staff['turnosPlantilla']): string[] {
   if (!bloques || bloques.length === 0) return [];
+  const porDia = new Map<number, string[]>();
+  for (const b of [...bloques].sort((x, y) => horaDe(x.horaEntrada).localeCompare(horaDe(y.horaEntrada)))) {
+    porDia.set(b.diaSemana, [...(porDia.get(b.diaSemana) || []), `${horaDe(b.horaEntrada)}–${horaDe(b.horaSalida)}`]);
+  }
   const grupos = new Map<string, number[]>();
-  for (const b of bloques) {
-    const clave = `${horaDe(b.horaEntrada)}–${horaDe(b.horaSalida)}`;
-    grupos.set(clave, [...(grupos.get(clave) || []), b.diaSemana]);
+  for (const [dia, tramos] of porDia) {
+    const clave = tramos.join(' y ');
+    grupos.set(clave, [...(grupos.get(clave) || []), dia]);
   }
   const orden = (d: number) => (d === 0 ? 7 : d);
   return [...grupos.entries()].map(([horas, dias]) => `${dias.sort((a, b) => orden(a) - orden(b)).map((d) => DIA_CORTO[d]).join(', ')} · ${horas}`);
@@ -332,7 +353,10 @@ export default function PersonalPage() {
     const diasActivos = values.dias
       .map((d, dia) => ({ ...d, dia }))
       .filter((d) => d.activo)
-      .map((d) => ({ diaSemana: d.dia, horaEntrada: d.entrada, horaSalida: d.salida }));
+      .flatMap((d) => [
+        { diaSemana: d.dia, horaEntrada: d.entrada, horaSalida: d.salida },
+        ...(d.partido ? [{ diaSemana: d.dia, horaEntrada: d.entrada2, horaSalida: d.salida2 }] : []),
+      ]);
 
     // En edición el horario solo se envía si se tocó (guardarlo re-sincroniza los turnos futuros).
     // Trabaja donde tiene acceso; con acceso a todas, donde se indicó.
@@ -383,8 +407,14 @@ export default function PersonalPage() {
     setEditingPersonal(staff);
     const asignacion = staff.usuario?.asignacionesAcceso?.[0];
     const dias = diasVacios();
-    for (const b of staff.turnosPlantilla || []) {
-      dias[b.diaSemana] = { activo: true, entrada: horaDe(b.horaEntrada), salida: horaDe(b.horaSalida) };
+    const bloques = [...(staff.turnosPlantilla || [])].sort((x, y) => horaDe(x.horaEntrada).localeCompare(horaDe(y.horaEntrada)));
+    for (const b of bloques) {
+      const dia = dias[b.diaSemana];
+      if (!dia.activo) {
+        dias[b.diaSemana] = { ...dia, activo: true, entrada: horaDe(b.horaEntrada), salida: horaDe(b.horaSalida) };
+      } else if (!dia.partido) {
+        dias[b.diaSemana] = { ...dia, partido: true, entrada2: horaDe(b.horaEntrada), salida2: horaDe(b.horaSalida) };
+      }
     }
     form.reset({
       modo: 'editar',
@@ -457,7 +487,7 @@ export default function PersonalPage() {
   // ------------------------------------------------------------------
   const renderHorario = (f: UseFormReturn<FieldValues>) => {
     const dias = f.watch('dias') as MiembroFormValues['dias'];
-    const errores = (f.formState.errors.dias as unknown as { salida?: { message?: string } }[] | undefined) || [];
+    const errores = (f.formState.errors.dias as unknown as { salida?: { message?: string }; salida2?: { message?: string } }[] | undefined) || [];
     const copiarPrimerDia = () => {
       const primero = DIAS_GRILLA.map((d) => dias[d.dia]).find((d) => d.activo);
       if (!primero) return;
@@ -465,6 +495,9 @@ export default function PersonalPage() {
         if (dias[dia].activo) {
           f.setValue(`dias.${dia}.entrada`, primero.entrada, { shouldDirty: true });
           f.setValue(`dias.${dia}.salida`, primero.salida, { shouldDirty: true });
+          f.setValue(`dias.${dia}.partido`, primero.partido, { shouldDirty: true });
+          f.setValue(`dias.${dia}.entrada2`, primero.entrada2, { shouldDirty: true });
+          f.setValue(`dias.${dia}.salida2`, primero.salida2, { shouldDirty: true });
         }
       });
     };
@@ -473,6 +506,7 @@ export default function PersonalPage() {
       DIAS_GRILLA.forEach(({ dia }) => {
         const activo = !!plantilla && plantilla.dias.includes(dia);
         f.setValue(`dias.${dia}.activo`, activo, { shouldDirty: true });
+        f.setValue(`dias.${dia}.partido`, false, { shouldDirty: true });
         if (plantilla && activo) {
           f.setValue(`dias.${dia}.entrada`, plantilla.entrada, { shouldDirty: true });
           f.setValue(`dias.${dia}.salida`, plantilla.salida, { shouldDirty: true });
@@ -498,7 +532,8 @@ export default function PersonalPage() {
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-800">
           {DIAS_GRILLA.map(({ dia, label }) => {
             const activo = dias?.[dia]?.activo;
-            const error = errores[dia]?.salida?.message;
+            const partido = dias?.[dia]?.partido;
+            const error = errores[dia]?.salida?.message ?? (partido ? errores[dia]?.salida2?.message : undefined);
             return (
               <div key={dia} className="px-3 py-2">
                 <div className="flex items-center gap-3">
@@ -515,14 +550,40 @@ export default function PersonalPage() {
                   <input type="time" disabled={!activo} {...f.register(`dias.${dia}.entrada`)} className={inputHora} aria-label={`Entrada ${label}`} />
                   <span className="text-zinc-400">a</span>
                   <input type="time" disabled={!activo} {...f.register(`dias.${dia}.salida`)} className={inputHora} aria-label={`Salida ${label}`} />
+                  {activo && !partido && (
+                    <button
+                      type="button"
+                      onClick={() => f.setValue(`dias.${dia}.partido`, true, { shouldDirty: true })}
+                      className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                      title="Turno partido: agrega un segundo horario ese día (ej. 16:00 a 20:00)"
+                    >
+                      + Otro horario
+                    </button>
+                  )}
                 </div>
+                {activo && partido && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="w-32 text-xs text-zinc-500 dark:text-zinc-400 pl-7">y también</span>
+                    <input type="time" {...f.register(`dias.${dia}.entrada2`)} className={inputHora} aria-label={`Entrada del segundo horario ${label}`} />
+                    <span className="text-zinc-400">a</span>
+                    <input type="time" {...f.register(`dias.${dia}.salida2`)} className={inputHora} aria-label={`Salida del segundo horario ${label}`} />
+                    <button
+                      type="button"
+                      onClick={() => f.setValue(`dias.${dia}.partido`, false, { shouldDirty: true })}
+                      className="text-zinc-400 hover:text-rose-600"
+                      aria-label={`Quitar el segundo horario del ${label}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 {activo && error && <p className="text-xs text-red-500 mt-1 ml-32 pl-3">{error}</p>}
               </div>
             );
           })}
         </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Los turnos de las próximas semanas se generan solos a partir de este horario. Para una ausencia puntual (vacaciones, día libre), marca ese turno como Ausente o Cancelado en Turnos.
+          Las jornadas de las próximas semanas se generan solas a partir de este horario. Para vacaciones, enfermedad o un día libre, usa &quot;Registrar ausencia&quot; en Jornadas.
         </p>
       </div>
     );

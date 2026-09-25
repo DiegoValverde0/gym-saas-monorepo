@@ -764,6 +764,15 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 - **Criterio:** crear "Spinning martes y jueves 18:00 con Marta en Sede Central solo para plan Full" toma menos de un minuto y 5 clics de horario. Un cliente con plan Básico no puede reservarla y el mensaje explica por qué.
 
 ### Fase 4 · Jornadas del equipo (3–4 días)
+- **Estado: hecha** (2026-09-25), sin cambios de base de datos. Notas:
+  - "Turnos" pasa a llamarse **Jornadas** en el menú (la ruta sigue siendo `/dashboard/turnos`). Endpoints nuevos: `GET /turnos/hoy`, `GET /turnos/ausencias`, `POST /turnos/ausencias/vista-previa`, `POST /turnos/ausencias`, `POST /turnos/ausencias/quitar` y `POST /turnos/:id/marcar-ingreso|salida` (marcaje hecho por quien gestiona el equipo, solo jornadas de hoy).
+  - En **intermedio** se ven Hoy, Semana y Ausencias: la tabla anterior dejaba editar días sueltos y agregar turnos extra, y la regla de la fase 2 es no ocultar nada que ya existiera.
+  - Las clases de alguien ausente **conservan su instructor** si no se elige reemplazo (en la Agenda aparecen como "sin turno"), así "Quitar ausencia" deja todo como estaba. Las clases que sí pasaron a un reemplazo no vuelven solas al quitar la ausencia. Si al reemplazo le choca una clase, esa no se reasigna y se avisa el motivo.
+  - Los días de la ausencia que todavía no tienen jornada generada (más allá de las 8 semanas) se crean ya como AUSENTE, así el generador no los vuelve a programar.
+  - Turno partido: el backend admite hasta 3 bloques no solapados por día; el formulario de Equipo ofrece 2 ("+ Otro horario"). El generador ahora compara por solapamiento de horario y no por persona + día.
+  - La tarjeta "Mi turno" de Asistencias se reemplazó por el botón **Marcar entrada / salida** de la barra superior (visible en el celular, D7).
+  - Tolerancia de atraso en Configuración → Políticas (`configuracion.jornadas.toleranciaAtrasoMinutos`, 10 por defecto).
+  - Pendiente: en experto, "marcaje obligatorio" y el reporte de horas, atrasos y costo de personal (va con Reportes, fase 5).
 - Vista Hoy, Semana y Ausencias (7.2), endpoint de ausencias por rango con aviso de clases afectadas, marcaje desde la barra superior (7.4), turno partido (13.8).
 - **Criterio:** registrar dos semanas de vacaciones de una persona es un solo formulario, y el sistema avisa qué clases quedan sin instructor.
 

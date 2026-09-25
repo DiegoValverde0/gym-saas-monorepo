@@ -45,6 +45,9 @@ const organizacionSchema = z.object({
     clases: z.object({
       descontarSesionEnClase: z.boolean(),
     }),
+    jornadas: z.object({
+      toleranciaAtrasoMinutos: z.number({ message: 'Ingresa un número de minutos' }).int().min(0, 'Mínimo 0').max(120, 'Máximo 120'),
+    }),
     preferenciasOperativas: z.object({
       renovacionAutomaticaPlanes: z.boolean(),
       impresionTickets: z.string(),
@@ -97,6 +100,9 @@ export default function ConfiguracionPage() {
         clases: {
           descontarSesionEnClase: (organizacion as any).configuracion?.clases?.descontarSesionEnClase ?? false,
         },
+        jornadas: {
+          toleranciaAtrasoMinutos: (organizacion as any).configuracion?.jornadas?.toleranciaAtrasoMinutos ?? 10,
+        },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: (organizacion as any).configuracion?.preferenciasOperativas?.renovacionAutomaticaPlanes ?? true,
           impresionTickets: (organizacion as any).configuracion?.preferenciasOperativas?.impresionTickets ?? 'NINGUNA',
@@ -132,6 +138,9 @@ export default function ConfiguracionPage() {
         },
         clases: {
           descontarSesionEnClase: false,
+        },
+        jornadas: {
+          toleranciaAtrasoMinutos: 10,
         },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: true,
@@ -566,6 +575,29 @@ export default function ConfiguracionPage() {
                     </p>
                   </div>
                 </div>
+                {/* Jornadas del equipo (plan 7.2): tolerancia antes de mostrar a alguien como atrasado. */}
+                {form.watch('configuracion.modulos.controlPersonal') && (
+                  <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Input
+                      id="toleranciaAtraso"
+                      type="number"
+                      min={0}
+                      max={120}
+                      {...form.register('configuracion.jornadas.toleranciaAtrasoMinutos', { valueAsNumber: true })}
+                      disabled={isLoading || updateMutation.isPending}
+                      className="w-20 shrink-0"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="toleranciaAtraso" className="font-medium text-slate-900 dark:text-white">Minutos de tolerancia para llegar</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        En Jornadas, alguien aparece como atrasado si no marcó su entrada pasados estos minutos desde su hora de inicio.
+                      </p>
+                      {form.formState.errors.configuracion?.jornadas?.toleranciaAtrasoMinutos && (
+                        <p className="text-xs text-red-500 dark:text-red-400">{form.formState.errors.configuracion.jornadas.toleranciaAtrasoMinutos.message}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Decisión D4: solo en experto; por defecto solo el ingreso al gimnasio descuenta sesión. */}
                 {alMenos('experto') && (
                   <div className="flex items-start space-x-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">

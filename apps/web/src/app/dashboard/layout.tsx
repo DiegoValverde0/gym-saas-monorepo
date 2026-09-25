@@ -46,6 +46,7 @@ import { nombreRol } from '@/lib/roles';
 import { AsistenteInicio } from '@/components/ui/asistente-inicio';
 import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
+import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
 interface NavItem {
   name: string;
@@ -94,7 +95,7 @@ const navigationGroups: NavGroup[] = [
       { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
       { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
       { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
-      { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
+      { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
       { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
   },
@@ -170,7 +171,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
           }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Personal', 'Turnos'].includes(item.name)) return modulos.controlPersonal;
+          if (['Personal', 'Jornadas'].includes(item.name)) return modulos.controlPersonal;
           if (item.name === 'Asistencias') return modulos.controlAcceso;
           if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
           if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
@@ -384,6 +385,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </div>
               )
             )}
+
+            {/* Marcaje del equipo (plan 7.4): visible también en el celular. */}
+            <MarcajeTurno />
 
             <ThemeToggle />
 
