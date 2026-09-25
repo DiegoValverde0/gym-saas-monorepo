@@ -777,6 +777,15 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 - **Criterio:** registrar dos semanas de vacaciones de una persona es un solo formulario, y el sistema avisa qué clases quedan sin instructor.
 
 ### Fase 5 · Simplificación del resto de módulos (6–8 días)
+- **Se entrega en tres tandas:** 5a flujos diarios del modo simple, 5b Reportes, Dashboard y Configuración por modo, 5c resto (plantillas de planes, productos, sucursales, disciplinas, glosario y ayuda).
+- **5a · Estado: hecha** (2026-09-25), sin cambios de base de datos:
+  - **Venta en una pantalla** compartida (`components/ui/venta-rapida-modal.tsx`): alta rápida del cliente (nombre, teléfono, documento opcional), plan en botones, **descuento manual** (usa `Membresia.descuentoAplicado`, no se combina con una promoción) y forma de pago. Fuera del modo simple pide caja abierta y cuenta destino.
+  - **Ficha 360 del cliente** (`GET /clientes/:id/ficha`): membresía actual y días que le quedan, "Renovar" con el mismo plan y la forma de pago del último cobro, "Registrar ingreso" (abre Control de acceso con el cliente ya validado) y "Reservar clase"; asistencias, reservas y pagos. En la lista, el estado del cliente se calcula a partir de sus membresías; el estado manual solo se muestra si alguien lo cambió a mano.
+  - **Control de acceso:** el semáforo rojo por "sin membresía" o "sesiones agotadas" ofrece "Vender / renovar membresía" ahí mismo (código `SIN_MEMBRESIA` / `SESIONES_AGOTADAS` en la validación), y si la búsqueda no encuentra a nadie, "Registrar cliente nuevo y vender".
+  - **Registrar gasto** en una pantalla (monto, concepto de una lista corta, forma de pago). Siempre con la fecha de hoy: la API de transacciones no recibe fecha.
+  - **Cerrar el día** (`GET /apertura-caja/dia`, `POST /apertura-caja/cerrar-dia`, solo en modo simple): cobros de hoy por forma de pago, efectivo esperado frente al contado. En vez de preguntar "¿con cuánto empiezas?" en el primer cobro, el efectivo inicial se pide al cerrar, propuesto con lo contado en el cierre anterior. El cierre se guarda como una `AperturaCaja` ya cerrada en la "Caja del gimnasio" de la sucursal, que se crea sola.
+  - Dashboard del modo simple: accesos directos a Vender, Registrar ingreso, Registrar gasto y Cerrar el día.
+  - Pendiente: el motivo del descuento manual no se guarda (no hay columna; iría en la auditoría).
 - Sección 11 completa: ficha 360 del cliente, plantillas de planes, venta en una pantalla y renovación en un clic, caja automática, gasto rápido, reportes por modo, reorganización de Configuración, Dashboard por modo.
 - Sección 12: glosario aplicado, patrones de pantalla, ayuda contextual.
 - **Criterio:** los flujos más frecuentes (vender, renovar, registrar ingreso, registrar gasto, cerrar el día) toman 3 pasos o menos en modo simple.

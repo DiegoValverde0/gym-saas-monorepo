@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Edit, Trash2, Mail, Phone, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
+import { FichaCliente, ESTADO_SEGMENTO, Segmento } from '@/components/ui/ficha-cliente';
 
 const clienteSchema = z.object({
   sucursalBaseId: z.string().optional(),
@@ -42,6 +43,8 @@ export default function ClientesPage() {
   const { toast } = useToast();
   const { token, user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Ficha 360 del cliente (plan 11.1): se abre tocando el nombre.
+  const [fichaId, setFichaId] = useState<string | null>(null);
   const [editingCliente, setEditingCliente] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
@@ -330,7 +333,7 @@ export default function ClientesPage() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Contacto</TableHead>
                 <TableHead>Documento</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead>Membresía</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -343,7 +346,13 @@ export default function ClientesPage() {
                         {cliente.nombre.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{cliente.nombre}</p>
+                        {showDeleted ? (
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">{cliente.nombre}</p>
+                        ) : (
+                          <button type="button" onClick={() => setFichaId(cliente.id)} className="font-semibold text-slate-900 dark:text-white text-sm hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline text-left">
+                            {cliente.nombre}
+                          </button>
+                        )}
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cliente.sucursalBaseId ? 'Sede local' : 'Global'}</p>
                       </div>
                     </div>
@@ -360,10 +369,17 @@ export default function ClientesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {cliente.estado === 'ACTIVO' && <Badge variant="success">Activo</Badge>}
-                    {cliente.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
-                    {cliente.estado === 'MOROSO' && <Badge variant="warning">Moroso</Badge>}
-                    {cliente.estado === 'SUSPENDIDO' && <Badge variant="destructive">Suspendido</Badge>}
+                    {/* Estado calculado de sus membresías (plan 11.1); el estado manual
+                        solo se muestra si alguien lo cambió a mano. */}
+                    <div className="flex flex-wrap gap-1">
+                      {(() => {
+                        const e = ESTADO_SEGMENTO[cliente.segmento as Segmento] ?? ESTADO_SEGMENTO.PROSPECTO;
+                        return <Badge variant={e.variante}>{e.texto}</Badge>;
+                      })()}
+                      {cliente.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
+                      {cliente.estado === 'MOROSO' && <Badge variant="warning">Moroso</Badge>}
+                      {cliente.estado === 'SUSPENDIDO' && <Badge variant="destructive">Suspendido</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -401,6 +417,8 @@ export default function ClientesPage() {
           </Table>
         )}
         
+        <FichaCliente clienteId={fichaId} onClose={() => setFichaId(null)} />
+
         <GlobalConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}

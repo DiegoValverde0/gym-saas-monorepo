@@ -16,6 +16,7 @@ import { Search, UserCheck, UserX, Clock, Ban, CheckCircle2, Play, Info, Calenda
 import { useToast } from '@/hooks/use-toast';
 
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
+import { VentaRapidaModal } from '@/components/ui/venta-rapida-modal';
 
 interface Cliente {
   id: string;
@@ -31,6 +32,8 @@ interface ClaseReservada {
 
 interface Validacion {
   allowed: boolean;
+  // SIN_MEMBRESIA / SESIONES_AGOTADAS: se ofrece vender o renovar ahí mismo.
+  codigo?: string;
   reason?: string;
   tipoPlan?: string;
   sesionesRestantes?: number;
@@ -189,6 +192,28 @@ export default function AsistenciasPage() {
     validateMutation.mutate(c.id);
   };
 
+  // Desde la ficha del cliente ("Registrar ingreso"): /asistencias?cliente=<id>
+  // llega con el cliente ya elegido y validado.
+  useEffect(() => {
+    if (!token) return;
+    const id = new URLSearchParams(window.location.search).get('cliente');
+    if (!id) return;
+    apiGet<Cliente>(`/clientes/${id}`)
+      .then((c) => handleSelectCliente(c))
+      .catch(() => undefined);
+    window.history.replaceState(null, '', window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // Venta o renovación sin salir de Control de acceso (plan 10.2): desde el
+  // semáforo rojo o dando de alta a alguien que no está registrado.
+  const [venta, setVenta] = useState<{ abierta: boolean; conCliente: boolean }>({ abierta: false, conCliente: false });
+  const { data: renovacion } = useQuery({
+    queryKey: ['ficha-cliente', selectedCliente?.id],
+    queryFn: async () => apiGet<{ renovacion: { planId: string; formaPago: string } | null }>(`/clientes/${selectedCliente?.id}/ficha`),
+    enabled: venta.abierta && venta.conCliente && !!selectedCliente,
+  });
+
   const handleForzarIngreso = () => {
     if (!motivoForzado.trim()) {
       toast({ title: 'Falta motivo', description: 'Debes escribir por qué estás forzando el acceso.', variant: 'destructive' });
@@ -293,7 +318,14 @@ export default function AsistenciasPage() {
                               {buscando && !resultados ? (
                                 <div className="p-4 text-center text-zinc-500 dark:text-zinc-400">Buscando...</div>
                               ) : (resultados || []).length === 0 ? (
-                                <div className="p-4 text-center text-zinc-500 dark:text-zinc-400">No se encontraron clientes</div>
+                                <div className="p-4 text-center text-zinc-500 dark:text-zinc-400 space-y-2">
+                                  <p>No se encontraron clientes</p>
+                                  <Protect permission="membresias:crear" fallbackType="hide">
+                                    <Button variant="outline" size="sm" onClick={() => setVenta({ abierta: true, conCliente: false })}>
+                                      <UserPlus className="w-4 h-4 mr-1.5" /> Registrar cliente nuevo y vender
+                                    </Button>
+                                  </Protect>
+                                </div>
                               ) : (
                                 (resultados || []).map((c) => (
                                   <button
@@ -359,6 +391,13 @@ export default function AsistenciasPage() {
                                   <h3 className="font-bold text-xl">ACCESO DENEGADO</h3>
                                 </div>
                                 <p className="text-red-700 dark:text-red-300 font-bold text-lg">{validacion.reason}</p>
+                                {(validacion.codigo === 'SIN_MEMBRESIA' || validacion.codigo === 'SESIONES_AGOTADAS') && (
+                                  <Protect permission="membresias:crear" fallbackType="hide">
+                                    <Button className="w-full h-12 text-base font-bold" onClick={() => setVenta({ abierta: true, conCliente: true })}>
+                                      <CheckCircle2 className="w-5 h-5 mr-2" /> Vender / renovar membresía
+                                    </Button>
+                                  </Protect>
+                                )}
                                 {renderClasesReservadas(validacion.clasesReservadasHoy)}
                                 <SoloEnModo minimo="intermedio">
                                 <Protect permission="asistencias:forzar" fallbackType="hide">
@@ -524,6 +563,16 @@ export default function AsistenciasPage() {
             </div>
           </div>
         )}
+
+        <VentaRapidaModal
+          open={venta.abierta}
+          onOpenChange={(abierta) => setVenta((v) => ({ ...v, abierta }))}
+          clienteInicial={venta.conCliente ? selectedCliente : null}
+          planIdInicial={venta.conCliente ? renovacion?.renovacion?.planId ?? null : null}
+          formaPagoInicial={venta.conCliente ? renovacion?.renovacion?.formaPago ?? null : null}
+          busquedaInicial={venta.conCliente ? undefined : searchTerm.trim()}
+          onVendido={(c) => handleSelectCliente(c)}
+        />
 
         <GlobalConfirmDialog
           open={confirmOpen}

@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { POSModal } from './POSModal';
-import { VentaRapidaModal } from './VentaRapidaModal';
+import { VentaRapidaModal } from '@/components/ui/venta-rapida-modal';
 import { useModoUso } from '@/hooks/use-modo-uso';
 import type { z } from 'zod';
 
@@ -229,12 +229,7 @@ export default function MembresiasPage() {
           </div>
         </div>
 
-        <VentaRapidaModal
-          open={ventaRapidaOpen}
-          onOpenChange={setVentaRapidaOpen}
-          planes={planesList.filter((p: any) => p.estado === 'ACTIVO') as any[]}
-          sucursalId={userSucursalId || sucursalActiva}
-        />
+        <VentaRapidaModal open={ventaRapidaOpen} onOpenChange={setVentaRapidaOpen} />
 
         <MembresiaWizardModal
           open={isDialogOpen}

@@ -7,6 +7,7 @@ import { apiGet } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Protect } from '@/components/ui/protect';
 import { PrimerosPasos } from '@/components/ui/primeros-pasos';
+import { AccionesRapidas } from '@/components/ui/acciones-rapidas';
 import { Users, Wallet, Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -67,6 +68,8 @@ export default function DashboardPage() {
       </div>
 
       <PrimerosPasos />
+
+      <AccionesRapidas />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         
