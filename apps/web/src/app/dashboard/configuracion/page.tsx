@@ -42,6 +42,9 @@ const organizacionSchema = z.object({
     requerimientosClase: z.object({
       exigirTurnoEntrenador: z.boolean(),
     }),
+    clases: z.object({
+      descontarSesionEnClase: z.boolean(),
+    }),
     preferenciasOperativas: z.object({
       renovacionAutomaticaPlanes: z.boolean(),
       impresionTickets: z.string(),
@@ -91,6 +94,9 @@ export default function ConfiguracionPage() {
         requerimientosClase: {
           exigirTurnoEntrenador: (organizacion as any).configuracion?.requerimientosClase?.exigirTurnoEntrenador ?? false,
         },
+        clases: {
+          descontarSesionEnClase: (organizacion as any).configuracion?.clases?.descontarSesionEnClase ?? false,
+        },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: (organizacion as any).configuracion?.preferenciasOperativas?.renovacionAutomaticaPlanes ?? true,
           impresionTickets: (organizacion as any).configuracion?.preferenciasOperativas?.impresionTickets ?? 'NINGUNA',
@@ -123,6 +129,9 @@ export default function ConfiguracionPage() {
         },
         requerimientosClase: {
           exigirTurnoEntrenador: false,
+        },
+        clases: {
+          descontarSesionEnClase: false,
         },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: true,
@@ -557,6 +566,24 @@ export default function ConfiguracionPage() {
                     </p>
                   </div>
                 </div>
+                {/* Decisión D4: solo en experto; por defecto solo el ingreso al gimnasio descuenta sesión. */}
+                {alMenos('experto') && (
+                  <div className="flex items-start space-x-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Switch
+                      checked={form.watch('configuracion.clases.descontarSesionEnClase')}
+                      onCheckedChange={(c) => form.setValue('configuracion.clases.descontarSesionEnClase', c, { shouldDirty: true })}
+                      disabled={isLoading || updateMutation.isPending}
+                      className="mt-1"
+                    />
+                    <div className="space-y-1">
+                      <Label className="font-medium text-slate-900 dark:text-white">Asistir a una clase descuenta una sesión</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Para planes por sesiones. Si está inactivo, solo el ingreso al gimnasio descuenta. Si lo activas, marcar a un
+                        cliente como &quot;asistió&quot; en una clase también le descuenta una sesión (y corregirlo se la devuelve).
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

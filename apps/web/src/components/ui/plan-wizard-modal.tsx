@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { ArrowRight, ArrowLeft, Save, CalendarClock, ChevronDown } from 'lucide-react';
 import { useModoUso } from '@/hooks/use-modo-uso';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet, unwrapList } from '@/lib/api-client';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -38,10 +41,15 @@ const DAYS_OF_WEEK = [
   { label: 'Domingo', value: 0 },
 ];
 
+type ModoAcceso = 'ABIERTA' | 'MIEMBROS' | 'PLANES';
+interface AccesoClases { porDefecto: ModoAcceso; porDisciplina: Record<string, { modo: ModoAcceso; planIds?: string[] }> }
+
 interface PlanWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: PlanFormValues) => void;
+  // disciplinaIds: clases que incluye el plan (null si no se tocó o no hay
+  // módulo de clases). Se guarda aparte, en las reglas de reserva (plan 8.4).
+  onSubmit: (data: PlanFormValues, disciplinaIds: string[] | null) => void;
   initialData?: any;
   isPending?: boolean;
 }
@@ -51,6 +59,33 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
   const { modo, esExperto } = useModoUso();
   const ultimoPaso = esExperto ? 3 : 2;
   const [masOpciones, setMasOpciones] = useState(false);
+
+  // "Este plan incluye: ☑ Spinning ☑ Yoga ☐ Pilates" (plan de simplificación, 8.4).
+  const modulos = useModulosActivos();
+  const { data: disciplinas = [] } = useQuery({
+    queryKey: ['disciplinas', 'plan'],
+    queryFn: async () => unwrapList<{ id: string; nombre: string }>(await apiGet('/disciplinas')),
+    enabled: isOpen && modulos.clasesGrupales,
+  });
+  const { data: acceso } = useQuery({
+    queryKey: ['acceso-clases'],
+    queryFn: async () => apiGet<AccesoClases>('/acceso-clases'),
+    enabled: isOpen && modulos.clasesGrupales,
+  });
+  const reglaDe = (id: string) => acceso?.porDisciplina[id] ?? { modo: acceso?.porDefecto ?? 'MIEMBROS' };
+  const [incluidas, setIncluidas] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!isOpen || !acceso) return;
+    setIncluidas(disciplinas.filter((d) => {
+      const regla = reglaDe(d.id);
+      return regla.modo !== 'PLANES' || (!!initialData?.id && (regla.planIds ?? []).includes(initialData.id));
+    }).map((d) => d.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, acceso, disciplinas, initialData]);
+  const [incluidasTocadas, setIncluidasTocadas] = useState(false);
+  useEffect(() => {
+    if (isOpen) setIncluidasTocadas(false);
+  }, [isOpen]);
   
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema) as any,
@@ -134,7 +169,7 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
   // era el mismo bug encontrado y corregido en membresia-wizard-modal.tsx.
   const onFinalSubmit = form.handleSubmit((values) => {
     if (step !== ultimoPaso) return;
-    onSubmit(values);
+    onSubmit(values, incluidasTocadas ? incluidas : null);
   });
 
   // Renovación automática y restricciones de acceso: en experto, a la vista
@@ -331,6 +366,32 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                     <p className="text-sm text-slate-500 mb-4">Ingresa el total de ingresos o clases permitidas.</p>
                     <Input type="number" placeholder="Ej. 12" {...form.register('cantidadSesiones')} className="max-w-[200px] text-lg bg-slate-50" />
                     {form.formState.errors.cantidadSesiones && <p className="text-sm text-red-500">{form.formState.errors.cantidadSesiones.message}</p>}
+                  </div>
+                )}
+
+                {modulos.clasesGrupales && disciplinas.length > 0 && incluidas && (
+                  <div className="space-y-2 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <Label className="font-semibold">Clases que incluye este plan</Label>
+                    <p className="text-xs text-slate-500">Los clientes con este plan podrán reservar estas clases.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {disciplinas.map((d) => {
+                        const abierta = reglaDe(d.id).modo === 'ABIERTA';
+                        return (
+                          <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={abierta || incluidas.includes(d.id)}
+                              disabled={abierta}
+                              onCheckedChange={(c) => {
+                                setIncluidasTocadas(true);
+                                setIncluidas(c ? [...incluidas, d.id] : incluidas.filter((x) => x !== d.id));
+                              }}
+                            />
+                            {d.nombre}
+                            {abierta && <span className="text-xs text-slate-500">(abierta a todos)</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

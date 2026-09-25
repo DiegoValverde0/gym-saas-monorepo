@@ -752,6 +752,11 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 - **Criterio:** una organización nueva en modo simple puede registrar un cliente, venderle una membresía y registrar su ingreso sin haber configurado nada, con un máximo de 6 campos por formulario.
 
 ### Fase 3 · Clases inteligentes (6–8 días)
+- **Estado: hecha** (2026-09-25). Notas:
+  - "Descuenta una sesión" (D4) quedó en Configuración → Políticas (experto) y no en el paso 4 del asistente, porque es una regla de toda la organización, no de una clase.
+  - La grilla no muestra ausencias puntuales (son de fechas concretas, no de la semana tipo); el choque real se valida igual al guardar.
+  - El choque de una serie se compara contra otras series del instructor; contra clases sueltas futuras se valida en cada sesión puntual.
+  - Pendiente: horizonte de generación configurable (8.6), aviso de choque por sucursal en el backend (hoy solo se ve en gris en la grilla), "Asignar instructor" directo desde los huecos de cobertura de la Agenda (sección 9).
 - Asistente "Nueva clase" de 5 pasos con la grilla de horarios disponibles (8.2) y endpoint `horarios-disponibles`.
 - Choques de instructor (8.3).
 - Quién puede reservar, nivel A (8.4), con validación en reservas y edición desde el plan.

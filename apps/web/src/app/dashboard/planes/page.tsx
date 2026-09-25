@@ -4,19 +4,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
-import { useForm, Controller } from 'react-hook-form';
+import { apiGet, apiPost, apiPatch, apiPut, unwrapList } from '@/lib/api-client';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { PlanWizardModal } from '@/components/ui/plan-wizard-modal';
 import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, Plus, Edit, Trash2, Clock, CalendarDays, Search, ArchiveRestore } from 'lucide-react';
@@ -47,8 +41,14 @@ export default function PlanesPage() {
     enabled: !!token,
   });
 
+  // Clases que incluye el plan: se guardan en las reglas de reserva (plan 8.4)
+  // después de guardar el plan, porque un plan nuevo recién tiene id ahí.
+  const guardarDisciplinas = async (planId: string, disciplinaIds: string[] | null) => {
+    if (disciplinaIds) await apiPut(`/acceso-clases/planes/${planId}`, { disciplinaIds });
+  };
+
   const createMutation = useMutation({
-    mutationFn: async (values: any) => {
+    mutationFn: async ({ values, disciplinaIds }: { values: any; disciplinaIds: string[] | null }) => {
       const payload: any = { ...values };
       if (!payload.duracionDias) delete payload.duracionDias;
       if (!payload.cantidadSesiones) delete payload.cantidadSesiones;
@@ -56,7 +56,9 @@ export default function PlanesPage() {
       if (!payload.horaInicioAcceso) delete payload.horaInicioAcceso;
       if (!payload.horaFinAcceso) delete payload.horaFinAcceso;
 
-      return apiPost('/planes', payload);
+      const plan = await apiPost<{ id: string }>('/planes', payload);
+      await guardarDisciplinas(plan.id, disciplinaIds);
+      return plan;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planes'] });
@@ -69,7 +71,7 @@ export default function PlanesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { id: string, values: any }) => {
+    mutationFn: async (data: { id: string, values: any, disciplinaIds: string[] | null }) => {
       const payload: any = { ...data.values };
       if (!payload.duracionDias) payload.duracionDias = null;
       if (!payload.cantidadSesiones) payload.cantidadSesiones = null;
@@ -77,7 +79,9 @@ export default function PlanesPage() {
       if (!payload.horaInicioAcceso) payload.horaInicioAcceso = null;
       if (!payload.horaFinAcceso) payload.horaFinAcceso = null;
 
-      return apiPatch(`/planes/${data.id}`, payload);
+      const plan = await apiPatch(`/planes/${data.id}`, payload);
+      await guardarDisciplinas(data.id, data.disciplinaIds);
+      return plan;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planes'] });
@@ -97,11 +101,11 @@ export default function PlanesPage() {
     itemName: 'El plan'
   });
 
-  const onSubmit = (values: any) => {
+  const onSubmit = (values: any, disciplinaIds: string[] | null) => {
     if (editingPlan) {
-      updateMutation.mutate({ id: editingPlan.id, values });
+      updateMutation.mutate({ id: editingPlan.id, values, disciplinaIds });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate({ values, disciplinaIds });
     }
   };
 
