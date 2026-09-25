@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,9 @@ export default function MembresiasPage() {
   const { activeTenantId } = useTenantStore();
 
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -225,7 +229,8 @@ export default function MembresiasPage() {
           planes={planesList.filter((p: any) => p.estado === 'ACTIVO')}
           promociones={promocionesList.filter((p: any) => p.estado === 'ACTIVO')}
           sucursales={sucursales || []}
-          userSucursalId={userSucursalId || undefined}
+          // Una venta nueva se registra en la sucursal activa, sin preguntar.
+          userSucursalId={userSucursalId || (editingMembresia && variasSucursales ? undefined : sucursalActiva) || undefined}
           editingMembresia={editingMembresia}
         />
 

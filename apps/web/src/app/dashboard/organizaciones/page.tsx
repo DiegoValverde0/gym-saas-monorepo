@@ -11,7 +11,7 @@ import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
-import { Globe, Plus, Ban, RotateCcw, Search } from 'lucide-react';
+import { Globe, Plus, Ban, RotateCcw, Search, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,9 @@ interface Organizacion {
   nombre: string;
   estado: string;
   createdAt: string;
+  // Diagnóstico de acceso (plan 6.6 e).
+  administradores?: { asignacionId: string; nombre: string; correo: string; sucursalNombre: string | null }[];
+  sinAdministradorGeneral?: boolean;
 }
 
 // El superadmin ya no puede editar los datos de una organización (ver
@@ -136,6 +139,27 @@ export default function OrganizacionesPage() {
     setIsDialogOpen(true);
   };
 
+  // Única escritura del superadmin sobre el acceso de un gimnasio: acotada y
+  // registrada en Auditoria (ver organizacion.service.ts).
+  const accesoTotalMutation = useMutation({
+    mutationFn: async (v: { orgId: string; asignacionId: string }) =>
+      apiPost(`/organizaciones/${v.orgId}/administradores/${v.asignacionId}/acceso-total`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organizaciones'] });
+      toast({ title: 'Acceso actualizado', description: 'El administrador ya trabaja con todas las sucursales, sin cerrar sesión.', variant: 'success' });
+    },
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+  const handleAccesoTotal = (org: Organizacion, admin: NonNullable<Organizacion['administradores']>[number]) => {
+    setConfirmConfig({
+      title: 'Dar acceso a todas las sucursales',
+      description: `${admin.nombre} (${org.nombre}) está limitado a ${admin.sucursalNombre}. Pasará a ver y gestionar todas las sucursales de su gimnasio. Esta acción queda registrada.`,
+      onConfirm: () => accesoTotalMutation.mutate({ orgId: org.id, asignacionId: admin.asignacionId }),
+      isDestructive: false,
+    });
+    setConfirmOpen(true);
+  };
+
   const handleSuspender = (id: string) => {
     setConfirmConfig({
       title: '¿Suspender Organización?',
@@ -224,6 +248,7 @@ export default function OrganizacionesPage() {
             <TableRow>
               <TableHead>Organización</TableHead>
               <TableHead>Estado</TableHead>
+              <TableHead>Administradores</TableHead>
               <TableHead>Fecha de Registro</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -246,6 +271,35 @@ export default function OrganizacionesPage() {
                   {org.estado === 'ACTIVO' && <Badge variant="success">Activo</Badge>}
                   {org.estado === 'SUSPENDIDO' && <Badge variant="destructive">Suspendido</Badge>}
                   {org.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1">
+                    {org.sinAdministradorGeneral && (
+                      <p className="flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Ningún administrador tiene acceso a todas sus sucursales
+                      </p>
+                    )}
+                    {(org.administradores || []).map((a) => (
+                      <div key={a.asignacionId} className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-700 dark:text-slate-300">{a.nombre}</span>
+                        <span className="text-slate-400 dark:text-slate-500">·</span>
+                        {a.sucursalNombre ? (
+                          <>
+                            <span className="text-amber-700 dark:text-amber-300">Solo {a.sucursalNombre}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleAccesoTotal(org, a)}
+                              className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+                            >
+                              Dar acceso a todas
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-slate-500 dark:text-slate-400">Todas las sucursales</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <span className="text-xs text-slate-600 dark:text-slate-400">{new Date(org.createdAt).toLocaleDateString()}</span>

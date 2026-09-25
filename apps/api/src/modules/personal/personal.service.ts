@@ -8,10 +8,10 @@ import { UpdatePersonalDto } from './dto/update-personal.dto';
 import { CreateMiembroEquipoDto, UpdateMiembroEquipoDto } from './dto/miembro-equipo.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
-import { hashContrasena } from '../../common/utils/contrasena.util';
+import { generarContrasenaTemporal, hashContrasena } from '../../common/utils/contrasena.util';
 import { TurnoPlantillaService } from '../turno-plantilla/turno-plantilla.service';
 import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
-import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
+import { assertSucursalAsignable, cerrarSesiones, cuentaSoloDeEstaOrganizacion, invalidarAccesoVigente, ultimasActividades } from '../../common/utils/acceso-vigente.util';
 
 // Además de SUPERADMIN (ver rol.util.ts), una persona del equipo tampoco
 // puede tener el rol CLIENTE: es el de las cuentas de clientes, no de empleados.
@@ -220,7 +220,52 @@ export class PersonalService {
       }),
       this.prisma.extendedClient.perfilStaff.count({ where: this.filtroAlcance() }),
     ]);
-    return paginar(data, total, page, limit);
+    // Última actividad de cada persona en esta organización (Redis, la
+    // registra JwtAuthGuard). Si Redis falla, simplemente no se muestra.
+    const actividad = await ultimasActividades(this.redisClient, data.map((p) => p.usuarioId), this.cls.get('organizacionId')).catch(
+      () => new Map<string, string | null>(),
+    );
+    return paginar(data.map((p) => ({ ...p, ultimaActividad: actividad.get(p.usuarioId) ?? null })), total, page, limit);
+  }
+
+  // =========================================================================
+  // ACCIONES DE SOPORTE (plan de simplificación, 6.6 d)
+  // =========================================================================
+
+  // Cierra la sesión de la persona en todos sus dispositivos, en esta
+  // organización. Puede volver a entrar enseguida con su contraseña.
+  async cerrarSesionesDe(id: string) {
+    const staff = await this.findOne(id);
+    await cerrarSesiones(this.redisClient, staff.usuarioId, this.cls.get('organizacionId'));
+    return { ok: true };
+  }
+
+  // Genera una contraseña temporal para copiarla o enviarla por WhatsApp y
+  // cierra sus sesiones abiertas. Solo si la cuenta se usa únicamente en este
+  // gimnasio: si también entra a otro, cambiarle la contraseña le cambiaría
+  // el acceso allá, y eso no le corresponde a este administrador.
+  async restablecerContrasena(id: string, autorId: string) {
+    const staff = await this.findOne(id);
+    const organizacionId = this.cls.get('organizacionId');
+    if (!(await cuentaSoloDeEstaOrganizacion(this.prisma, staff.usuarioId, organizacionId))) {
+      throw new BadRequestException(
+        `La cuenta de ${staff.usuario.nombreCompleto} también se usa en otro gimnasio: solo esa persona puede cambiar su contraseña.`,
+      );
+    }
+
+    const contrasenaTemporal = generarContrasenaTemporal();
+    await this.prisma.extendedClient.usuario.update({ where: { id: staff.usuarioId }, data: { contrasenaHash: await hashContrasena(contrasenaTemporal) } });
+    await cerrarSesiones(this.redisClient, staff.usuarioId, organizacionId);
+    await this.prisma.extendedClient.auditoria.create({
+      data: {
+        // organizacionId lo inyecta la extensión RLS.
+        usuarioId: autorId,
+        tablaAfectada: 'usuarios',
+        operacion: 'UPDATE',
+        valoresNuevos: { accion: 'restablecer_contrasena', usuarioAfectadoId: staff.usuarioId },
+      },
+    });
+    return { contrasenaTemporal };
   }
 
   async findOne(id: string) {

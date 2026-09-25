@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
@@ -70,6 +71,9 @@ export default function TurnosPage() {
   const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTurno, setEditingTurno] = useState<Turno | null>(null);
@@ -136,7 +140,7 @@ export default function TurnosPage() {
     setEditingTurno(null);
     form.reset({
       staffId: '',
-      sucursalId: userSucursalId || '',
+      sucursalId: userSucursalId || sucursalActiva || '',
       fecha: '',
       horaEntrada: '',
       horaSalida: '',
@@ -322,7 +326,7 @@ export default function TurnosPage() {
                 options: (personalList as Staff[]).map((p: Staff) => ({ label: p.usuario?.nombreCompleto || 'Sin nombre', value: p.id })),
                 colSpan: 2,
               },
-              ...(!userSucursalId
+              ...(!userSucursalId && (editingTurno ? variasSucursales : !sucursalActiva)
                 ? [{
                     name: 'sucursalId',
                     label: 'Sucursal',

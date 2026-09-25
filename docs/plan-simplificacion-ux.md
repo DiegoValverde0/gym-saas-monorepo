@@ -729,6 +729,11 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 - 6.6 d) y e) (acciones de soporte y diagnóstico del superadmin) pasan a la fase 1.
 
 ### Fase 1 · Sucursal predeterminada y alta del equipo sin duplicados (3–4 días)
+- **Estado: hecha** (2026-09-24). Quedan para más adelante:
+  - Filtrar por la sucursal activa los listados con datos de varias sucursales (clientes, membresías, cajas, stock, turnos), con el filtro "Todas" para quien tiene acceso total (5.1.6). Los listados del servidor están paginados, así que filtrar en el navegador mostraría datos incompletos: hace falta un parámetro de sucursal en cada endpoint.
+  - La cabecera `x-sucursal-id` de 5.2 no hizo falta: los formularios ya envían la sucursal activa de forma explícita.
+  - El formulario de Equipo por modo (simple / intermedio / experto) llega con la fase 2; por ahora todos ven la versión intermedia, con "Contratación y pagos" al final.
+  - "Última actividad" no existía en Redis como suponía 6.6 d: ahora la registra la guardia de sesión en cada petición (`actividad:<usuario>:<org>`, 90 días).
 - Sección 5 completa (store global, selector en la barra superior, sede principal, todas las pantallas).
 - Formulario de equipo con un solo campo de sucursal (6.3), plantillas rápidas de horario y roles con nombres humanos (6.2).
 - Acciones de soporte en la ficha de la persona y diagnóstico de acceso para el superadmin (6.6 d y e).

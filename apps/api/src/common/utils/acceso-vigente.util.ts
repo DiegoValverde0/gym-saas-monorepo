@@ -113,3 +113,57 @@ export async function assertSucursalAsignable(
     `Tu acceso está limitado a ${mia?.nombre ?? 'una sucursal'}, así que solo puedes dar acceso a esa sucursal.`,
   );
 }
+
+// =========================================================================
+// SESIONES Y ÚLTIMA ACTIVIDAD (acciones de soporte, plan 6.6 d)
+// =========================================================================
+
+// "Cerrar sus sesiones": se guarda desde cuándo valen las sesiones de esa
+// persona en esa organización. JwtAuthGuard rechaza los tokens emitidos antes
+// (iat), así que se cierran todos sus dispositivos pero puede volver a entrar
+// enseguida -- a diferencia de `user:revoked`, que bloquea la cuenta entera.
+// Dura lo mismo que el token más largo (1 día, ver auth.module.ts) con margen.
+const TTL_SESIONES_DESDE = 2 * 24 * 60 * 60;
+const claveSesionesDesde = (usuarioId: string, organizacionId: string | null | undefined) =>
+  `sesiones:desde:${usuarioId}:${organizacionId ?? 'global'}`;
+
+export async function cerrarSesiones(redis: RedisClientType, usuarioId: string, organizacionId: string | null | undefined) {
+  await redis.setEx(claveSesionesDesde(usuarioId, organizacionId), TTL_SESIONES_DESDE, String(Math.floor(Date.now() / 1000)));
+  await invalidarAccesoVigente(redis, usuarioId, organizacionId);
+}
+
+export async function sesionCerrada(redis: RedisClientType, usuarioId: string, organizacionId: string | null | undefined, emitidoEn?: number) {
+  if (!emitidoEn) return false;
+  const desde = await redis.get(claveSesionesDesde(usuarioId, organizacionId));
+  return !!desde && emitidoEn < Number(desde);
+}
+
+// Última actividad: la registra JwtAuthGuard en cada petición autenticada.
+const TTL_ACTIVIDAD = 90 * 24 * 60 * 60;
+const claveActividad = (usuarioId: string, organizacionId: string | null | undefined) =>
+  `actividad:${usuarioId}:${organizacionId ?? 'global'}`;
+
+export async function registrarActividad(redis: RedisClientType, usuarioId: string, organizacionId: string | null | undefined) {
+  await redis.setEx(claveActividad(usuarioId, organizacionId), TTL_ACTIVIDAD, new Date().toISOString());
+}
+
+export async function ultimasActividades(redis: RedisClientType, usuarioIds: string[], organizacionId: string | null | undefined) {
+  if (usuarioIds.length === 0) return new Map<string, string | null>();
+  const valores = await redis.mGet(usuarioIds.map((id) => claveActividad(id, organizacionId)));
+  return new Map(usuarioIds.map((id, i) => [id, valores[i] ?? null]));
+}
+
+/**
+ * ¿La cuenta se usa solo en esta organización? (no es superadmin ni tiene
+ * acceso a otro gimnasio). Lee a propósito con el cliente crudo: las
+ * asignaciones de OTRAS organizaciones no son visibles con la extensión RLS.
+ * Se usa antes de cambiar datos de la cuenta que afectarían a los demás
+ * gimnasios, como su contraseña.
+ */
+export async function cuentaSoloDeEstaOrganizacion(prisma: PrismaClient, usuarioId: string, organizacionId: string) {
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+    select: { isSuperAdmin: true, asignacionesAcceso: { select: { organizacionId: true } } },
+  });
+  return !!usuario && !usuario.isSuperAdmin && usuario.asignacionesAcceso.every((a) => a.organizacionId === organizacionId);
+}

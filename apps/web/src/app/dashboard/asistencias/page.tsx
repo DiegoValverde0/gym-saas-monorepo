@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { Protect } from '@/components/ui/protect';
 import { Input } from '@/components/ui/input';
@@ -19,11 +20,6 @@ interface Cliente {
   id: string;
   nombre: string;
   numeroDocumento?: string | null;
-}
-
-interface Sucursal {
-  id: string;
-  nombre: string;
 }
 
 interface ClaseReservada {
@@ -68,7 +64,6 @@ const TIPO_ASISTENCIA_LABEL: Record<string, string> = {
   PRUEBA_GRATIS: 'Prueba gratis',
 };
 
-const STORAGE_SUCURSAL = 'asistencias.sucursalId';
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -88,33 +83,9 @@ export default function AsistenciasPage() {
   const { toast } = useToast();
   const { activeTenantId } = useTenantStore();
   const { token, user } = useAuth();
-  const sucursalFija = user?.sucursalId || null;
 
-  // ---------------------------------------------------------------------
-  // Sucursal de trabajo. Antes se usaba el id de la ORGANIZACIÓN como si
-  // fuera una sucursal, así que la lista de "adentro" salía siempre vacía.
-  // ---------------------------------------------------------------------
-  const { data: sucursalesData } = useQuery({
-    queryKey: ['sucursales', activeTenantId],
-    queryFn: async () => unwrapList<Sucursal>(await apiGet('/sucursales')),
-    enabled: !!token,
-  });
-  const sucursales = sucursalesData || [];
-  const [sucursalElegida, setSucursalElegida] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (sucursalElegida || sucursales.length === 0) return;
-    let guardada: string | null = null;
-    try { guardada = localStorage.getItem(STORAGE_SUCURSAL); } catch { /* sin almacenamiento */ }
-    setSucursalElegida(sucursales.some((s) => s.id === guardada) ? guardada : sucursales[0].id);
-  }, [sucursales, sucursalElegida]);
-
-  const sucursalId = sucursalFija || sucursalElegida;
-  const cambiarSucursal = (id: string) => {
-    setSucursalElegida(id);
-    try { localStorage.setItem(STORAGE_SUCURSAL, id); } catch { /* sin almacenamiento */ }
-    handleResetSearch();
-  };
+  // Sucursal de trabajo: la activa de la barra superior (se elige ahí, no acá).
+  const { sucursalId, sucursal, variasSucursales } = useSucursalActiva();
 
   // ---------------------------------------------------------------------
   // Búsqueda de clientes en el servidor (antes solo filtraba los primeros 50)
@@ -291,22 +262,11 @@ export default function AsistenciasPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Sucursal de trabajo */}
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-              <MapPin className="w-4 h-4 text-zinc-400" />
-              {sucursalFija ? (
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300">{user?.sucursalNombre || sucursales.find((s) => s.id === sucursalFija)?.nombre || 'Mi sucursal'}</span>
-              ) : (
-                <select
-                  value={sucursalId || ''}
-                  onChange={(e) => cambiarSucursal(e.target.value)}
-                  className="bg-transparent font-semibold text-zinc-700 dark:text-zinc-300 outline-none cursor-pointer"
-                >
-                  {sucursales.length === 0 && <option value="">Sin sucursales</option>}
-                  {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
-              )}
-            </label>
+            {variasSucursales && sucursal && (
+              <span className="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                <MapPin className="w-4 h-4 text-zinc-400" /> {sucursal.nombre}
+              </span>
+            )}
 
             {/* Mi turno de hoy */}
             {miTurno && (

@@ -1,4 +1,7 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { RedisClientType } from 'redis';
+import { invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
+import { ROL_ADMINISTRADOR } from '../../common/utils/rol.util';
 import { promisify } from 'util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
@@ -16,7 +19,11 @@ async function hashPassword(password: string): Promise<string> {
 
 @Injectable()
 export class OrganizacionService {
-  constructor(private prisma: PrismaService, private cls: ClsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cls: ClsService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
+  ) {}
 
   // ==============================================================
   // METODOS DE PLATAFORMA PARA SUPERADMIN
@@ -29,10 +36,64 @@ export class OrganizacionService {
   // suspender/reactivar una existente (solo el campo `estado`).
   // ==============================================================
 
+  // Incluye el diagnóstico de acceso (plan 6.6 e): sus administradores con su
+  // alcance, y si ninguno tiene acceso a todas las sucursales (como le pasó a
+  // Gym Diego). Solo lectura.
   async getAllOrganizaciones() {
-    return this.prisma.organizacion.findMany({
+    const organizaciones = await this.prisma.organizacion.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        asignacionesAcceso: {
+          where: { rol: { nombre: ROL_ADMINISTRADOR, organizacionId: null }, usuario: { deletedAt: null } },
+          select: {
+            id: true,
+            sucursalId: true,
+            sucursal: { select: { nombre: true } },
+            usuario: { select: { nombreCompleto: true, correo: true } },
+          },
+        },
+      },
     });
+    return organizaciones.map(({ asignacionesAcceso, ...org }) => ({
+      ...org,
+      administradores: asignacionesAcceso.map((a) => ({
+        asignacionId: a.id,
+        nombre: a.usuario.nombreCompleto,
+        correo: a.usuario.correo,
+        sucursalNombre: a.sucursalId ? a.sucursal?.nombre ?? 'Una sucursal' : null,
+      })),
+      sinAdministradorGeneral: !asignacionesAcceso.some((a) => a.sucursalId === null),
+    }));
+  }
+
+  // Acción de plataforma acotada (plan 6.6 e): da acceso a todas las
+  // sucursales a un ADMINISTRADOR de la organización. Es la única escritura
+  // del superadmin sobre el acceso de un gimnasio, igual que el alta de la
+  // organización con su administrador, y queda registrada en Auditoria.
+  async darAccesoTotalAdministrador(organizacionId: string, asignacionId: string, autorId: string, ip?: string) {
+    await this.assertOrganizacionExiste(organizacionId);
+    const asignacion = await this.prisma.asignacionAcceso.findFirst({
+      where: { id: asignacionId, organizacionId, rol: { nombre: ROL_ADMINISTRADOR, organizacionId: null } },
+    });
+    if (!asignacion) throw new NotFoundException('Ese administrador no pertenece a esta organización.');
+    if (asignacion.sucursalId === null) return { ok: true, sinCambios: true };
+
+    await this.prisma.$transaction([
+      this.prisma.asignacionAcceso.update({ where: { id: asignacionId }, data: { sucursalId: null } }),
+      this.prisma.auditoria.create({
+        data: {
+          organizacionId,
+          usuarioId: autorId,
+          tablaAfectada: 'asignaciones_acceso',
+          operacion: 'UPDATE',
+          valoresAnteriores: { asignacionId, sucursalId: asignacion.sucursalId },
+          valoresNuevos: { asignacionId, sucursalId: null, accion: 'plataforma_acceso_total_administrador' },
+          ipOrigen: ip?.slice(0, 45),
+        },
+      }),
+    ]);
+    await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, organizacionId);
+    return { ok: true };
   }
 
   async crearOrganizacionConAdmin(datos: CrearOrganizacionDto) {

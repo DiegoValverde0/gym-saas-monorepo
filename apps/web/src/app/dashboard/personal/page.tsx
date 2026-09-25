@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { refrescarAcceso, useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
+import { descripcionRol, nombreRol, ordenRol } from '@/lib/roles';
 import { apiGet, apiPatch, apiPost, unwrapList } from '@/lib/api-client';
 import { useForm, Controller, UseFormReturn, FieldValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,7 +22,8 @@ import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy } from 'lucide-react';
+import { UserCog, Plus, Edit, Trash2, Search, ArchiveRestore, Copy, Wand2, KeyRound, LogOut } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 
@@ -44,6 +48,28 @@ const DIA_CORTO: Record<number, string> = Object.fromEntries(DIAS_GRILLA.map((d)
 // Roles globales que no corresponden a un empleado (el backend también los rechaza).
 const ROLES_NO_ASIGNABLES = ['SUPERADMIN', 'CLIENTE'];
 
+// Roles que no dan clases: para ellos no se pregunta qué disciplinas imparte.
+const ROLES_SIN_CLASES = ['ADMIN_GYM', 'RECEPCIONISTA'];
+
+// Plantillas rápidas de horario (plan de simplificación, 6.3). Días 1..5 = lunes a viernes.
+const PLANTILLAS_HORARIO = [
+  { etiqueta: 'Lunes a viernes, 8 a 16', dias: [1, 2, 3, 4, 5], entrada: '08:00', salida: '16:00' },
+  { etiqueta: 'Mañanas, lunes a sábado (6 a 14)', dias: [1, 2, 3, 4, 5, 6], entrada: '06:00', salida: '14:00' },
+  { etiqueta: 'Tardes, lunes a sábado (14 a 22)', dias: [1, 2, 3, 4, 5, 6], entrada: '14:00', salida: '22:00' },
+];
+
+// Contraseña inicial fácil de dictar o enviar por WhatsApp: sin caracteres
+// que se confunden (0/O, 1/l/I).
+function generarContrasena() {
+  const letras = 'abcdefghjkmnpqrstuvwxyz';
+  const numeros = '23456789';
+  const azar = (conjunto: string, n: number) => {
+    const valores = crypto.getRandomValues(new Uint32Array(n));
+    return Array.from(valores, (v) => conjunto[v % conjunto.length]).join('');
+  };
+  return `${azar(letras, 4)}${azar(numeros, 4)}${azar(letras, 2)}`;
+}
+
 interface Rol { id: string; nombre: string; }
 interface Sucursal { id: string; nombre: string; }
 interface Disciplina { id: string; nombre: string; }
@@ -55,6 +81,7 @@ interface Staff {
   costoPorHora: number | string;
   comisionPorcentaje?: number | string | null;
   estado: string;
+  ultimaActividad?: string | null;
   usuario?: {
     nombreCompleto: string;
     correo: string;
@@ -70,6 +97,18 @@ interface ResumenHorario {
   turnosActualizados: number;
   turnosEliminados: number;
   turnosConservados: number;
+}
+
+// "hace 5 min", "hace 3 h", "hace 2 días"; null = nunca entró (o hace más de 90 días).
+function haceCuanto(iso?: string | null): string {
+  if (!iso) return 'Sin actividad reciente';
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 2) return 'Activo ahora';
+  if (min < 60) return `Activo hace ${min} min`;
+  const horas = Math.floor(min / 60);
+  if (horas < 24) return `Activo hace ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return `Activo hace ${dias} ${dias === 1 ? 'día' : 'días'}`;
 }
 
 const horaDe = (iso: string) => new Date(iso).toISOString().substring(11, 16);
@@ -105,7 +144,7 @@ const miembroSchema = z
       }
     }
     const activos = v.dias.filter((d) => d.activo);
-    if (activos.length > 0 && !v.horarioSucursalId) {
+    if (activos.length > 0 && !v.sucursalAccesoId && !v.horarioSucursalId) {
       ctx.addIssue({ code: 'custom', path: ['horarioSucursalId'], message: 'Elige en qué sucursal trabaja' });
     }
     v.dias.forEach((d, i) => {
@@ -140,6 +179,8 @@ export default function PersonalPage() {
   // Quien tiene acceso limitado a una sucursal solo puede dar acceso a esa
   // (el backend lo exige igual): el selector de sucursal desaparece.
   const miSucursalId = user?.sucursalId ?? null;
+  const { sucursalId: sucursalActiva } = useSucursalActiva();
+  const modulos = useModulosActivos();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPersonal, setEditingPersonal] = useState<Staff | null>(null);
@@ -191,10 +232,19 @@ export default function PersonalPage() {
     enabled: !!token,
   });
 
-  const rolesAsignables = (roles || []).filter((r) => !ROLES_NO_ASIGNABLES.includes(r.nombre));
+  const rolesAsignables = (roles || [])
+    .filter((r) => !ROLES_NO_ASIGNABLES.includes(r.nombre))
+    .sort((a, b) => ordenRol(a.nombre) - ordenRol(b.nombre));
   const sucursalesList = sucursales || [];
   const nombreSucursal = (id?: string | null) => sucursalesList.find((s) => s.id === id)?.nombre;
   const sucursalesAsignables = miSucursalId ? sucursalesList.filter((s) => s.id === miSucursalId) : sucursalesList;
+  // Un solo campo "Sucursal" (3.1 y 6.3): si trabaja en una sucursal, esa es a
+  // la vez su acceso y su lugar de trabajo. Solo con "Todas las sucursales" se
+  // pregunta dónde trabaja habitualmente, para su horario.
+  const eligeSucursal = sucursalesAsignables.length > 1;
+  const accesoElegido = form.watch('sucursalAccesoId');
+  const rolElegido = rolesAsignables.find((r) => r.id === form.watch('rolId'));
+  const preguntaDisciplinas = modulos.clasesGrupales && !ROLES_SIN_CLASES.includes(rolElegido?.nombre ?? '');
 
   const describirResultado = (res: { horarioResumen?: ResumenHorario | null; usuarioExistente?: boolean }) => {
     const partes: string[] = [];
@@ -238,6 +288,37 @@ export default function PersonalPage() {
     onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
   });
 
+  // Acciones de soporte (plan 6.6 d).
+  const [contrasenaTemporal, setContrasenaTemporal] = useState<{ nombre: string; contrasena: string } | null>(null);
+  const cerrarSesionesMutation = useMutation({
+    mutationFn: async (staff: Staff) => apiPost(`/personal/${staff.id}/cerrar-sesiones`, {}),
+    onSuccess: (_res, staff) =>
+      toast({ title: 'Sesiones cerradas', description: `${staff.usuario?.nombreCompleto} tendrá que volver a iniciar sesión en todos sus dispositivos.`, variant: 'success' }),
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+  const restablecerMutation = useMutation({
+    mutationFn: async (staff: Staff) => apiPost<{ contrasenaTemporal: string }>(`/personal/${staff.id}/restablecer-contrasena`, {}),
+    onSuccess: (res, staff) => setContrasenaTemporal({ nombre: staff.usuario?.nombreCompleto || '', contrasena: res.contrasenaTemporal }),
+    onError: (err: Error) => toast({ title: 'No se pudo restablecer', description: err.message, variant: 'destructive' }),
+  });
+  const confirmarSoporte = (staff: Staff, accion: 'sesiones' | 'contrasena') => {
+    const nombre = staff.usuario?.nombreCompleto;
+    setConfirmConfig(
+      accion === 'sesiones'
+        ? {
+            title: '¿Cerrar sus sesiones?',
+            description: `${nombre} saldrá del sistema en todos sus dispositivos (por ejemplo, si perdió el celular). Podrá volver a entrar con su contraseña.`,
+            onConfirm: () => cerrarSesionesMutation.mutate(staff),
+          }
+        : {
+            title: '¿Restablecer su contraseña?',
+            description: `Se generará una contraseña temporal para ${nombre} y se cerrarán sus sesiones abiertas. Su contraseña actual deja de funcionar.`,
+            onConfirm: () => restablecerMutation.mutate(staff),
+          },
+    );
+    setConfirmOpen(true);
+  };
+
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
     queryKey: ['personal', activeTenantId, showDeleted],
     endpoint: 'personal',
@@ -252,9 +333,12 @@ export default function PersonalPage() {
       .map((d) => ({ diaSemana: d.dia, horaEntrada: d.entrada, horaSalida: d.salida }));
 
     // En edición el horario solo se envía si se tocó (guardarlo re-sincroniza los turnos futuros).
-    const horarioTocado = !!form.formState.dirtyFields.dias || !!form.formState.dirtyFields.horarioSucursalId;
+    // Trabaja donde tiene acceso; con acceso a todas, donde se indicó.
+    const horarioSucursalId = values.sucursalAccesoId || values.horarioSucursalId || sucursalActiva || sucursalesAsignables[0]?.id;
+    const cambioSucursalHorario =
+      !!editingPersonal && diasActivos.length > 0 && horarioSucursalId !== editingPersonal.turnosPlantilla?.[0]?.sucursalId;
+    const horarioTocado = !!form.formState.dirtyFields.dias || cambioSucursalHorario;
     const enviarHorario = editingPersonal ? horarioTocado : diasActivos.length > 0;
-    const horarioSucursalId = values.horarioSucursalId || sucursalesAsignables[0]?.id;
 
     const base: Record<string, unknown> = {
       nombreCompleto: values.nombreCompleto.trim(),
@@ -284,7 +368,11 @@ export default function PersonalPage() {
   const handleAddNew = () => {
     setEditingPersonal(null);
     const iniciales = valoresIniciales();
-    if (sucursalesAsignables.length === 1) iniciales.horarioSucursalId = sucursalesAsignables[0].id;
+    // Por defecto trabaja en la sucursal activa. Con una sola sucursal no se
+    // pregunta nada y queda con acceso a todas (sirve también si después se
+    // abre otra sede).
+    iniciales.sucursalAccesoId = miSucursalId ?? (eligeSucursal ? sucursalActiva ?? '' : '');
+    iniciales.horarioSucursalId = miSucursalId ?? sucursalActiva ?? sucursalesAsignables[0]?.id ?? '';
     form.reset(iniciales);
     setIsDialogOpen(true);
   };
@@ -309,7 +397,7 @@ export default function PersonalPage() {
       costoPorHora: Number(staff.costoPorHora) || 0,
       comisionPorcentaje: staff.comisionPorcentaje != null ? String(Number(staff.comisionPorcentaje)) : '',
       disciplinaIds: (staff.staffDisciplinas || []).map((sd) => sd.disciplinaId),
-      horarioSucursalId: staff.turnosPlantilla?.[0]?.sucursalId || (sucursalesAsignables.length === 1 ? sucursalesAsignables[0].id : ''),
+      horarioSucursalId: staff.turnosPlantilla?.[0]?.sucursalId || sucursalActiva || sucursalesAsignables[0]?.id || '',
       dias,
     });
     setIsDialogOpen(true);
@@ -348,9 +436,26 @@ export default function PersonalPage() {
       });
     };
     const inputHora = 'h-9 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-slate-900 px-2 text-sm disabled:opacity-40';
+    const aplicarPlantilla = (plantilla: (typeof PLANTILLAS_HORARIO)[number] | null) => {
+      DIAS_GRILLA.forEach(({ dia }) => {
+        const activo = !!plantilla && plantilla.dias.includes(dia);
+        f.setValue(`dias.${dia}.activo`, activo, { shouldDirty: true });
+        if (plantilla && activo) {
+          f.setValue(`dias.${dia}.entrada`, plantilla.entrada, { shouldDirty: true });
+          f.setValue(`dias.${dia}.salida`, plantilla.salida, { shouldDirty: true });
+        }
+      });
+    };
+    const chip = 'rounded-full border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300';
 
     return (
       <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {PLANTILLAS_HORARIO.map((pl) => (
+            <button key={pl.etiqueta} type="button" className={chip} onClick={() => aplicarPlantilla(pl)}>{pl.etiqueta}</button>
+          ))}
+          <button type="button" className={chip} onClick={() => aplicarPlantilla(null)}>Sin horario fijo</button>
+        </div>
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Días y horas de trabajo</p>
           <Button type="button" variant="ghost" size="sm" onClick={copiarPrimerDia} className="text-indigo-600 dark:text-indigo-400">
@@ -459,11 +564,12 @@ export default function PersonalPage() {
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-white text-sm">{p.usuario?.nombreCompleto}</p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">{p.usuario?.correo}</p>
+                          {!showDeleted && <p className="text-[11px] text-slate-400 dark:text-slate-500">{haceCuanto(p.ultimaActividad)}</p>}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{asignacion?.rol?.nombre || '—'}</p>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{nombreRol(asignacion?.rol?.nombre) || '—'}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{TIPO_CONTRATACION_LABEL[p.tipoContratacion] || p.tipoContratacion}</p>
                     </TableCell>
                     <TableCell>
@@ -505,6 +611,16 @@ export default function PersonalPage() {
                         ) : (
                           <>
                             <Protect permission="staff:actualizar" fallbackType="hide">
+                              <Button variant="ghost" size="icon" title="Cerrar sus sesiones" aria-label="Cerrar sus sesiones" onClick={() => confirmarSoporte(p, 'sesiones')} className="text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400">
+                                <LogOut className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                            <Protect permission="usuarios:actualizar" fallbackType="hide">
+                              <Button variant="ghost" size="icon" title="Restablecer contraseña" aria-label="Restablecer contraseña" onClick={() => confirmarSoporte(p, 'contrasena')} className="text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400">
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                            <Protect permission="staff:actualizar" fallbackType="hide">
                               <Button variant="ghost" size="icon" onClick={() => handleEdit(p)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -536,7 +652,7 @@ export default function PersonalPage() {
         maxWidthClass="sm:max-w-[640px]"
         sections={[
           {
-            title: 'Datos y acceso',
+            title: '¿Quién es?',
             fields: [
               { name: 'nombreCompleto', label: 'Nombre completo', type: 'text', placeholder: 'Ej. Marta Rojas', colSpan: 2 },
               {
@@ -549,47 +665,64 @@ export default function PersonalPage() {
               },
               ...(editingPersonal
                 ? []
-                : [{ name: 'contrasena', label: 'Contraseña inicial', type: 'password' as const, placeholder: 'Mínimo 8 caracteres' }]),
+                : [{
+                    name: 'contrasena',
+                    label: '',
+                    type: 'custom' as const,
+                    renderCustom: (f: UseFormReturn<FieldValues>) => (
+                      <div className="space-y-2">
+                        <label htmlFor="contrasena-inicial" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Contraseña inicial</label>
+                        <div className="flex gap-2">
+                          <input
+                            id="contrasena-inicial"
+                            type="text"
+                            autoComplete="new-password"
+                            placeholder="Mínimo 8 caracteres"
+                            {...f.register('contrasena')}
+                            className="h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-slate-900 px-3 text-sm font-mono"
+                          />
+                          <Button type="button" variant="outline" onClick={() => f.setValue('contrasena', generarContrasena(), { shouldValidate: true })}>
+                            <Wand2 className="w-4 h-4 mr-1.5" /> Generar
+                          </Button>
+                        </div>
+                        {f.formState.errors.contrasena?.message ? (
+                          <p className="text-xs text-red-500">{String(f.formState.errors.contrasena.message)}</p>
+                        ) : (
+                          <p className="text-xs text-zinc-500">Cópiala y envíasela; podrá usarla para entrar.</p>
+                        )}
+                      </div>
+                    ),
+                  }]),
               { name: 'telefono', label: 'Teléfono (opcional)', type: 'text' },
+            ],
+          },
+          {
+            title: '¿Qué hace y dónde?',
+            fields: [
               {
                 name: 'rolId',
                 label: 'Rol',
                 type: 'select',
-                options: rolesAsignables.map((r) => ({ value: r.id, label: r.nombre })),
-                description: 'Define qué puede hacer en el sistema.',
+                options: rolesAsignables.map((r) => ({ value: r.id, label: nombreRol(r.nombre) })),
+                description: descripcionRol(rolElegido?.nombre) ?? 'Define qué puede hacer en el sistema.',
               },
-              ...(sucursalesAsignables.length > 1
+              ...(eligeSucursal
                 ? [{
                     name: 'sucursalAccesoId',
-                    label: 'Acceso a sucursales',
+                    label: 'Sucursal',
                     type: 'select' as const,
-                    options: [{ value: '', label: 'Todas las sucursales' }, ...sucursalesAsignables.map((s) => ({ value: s.id, label: `Solo ${s.nombre}` }))],
+                    options: [...sucursalesAsignables.map((s) => ({ value: s.id, label: s.nombre })), { value: '', label: 'Todas las sucursales' }],
+                    description: accesoElegido
+                      ? 'Trabaja en esta sucursal y solo verá sus datos.'
+                      : 'Podrá trabajar en cualquier sucursal y ver los datos de todas.',
                   }]
                 : []),
-            ],
-          },
-          {
-            title: 'Perfil',
-            fields: [
-              {
-                name: 'tipoContratacion',
-                label: 'Tipo de contratación',
-                type: 'select',
-                options: [
-                  { label: 'Planilla', value: 'PLANILLA' },
-                  { label: 'Independiente', value: 'INDEPENDIENTE' },
-                  { label: 'Voluntario', value: 'VOLUNTARIO' },
-                ],
-              },
-              { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }] },
-              { name: 'costoPorHora', label: 'Costo por hora', type: 'number', allowDecimals: true },
-              { name: 'comisionPorcentaje', label: 'Comisión % (independiente)', type: 'number', allowDecimals: true },
-              {
+              ...(preguntaDisciplinas ? [{
                 name: 'disciplinaIds',
                 label: '',
-                type: 'custom',
-                colSpan: 2,
-                renderCustom: (f) => (
+                type: 'custom' as const,
+                colSpan: 2 as const,
+                renderCustom: (f: UseFormReturn<FieldValues>) => (
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Disciplinas que imparte</p>
                     {(disciplinas || []).length === 0 ? (
@@ -618,16 +751,34 @@ export default function PersonalPage() {
                     )}
                   </div>
                 ),
-              },
+              }] : []),
             ],
           },
           {
-            title: 'Horario semanal',
+            title: 'Contratación y pagos',
             fields: [
-              ...(sucursalesAsignables.length > 1
+              {
+                name: 'tipoContratacion',
+                label: 'Tipo de contratación',
+                type: 'select',
+                options: [
+                  { label: 'Planilla', value: 'PLANILLA' },
+                  { label: 'Independiente', value: 'INDEPENDIENTE' },
+                  { label: 'Voluntario', value: 'VOLUNTARIO' },
+                ],
+              },
+              { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }] },
+              { name: 'costoPorHora', label: 'Costo por hora', type: 'number', allowDecimals: true },
+              { name: 'comisionPorcentaje', label: 'Comisión % (independiente)', type: 'number', allowDecimals: true },
+            ],
+          },
+          {
+            title: '¿Cuándo trabaja?',
+            fields: [
+              ...(eligeSucursal && !accesoElegido
                 ? [{
                     name: 'horarioSucursalId',
-                    label: 'Sucursal donde trabaja',
+                    label: '¿Dónde trabaja habitualmente?',
                     type: 'select' as const,
                     colSpan: 2 as const,
                     options: sucursalesAsignables.map((s) => ({ value: s.id, label: s.nombre })),
@@ -641,6 +792,39 @@ export default function PersonalPage() {
         isPending={saveMutation.isPending}
         submitLabel={editingPersonal ? 'Guardar cambios' : 'Agregar al equipo'}
       />
+
+      <Dialog open={!!contrasenaTemporal} onOpenChange={(abierto) => !abierto && setContrasenaTemporal(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Contraseña temporal</DialogTitle>
+            <DialogDescription>
+              Envíasela a {contrasenaTemporal?.nombre}. No se vuelve a mostrar: cópiala ahora.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-4 py-3 text-center font-mono text-2xl tracking-wider text-zinc-900 dark:text-white select-all">
+            {contrasenaTemporal?.contrasena}
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const texto = `Tu contraseña temporal para entrar al sistema del gimnasio es: ${contrasenaTemporal?.contrasena}`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+              }}
+            >
+              Enviar por WhatsApp
+            </Button>
+            <Button
+              onClick={() => {
+                navigator.clipboard?.writeText(contrasenaTemporal?.contrasena ?? '').catch(() => {});
+                toast({ title: 'Copiada', variant: 'success' });
+              }}
+            >
+              <Copy className="w-4 h-4 mr-1.5" /> Copiar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <GlobalConfirmDialog
         open={confirmOpen}

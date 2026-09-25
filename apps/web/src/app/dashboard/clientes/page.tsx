@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -23,7 +23,6 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Edit, Trash2, Mail, Phone, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
 
 const clienteSchema = z.object({
   sucursalBaseId: z.string().optional(),
@@ -48,6 +47,9 @@ export default function ClientesPage() {
   const { activeTenantId } = useTenantStore();
 
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -90,6 +92,8 @@ export default function ClientesPage() {
       // Si el usuario tiene una sucursal vinculada en el token, lo forzamos.
       if (userSucursalId) {
           payload.sucursalBaseId = userSucursalId;
+      } else if (!payload.sucursalBaseId && sucursalActiva) {
+          payload.sucursalBaseId = sucursalActiva;
       }
       // Eliminar si está vacío
       if (!payload.sucursalBaseId) {
@@ -194,7 +198,7 @@ export default function ClientesPage() {
       tipoDocumento: 'CI',
       numeroDocumento: '',
       estado: 'ACTIVO',
-      sucursalBaseId: userSucursalId || '',
+      sucursalBaseId: userSucursalId || sucursalActiva || '',
     });
     setIsDialogOpen(true);
   };
@@ -236,7 +240,7 @@ export default function ClientesPage() {
     }
   ];
 
-  if (!userSucursalId) {
+  if (!userSucursalId && (editingCliente ? variasSucursales : !sucursalActiva)) {
     const options = (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id }));
     formSections[0].fields.push({
       name: 'sucursalBaseId',

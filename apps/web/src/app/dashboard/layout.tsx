@@ -42,7 +42,8 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { CommandPalette } from '@/components/ui/command-palette';
-import { IndicadorAlcance, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
+import { nombreRol } from '@/lib/roles';
+import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 
 interface NavItem {
   name: string;
@@ -371,6 +372,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       <span className="truncate max-w-[120px]">{userData.organizacionNombre}</span>
                     </div>
                   )}
+                  <SelectorSucursal />
                   <IndicadorAlcance user={userData} />
                 </div>
               )
@@ -392,7 +394,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     {userData?.nombre || userData?.email?.split('@')[0] || 'Usuario'}
                   </p>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                    {isSuperAdmin ? 'SuperAdmin' : userData?.rolNombre || 'Staff'}
+                    {isSuperAdmin ? 'SuperAdmin' : nombreRol(userData?.rolNombre) || 'Staff'}
                   </p>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 ml-1" />

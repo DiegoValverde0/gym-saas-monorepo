@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, apiPut, unwrapList } from '@/lib/api-client';
 import { useForm, Controller } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
@@ -267,6 +268,10 @@ export default function ClasesPage() {
   const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: prellena el campo Sucursal. En
+  // Clases el campo se mantiene (se puede programar en otra sede); desde la
+  // Agenda la clase se crea en la sucursal que se está viendo.
+  const { sucursalId: sucursalActiva } = useSucursalActiva();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClase, setEditingClase] = useState<Clase | null>(null);
@@ -355,7 +360,7 @@ export default function ClasesPage() {
   const [confirmPlantillaOpen, setConfirmPlantillaOpen] = useState(false);
 
   const valoresSerie = (): SerieFormValues => ({
-    sucursalId: userSucursalId || '',
+    sucursalId: userSucursalId || sucursalActiva || '',
     disciplinaId: '',
     entrenadorId: '',
     nombreClase: '',
@@ -474,7 +479,7 @@ export default function ClasesPage() {
   const handleAddNew = (date?: Date) => {
     setEditingClase(null);
     form.reset({
-      sucursalId: userSucursalId || '',
+      sucursalId: userSucursalId || sucursalActiva || '',
       disciplinaId: '',
       entrenadorId: '',
       nombreClase: '',

@@ -4,7 +4,7 @@ import { Request } from 'express';
 import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
-import { obtenerAccesoVigente } from '../utils/acceso-vigente.util';
+import { obtenerAccesoVigente, registrarActividad, sesionCerrada } from '../utils/acceso-vigente.util';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -74,6 +74,20 @@ export class JwtAuthGuard implements CanActivate {
     const acceso = await obtenerAccesoVigente(this.prisma, this.redisClient, payload.sub, payload.organizacionId);
     if (!acceso) {
         throw new UnauthorizedException('Ya no tienes acceso a esta organización. Si crees que es un error, habla con un administrador.');
+    }
+
+    // "Cerrar sus sesiones" (Equipo) y "Restablecer contraseña" invalidan los
+    // tokens emitidos antes de ese momento en esta organización.
+    let cerrada = false;
+    try {
+        cerrada = await sesionCerrada(this.redisClient, payload.sub, payload.organizacionId, payload.iat);
+        // Última actividad (se muestra en Equipo). Sin await: no demora la petición.
+        registrarActividad(this.redisClient, payload.sub, payload.organizacionId).catch(() => {});
+    } catch (err: unknown) {
+        console.error('[JwtAuthGuard] Fallo al consultar sesiones en Redis (Fail-Open):', (err as Error).message);
+    }
+    if (cerrada) {
+        throw new UnauthorizedException('Un administrador cerró tu sesión. Vuelve a iniciar sesión.');
     }
 
     request['user'] = {

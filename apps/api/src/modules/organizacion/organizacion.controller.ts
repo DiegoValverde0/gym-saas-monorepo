@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Put, Delete, UseGuards, Param, ForbiddenException, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Delete, UseGuards, Param, ForbiddenException, Req, ParseUUIDPipe } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { OrganizacionService } from './organizacion.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -9,6 +9,7 @@ import { UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
 
 interface RequestWithUser extends ExpressRequest {
   user?: {
+    sub?: string;
     is_superadmin?: boolean;
   };
 }
@@ -58,6 +59,21 @@ export class OrganizacionController {
   async reactivarOrganizacion(@Req() req: RequestWithUser, @Param('id') id: string): Promise<unknown> {
     this.assertSuperAdmin(req);
     return this.organizacionService.reactivarOrganizacion(id);
+  }
+
+  // Diagnóstico de acceso: dar acceso a todas las sucursales a un
+  // administrador que quedó limitado a una. Mismo permiso que crear una
+  // organización con su administrador (acción de plataforma acotada).
+  @Post(':id/administradores/:asignacionId/acceso-total')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @RequirePermissions({ accion: 'crear', modulo: 'organizaciones' })
+  async darAccesoTotalAdministrador(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('asignacionId', ParseUUIDPipe) asignacionId: string,
+  ): Promise<unknown> {
+    this.assertSuperAdmin(req);
+    return this.organizacionService.darAccesoTotalAdministrador(id, asignacionId, req.user!.sub!, req.ip);
   }
 
   private assertSuperAdmin(req: RequestWithUser) {

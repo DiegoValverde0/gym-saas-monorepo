@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, unwrapList } from '@/lib/api-client';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { apiGet } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, MapPin, UserX, Users } from 'lucide-react';
-
-interface Sucursal { id: string; nombre: string; }
 
 interface TurnoAgenda {
   id: string;
@@ -47,7 +45,6 @@ interface AgendaSemana {
 }
 
 const PX_POR_HORA = 56;
-const STORAGE_SUCURSAL = 'agenda.sucursalId';
 // Una franja por persona, con color propio (se repite si hay más de 8).
 const COLORES_STAFF = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#8b5cf6', '#14b8a6', '#f97316'];
 const ANCHO_FRANJA = 6;
@@ -107,29 +104,10 @@ const ESTILO_COBERTURA: Record<Cobertura, string> = {
 
 export default function AgendaPage() {
   const router = useRouter();
-  const { token, user } = useAuth();
-  const { activeTenantId } = useTenantStore();
-  const sucursalFija = user?.sucursalId || null;
+  const { token } = useAuth();
 
-  // ---------------- Sucursal (misma lógica que el control de acceso)
-  const { data: sucursalesData } = useQuery({
-    queryKey: ['sucursales', activeTenantId],
-    queryFn: async () => unwrapList<Sucursal>(await apiGet('/sucursales')),
-    enabled: !!token,
-  });
-  const sucursales = sucursalesData || [];
-  const [sucursalElegida, setSucursalElegida] = useState<string | null>(null);
-  useEffect(() => {
-    if (sucursalElegida || sucursales.length === 0) return;
-    let guardada: string | null = null;
-    try { guardada = localStorage.getItem(STORAGE_SUCURSAL); } catch { /* sin almacenamiento */ }
-    setSucursalElegida(sucursales.some((s) => s.id === guardada) ? guardada : sucursales[0].id);
-  }, [sucursales, sucursalElegida]);
-  const sucursalId = sucursalFija || sucursalElegida;
-  const cambiarSucursal = (id: string) => {
-    setSucursalElegida(id);
-    try { localStorage.setItem(STORAGE_SUCURSAL, id); } catch { /* sin almacenamiento */ }
-  };
+  // ---------------- Sucursal: la activa de la barra superior (se elige ahí, no acá).
+  const { sucursalId, sucursal, variasSucursales } = useSucursalActiva();
 
   // ---------------- Semana
   const [fechaRef, setFechaRef] = useState<string | null>(null); // null = semana actual
@@ -206,17 +184,11 @@ export default function AgendaPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
-            <MapPin className="w-4 h-4 text-slate-400" />
-            {sucursalFija ? (
-              <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.sucursalNombre || 'Mi sucursal'}</span>
-            ) : (
-              <select value={sucursalId || ''} onChange={(e) => cambiarSucursal(e.target.value)} className="bg-transparent font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer">
-                {sucursales.length === 0 && <option value="">Sin sucursales</option>}
-                {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </select>
-            )}
-          </label>
+          {variasSucursales && sucursal && (
+            <span className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <MapPin className="w-4 h-4 text-slate-400" /> {sucursal.nombre}
+            </span>
+          )}
 
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => irASemana(-1)} aria-label="Semana anterior"><ChevronLeft className="h-4 w-4" /></Button>

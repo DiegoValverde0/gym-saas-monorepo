@@ -190,7 +190,7 @@ export default function SucursalesPage() {
                   { name: 'direccion', label: 'Dirección', type: 'text', placeholder: 'Ej. Av. Principal 123', colSpan: 2 },
                   { name: 'telefono', label: 'Teléfono (Solo números)', type: 'number', placeholder: 'Ej. 12345678' },
                   { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }] },
-                  { name: 'esPrincipal', label: 'Sede Principal', type: 'switch', description: 'Marcar esta sucursal como la central.', colSpan: 2 },
+                  { name: 'esPrincipal', label: 'Sede Principal', type: 'switch', description: 'Es la sucursal con la que empieza a trabajar el sistema. Solo hay una: al marcar esta, se desmarca la anterior.', colSpan: 2 },
                 ]
               }
             ]}

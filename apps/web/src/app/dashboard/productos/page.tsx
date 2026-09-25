@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
@@ -20,7 +21,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, Plus, Edit, Trash2, Search, Warehouse, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
 
 const productoSchema = z.object({
   nombre: z.string({ message: 'El nombre es obligatorio' }).min(2, 'Mínimo 2 caracteres'),
@@ -72,6 +72,9 @@ export default function ProductosPage() {
   const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [activeTab, setActiveTab] = useState('catalogo');
   const [searchProducto, setSearchProducto] = useState('');
@@ -231,7 +234,7 @@ export default function ProductosPage() {
 
   const handleAddInventario = () => {
     setEditingInventario(null);
-    inventarioForm.reset({ productoId: '', sucursalId: userSucursalId || '', cantidadActual: 0, puntoReorden: 5, ubicacionBodega: '' });
+    inventarioForm.reset({ productoId: '', sucursalId: userSucursalId || sucursalActiva || '', cantidadActual: 0, puntoReorden: 5, ubicacionBodega: '' });
     setInventarioModalOpen(true);
   };
 
@@ -528,7 +531,7 @@ export default function ProductosPage() {
                   options: productosActivos.map((p: Producto) => ({ label: `${p.nombre}${p.sku ? ` (${p.sku})` : ''}`, value: p.id })),
                   colSpan: 2,
                 },
-                ...(!userSucursalId
+                ...(!userSucursalId && (editingInventario ? variasSucursales : !sucursalActiva)
                   ? [{
                       name: 'sucursalId',
                       label: 'Sucursal',
