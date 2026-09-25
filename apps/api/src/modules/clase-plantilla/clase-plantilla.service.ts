@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
@@ -9,6 +9,7 @@ import { ActualizarSerieClaseDto, SerieClaseDto } from './dto/serie-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
+import { choqueDeSerie } from '../../common/utils/choques-clase.util';
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de clases a
 // partir de las plantillas activas (mismo default que turno-plantilla.service.ts).
@@ -100,6 +101,7 @@ export class ClasePlantillaService {
   // Crea la serie y genera sus clases de las próximas semanas en el acto.
   async crearSerie(dto: SerieClaseDto) {
     const { diasSemana, ...base } = dto;
+    await this.assertSinChoqueDeInstructor(dto);
     const data = this.normalizarHoras(base);
     await this.prisma.extendedClient.clasePlantilla.createMany({
       data: diasSemana.map((diaSemana) => ({ ...data, diaSemana })),
@@ -114,6 +116,7 @@ export class ClasePlantillaService {
   async actualizarSerie(dto: ActualizarSerieClaseDto) {
     const { ids, diasSemana, ...base } = dto;
     const db = this.prisma.extendedClient;
+    await this.assertSinChoqueDeInstructor(dto, ids);
     const actuales: Array<{ id: string; diaSemana: number }> = await db.clasePlantilla.findMany({ where: { id: { in: ids } } });
     if (actuales.length !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
 
@@ -137,6 +140,20 @@ export class ClasePlantillaService {
     const sincronizacion = await this.sincronizarClasesFuturas(actualizadas, quitadas);
     const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
     return { plantillasCreadas, plantillasQuitadas: quitadas.length, ...sincronizacion, ...generacion };
+  }
+
+  // Plan 8.3: un instructor no puede dar dos clases recurrentes que se solapan.
+  private async assertSinChoqueDeInstructor(dto: SerieClaseDto, excluirIds: string[] = []) {
+    const choque = await choqueDeSerie(this.prisma.extendedClient as unknown as Prisma.TransactionClient, {
+      entrenadorId: dto.entrenadorId,
+      diasSemana: dto.diasSemana,
+      horaInicio: dto.horaInicio,
+      duracionMinutos: dto.duracionMinutos,
+      vigenciaDesde: `${dto.vigenciaDesde}T00:00:00Z`,
+      vigenciaHasta: dto.vigenciaHasta ? `${dto.vigenciaHasta}T00:00:00Z` : null,
+      excluirIds,
+    });
+    if (choque) throw new BadRequestException(choque);
   }
 
   // Borra la serie y sus clases futuras sin reservas (las que tienen reservas

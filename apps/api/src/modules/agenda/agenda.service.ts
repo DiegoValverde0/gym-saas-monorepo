@@ -94,7 +94,7 @@ export class AgendaService {
         capacidadMaxima: number;
         entrenadorId: string | null;
         clasePlantillaId: string | null;
-        entrenador: { usuario: { nombreCompleto: string } | null } | null;
+        entrenador: { deletedAt: Date | null; usuario: { nombreCompleto: string } | null } | null;
         disciplina: { nombre: string } | null;
         _count: { reservas: number };
       }> = await db.claseProgramada.findMany({
@@ -115,8 +115,12 @@ export class AgendaService {
         const local = aHoraLocal(c.fechaHora, zonaHoraria);
         const fecha = fechaISO(local.fechaSolo);
         const inicio = local.minutosDelDia;
+        // Instructor dado de baja (perfil en la papelera): la clase queda "sin
+        // instructor" y aparece en los huecos de cobertura (plan 6.4.4). No se
+        // borra el dato, así "Deshacer" la baja lo devuelve todo como estaba.
+        const deBaja = !!c.entrenador?.deletedAt;
         let cobertura: CoberturaClase = 'sin_entrenador';
-        if (c.entrenadorId) {
+        if (c.entrenadorId && !deBaja) {
           const cubre = turnosVigentes.some(
             (t) => t.staffId === c.entrenadorId && t.fecha === fecha && t.inicio <= inicio && t.fin >= inicio + c.duracionMinutos,
           );
@@ -130,8 +134,8 @@ export class AgendaService {
           duracionMinutos: c.duracionMinutos,
           capacidadMaxima: c.capacidadMaxima,
           ocupados: c._count.reservas,
-          entrenadorId: c.entrenadorId,
-          entrenadorNombre: c.entrenador?.usuario?.nombreCompleto ?? null,
+          entrenadorId: deBaja ? null : c.entrenadorId,
+          entrenadorNombre: deBaja ? null : c.entrenador?.usuario?.nombreCompleto ?? null,
           disciplina: c.disciplina?.nombre ?? null,
           recurrente: !!c.clasePlantillaId,
           cobertura,

@@ -55,6 +55,15 @@ export class RequerimientosClaseConfigDto {
   exigirTurnoEntrenador?: boolean;
 }
 
+// Reglas de clases que se editan desde Configuración (modo experto).
+export class ClasesConfigDto {
+  // Decisión D4: asistir a una clase descuenta una sesión a los planes por
+  // sesiones (por defecto no: solo el ingreso al gimnasio descuenta).
+  @IsOptional()
+  @IsBoolean()
+  descontarSesionEnClase?: boolean;
+}
+
 export class PreferenciasOperativasConfigDto {
   @IsOptional()
   @IsBoolean()
@@ -127,6 +136,11 @@ export class ConfiguracionTenantDto {
   @ValidateNested()
   @Type(() => PreferenciasOperativasConfigDto)
   preferenciasOperativas?: PreferenciasOperativasConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ClasesConfigDto)
+  clases?: ClasesConfigDto;
 }
 
 // Asistente de inicio (plan 4.5): aplica modo y módulos elegidos, guarda las

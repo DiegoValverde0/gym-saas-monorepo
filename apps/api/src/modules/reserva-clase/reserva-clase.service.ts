@@ -6,6 +6,8 @@ import { CreateReservaClaseDto } from './dto/create-reserva-clase.dto';
 import { UpdateReservaClaseDto } from './dto/update-reserva-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { descontarSesionEnClase, evaluarReserva } from '../../common/utils/acceso-clases.util';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 
 const INCLUDE_RESERVA = {
   clase: { select: { nombreClase: true, fechaHora: true } },
@@ -17,17 +19,42 @@ interface ClaseLockRow {
   estado: string;
   fechaHora: Date;
   capacidadMaxima: number;
+  disciplinaId: string | null;
+  nombreClase: string;
 }
 
 @Injectable()
 export class ReservaClaseService {
   constructor(private readonly prisma: PrismaService, private readonly cls: ClsService) {}
 
-  async create(createReservaClaseDto: CreateReservaClaseDto) {
+  private async datosOrganizacion() {
+    const org = await this.prisma.extendedClient.organizacion.findUnique({
+      where: { id: this.cls.get('organizacionId') },
+      select: { configuracion: true, zonaHoraria: true },
+    });
+    return { configuracion: org?.configuracion ?? null, zonaHoraria: org?.zonaHoraria ?? null };
+  }
+
+  // Semáforo al buscar un cliente desde la sesión (plan 8.5): ¿puede reservar y,
+  // si no, por qué? Mismas reglas que create().
+  async puedeReservar(claseId: string, clienteId: string) {
+    const clase = await this.prisma.extendedClient.claseProgramada.findUnique({
+      where: { id: claseId },
+      select: { disciplinaId: true, fechaHora: true, nombreClase: true, disciplina: { select: { nombre: true } } },
+    });
+    if (!clase) throw new NotFoundException('La clase no existe.');
+    const { configuracion, zonaHoraria } = await this.datosOrganizacion();
+    return evaluarReserva(this.prisma.extendedClient as unknown as Prisma.TransactionClient, clienteId, clase, configuracion, zonaHoraria);
+  }
+
+  // `forzar`: reservar aunque el plan no lo permita (recepción, con el permiso
+  // asistencias:forzar, ver el controller). El cupo y la fecha se validan igual.
+  async create(createReservaClaseDto: CreateReservaClaseDto, forzar = false) {
     const organizacionId = this.cls.get('organizacionId');
     if (!organizacionId) {
       throw new BadRequestException('No se puede reservar sin un tenant activo.');
     }
+    const { configuracion, zonaHoraria } = await this.datosOrganizacion();
 
     return this.prisma.extendedClient.$transaction(async (tx) => {
       // SELECT ... FOR UPDATE bloquea la fila de la clase durante toda la
@@ -37,7 +64,8 @@ export class ReservaClaseService {
       // raw porque bypassa la extensión RLS/soft-delete, por eso filtramos
       // organizacionId y deletedAt a mano aquí.
       const clases = await tx.$queryRaw<ClaseLockRow[]>`
-        SELECT id, estado, fecha_hora AS "fechaHora", capacidad_maxima AS "capacidadMaxima"
+        SELECT id, estado, fecha_hora AS "fechaHora", capacidad_maxima AS "capacidadMaxima",
+               disciplina_id AS "disciplinaId", nombre_clase AS "nombreClase"
         FROM clases_programadas
         WHERE id = ${createReservaClaseDto.claseId}::uuid
           AND organizacion_id = ${organizacionId}::uuid
@@ -55,6 +83,22 @@ export class ReservaClaseService {
       if (clase.fechaHora <= new Date()) {
         throw new BadRequestException('No se puede reservar una clase que ya pasó.');
       }
+
+      // Quién puede reservar (plan 8.4): membresía vigente en la fecha de la
+      // clase y plan permitido para la disciplina.
+      if (!forzar) {
+        const disciplina = clase.disciplinaId
+          ? await tx.disciplina.findUnique({ where: { id: clase.disciplinaId }, select: { nombre: true } })
+          : null;
+        const evaluacion = await evaluarReserva(tx, createReservaClaseDto.clienteId, { ...clase, disciplina }, configuracion, zonaHoraria);
+        if (!evaluacion.permitido) throw new BadRequestException(evaluacion.motivo);
+      }
+
+      const yaReservada = await tx.reservaClase.findFirst({
+        where: { claseId: createReservaClaseDto.claseId, clienteId: createReservaClaseDto.clienteId, estado: { in: ['CONFIRMADA', 'ASISTIO'] } },
+        select: { id: true },
+      });
+      if (yaReservada) throw new ConflictException('Este cliente ya tiene una reserva en esta clase.');
 
       // ASISTIO también ocupa cupo: si no, marcar asistencia liberaba lugares
       // y permitía sobrevender la clase.
@@ -99,11 +143,48 @@ export class ReservaClaseService {
   }
 
   async update(id: string, updateReservaClaseDto: UpdateReservaClaseDto) {
-    await this.findOne(id);
-    return this.prisma.extendedClient.reservaClase.update({
+    const actual = await this.findOne(id);
+    const reserva = await this.prisma.extendedClient.reservaClase.update({
       where: { id },
       data: updateReservaClaseDto,
     });
+    // Decisión D4: si la organización lo activó (experto), asistir a la clase
+    // descuenta una sesión del plan por sesiones, igual que un ingreso.
+    // Si se corrige una asistencia marcada por error, la sesión se devuelve.
+    if (updateReservaClaseDto.estado === 'ASISTIO' && actual.estado !== 'ASISTIO') {
+      await this.ajustarSesionSiCorresponde(reserva.clienteId, actual.clase.fechaHora, -1);
+    } else if (actual.estado === 'ASISTIO' && updateReservaClaseDto.estado !== 'ASISTIO') {
+      await this.ajustarSesionSiCorresponde(reserva.clienteId, actual.clase.fechaHora, +1);
+    }
+    return reserva;
+  }
+
+  // delta -1: descuenta una sesión; +1: la devuelve (y reactiva una membresía
+  // que había quedado AGOTADA por esa sesión).
+  private async ajustarSesionSiCorresponde(clienteId: string, fechaHora: Date, delta: 1 | -1) {
+    const { configuracion, zonaHoraria } = await this.datosOrganizacion();
+    if (!descontarSesionEnClase(configuracion)) return;
+    const db = this.prisma.extendedClient;
+    // Fecha "de reloj" de la clase, como se guardan fechaInicio/fechaFin.
+    const fecha = aHoraLocal(fechaHora, zonaHoraria).fechaSolo;
+    const membresia = await db.membresia.findFirst({
+      where: {
+        clienteId,
+        ...(delta < 0 ? { estado: 'ACTIVA' as const, sesionesRestantes: { gt: 0 } } : { estado: { in: ['ACTIVA' as const, 'AGOTADA' as const] } }),
+        plan: { tipoPlan: 'SESIONES' },
+        fechaInicio: { lte: fecha },
+        OR: [{ fechaFin: null }, { fechaFin: { gte: fecha } }],
+      },
+      orderBy: { fechaInicio: 'asc' },
+    });
+    if (!membresia) return;
+    const actualizada = await db.membresia.update({ where: { id: membresia.id }, data: { sesionesRestantes: { increment: delta } } });
+    // Mismo criterio que el control de acceso: sin sesiones, queda AGOTADA.
+    if (actualizada.sesionesRestantes !== null && actualizada.sesionesRestantes <= 0) {
+      await db.membresia.update({ where: { id: membresia.id }, data: { estado: 'AGOTADA' } });
+    } else if (delta > 0 && actualizada.estado === 'AGOTADA') {
+      await db.membresia.update({ where: { id: membresia.id }, data: { estado: 'ACTIVA' } });
+    }
   }
 
   async cancelar(id: string) {

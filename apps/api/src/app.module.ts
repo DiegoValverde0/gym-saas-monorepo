@@ -33,6 +33,7 @@ import { TurnoPlantillaModule } from './modules/turno-plantilla/turno-plantilla.
 import { ClasePlantillaModule } from './modules/clase-plantilla/clase-plantilla.module';
 import { ClaseProgramadaModule } from './modules/clase-programada/clase-programada.module';
 import { ReservaClaseModule } from './modules/reserva-clase/reserva-clase.module';
+import { AccesoClasesModule } from './modules/acceso-clases/acceso-clases.module';
 import { SistemaModule } from './modules/sistema/sistema.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -78,6 +79,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ClaseProgramadaModule,
     ClasePlantillaModule,
     ReservaClaseModule,
+    AccesoClasesModule,
     SistemaModule,
     AgendaModule,
     ScheduleModule.forRoot()

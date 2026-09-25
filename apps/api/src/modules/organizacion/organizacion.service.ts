@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException, BadRequestException, 
 import { RedisClientType } from 'redis';
 import { invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 import { ROL_ADMINISTRADOR } from '../../common/utils/rol.util';
+import { combinarConfiguracion } from '../../common/utils/configuracion.util';
 import { promisify } from 'util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
@@ -9,24 +10,6 @@ import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
-
-// La configuración es un JSON con varias secciones (modulos, modoUso,
-// onboarding, requerimientosCliente...). Guardar desde una pantalla que solo
-// conoce algunas no debe borrar las demás: se combinan sección por sección.
-function combinarConfiguracion(actual: unknown, cambios: object): Prisma.InputJsonValue {
-  const base = (actual && typeof actual === 'object' && !Array.isArray(actual) ? actual : {}) as Record<string, unknown>;
-  const resultado: Record<string, unknown> = { ...base };
-  for (const [clave, valor] of Object.entries(cambios)) {
-    if (valor === undefined) continue;
-    const previo = base[clave];
-    const ambosObjetos = valor && typeof valor === 'object' && !Array.isArray(valor) && previo && typeof previo === 'object' && !Array.isArray(previo);
-    // Los DTO de class-transformer traen las propiedades opcionales no
-    // enviadas como `undefined`: se descartan para no pisar lo guardado.
-    const definidos = (obj: object) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
-    resultado[clave] = ambosObjetos ? { ...(previo as object), ...definidos(valor as object) } : valor;
-  }
-  return resultado as Prisma.InputJsonValue;
-}
 
 async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');

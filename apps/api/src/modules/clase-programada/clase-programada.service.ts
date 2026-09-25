@@ -5,9 +5,11 @@ import { Prisma } from '@prisma/client';
 import { CreateClaseProgramadaDto } from './dto/create-clase-programada.dto';
 import { UpdateClaseProgramadaDto } from './dto/update-clase-programada.dto';
 import { EntrenadoresClaseDto } from './dto/entrenadores-clase.dto';
+import { HorariosDisponiblesDto } from './dto/horarios-disponibles.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
+import { choqueDeSesion } from '../../common/utils/choques-clase.util';
 
 const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
@@ -178,11 +180,97 @@ export class ClaseProgramadaService {
     return resultado.sort((a, b) => puntaje(b) - puntaje(a) || a.nombre.localeCompare(b.nombre));
   }
 
+  // Grilla del asistente "Nueva clase" (plan 8.2, paso 3). Todo en minutos del
+  // día, por día de la semana (0 = domingo); el frontend pinta cada celda:
+  //  - trabajo: horario semanal del instructor en esa sucursal (verde si la
+  //    clase entra completa, amarillo si está libre pero fuera de horario).
+  //  - ocupado: otras clases recurrentes del instructor, en cualquier sucursal
+  //    (rojo: no se puede marcar).
+  //  - sucursal: clases recurrentes de la sucursal, de cualquier instructor
+  //    (gris, como referencia; puede haber varias salas).
+  // Las ausencias puntuales no entran: son de fechas concretas, no de la
+  // semana tipo; el choque real se valida igual al guardar.
+  async horariosDisponibles(q: HorariosDisponiblesDto) {
+    const db = this.prisma.extendedClient;
+    const excluir = q.excluirIds ? q.excluirIds.split(',') : [];
+    const minutos = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes();
+    const hoy = aHoraLocal(new Date(), await this.zonaHorariaOrganizacion()).fechaSolo;
+    const vigente = { activa: true, OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: hoy } }] };
+
+    const [trabajo, ocupado, sucursal] = await Promise.all([
+      q.entrenadorId
+        ? db.turnoPlantilla.findMany({
+            where: { staffId: q.entrenadorId, sucursalId: q.sucursalId, activa: true },
+            select: { diaSemana: true, horaEntrada: true, horaSalida: true },
+          })
+        : Promise.resolve([]),
+      q.entrenadorId
+        ? db.clasePlantilla.findMany({
+            where: { ...vigente, entrenadorId: q.entrenadorId, id: { notIn: excluir } },
+            select: { diaSemana: true, horaInicio: true, duracionMinutos: true, nombreClase: true, sucursal: { select: { nombre: true } } },
+          })
+        : Promise.resolve([]),
+      db.clasePlantilla.findMany({
+        where: { ...vigente, sucursalId: q.sucursalId, id: { notIn: excluir } },
+        select: {
+          diaSemana: true,
+          horaInicio: true,
+          duracionMinutos: true,
+          nombreClase: true,
+          entrenador: { select: { usuario: { select: { nombreCompleto: true } } } },
+        },
+      }),
+    ]);
+
+    return {
+      trabajo: trabajo.map((t) => ({ diaSemana: t.diaSemana, desde: minutos(t.horaEntrada), hasta: minutos(t.horaSalida) })),
+      ocupado: ocupado.map((c) => ({
+        diaSemana: c.diaSemana,
+        desde: minutos(c.horaInicio),
+        hasta: minutos(c.horaInicio) + c.duracionMinutos,
+        nombre: c.nombreClase,
+        sucursal: c.sucursal.nombre,
+      })),
+      sucursal: sucursal.map((c) => ({
+        diaSemana: c.diaSemana,
+        desde: minutos(c.horaInicio),
+        hasta: minutos(c.horaInicio) + c.duracionMinutos,
+        nombre: c.nombreClase,
+        instructor: c.entrenador?.usuario.nombreCompleto ?? null,
+      })),
+    };
+  }
+
+  // "Solo esta sesión → Cancelar" (plan 8.1 y 8.5): la sesión queda cancelada
+  // y sus reservas confirmadas también, en el acto.
+  async cancelarSesion(id: string) {
+    await this.findOne(id);
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      const reservas = await tx.reservaClase.updateMany({
+        where: { claseId: id, estado: 'CONFIRMADA' },
+        data: { estado: 'CANCELADA' },
+      });
+      await tx.claseProgramada.update({ where: { id }, data: { estado: 'INACTIVO' } });
+      return { reservasCanceladas: reservas.count };
+    });
+  }
+
   async verificarDisponibilidad(datos: DatosDisponibilidad) {
     return this.resolverTurnoParaClase(datos);
   }
 
+  // Plan 8.3: el instructor no puede tener otra sesión que se solape.
+  private async assertSinChoqueDeInstructor(datos: DatosDisponibilidad, excluirClaseId?: string) {
+    const choque = await choqueDeSesion(
+      this.prisma.extendedClient as unknown as Prisma.TransactionClient,
+      { ...datos, excluirClaseId },
+      await this.zonaHorariaOrganizacion(),
+    );
+    if (choque) throw new BadRequestException(choque);
+  }
+
   async create(createClaseProgramadaDto: CreateClaseProgramadaDto) {
+    await this.assertSinChoqueDeInstructor(createClaseProgramadaDto);
     const { turnoId, disponible } = await this.resolverTurnoParaClase(createClaseProgramadaDto);
     await this.assertDisponibilidadSiEsEstricta(createClaseProgramadaDto.entrenadorId, disponible);
 
@@ -228,6 +316,7 @@ export class ClaseProgramadaService {
       fechaHora: updateClaseProgramadaDto.fechaHora ?? actual.fechaHora,
       duracionMinutos: updateClaseProgramadaDto.duracionMinutos ?? actual.duracionMinutos,
     };
+    if (updateClaseProgramadaDto.estado !== 'INACTIVO') await this.assertSinChoqueDeInstructor(datosParaValidar, id);
     const { turnoId, disponible } = await this.resolverTurnoParaClase(datosParaValidar);
     await this.assertDisponibilidadSiEsEstricta(datosParaValidar.entrenadorId, disponible);
 
