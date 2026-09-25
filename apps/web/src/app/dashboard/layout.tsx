@@ -43,6 +43,8 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
+import { AsistenteInicio } from '@/components/ui/asistente-inicio';
+import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 
 interface NavItem {
@@ -50,6 +52,9 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
+  // Modo de uso mínimo para mostrarlo (plan de simplificación, 4.4). Sin
+  // valor: se muestra en todos los modos.
+  modoMinimo?: ModoUso;
 }
 
 interface NavGroup {
@@ -75,7 +80,7 @@ const navigationGroups: NavGroup[] = [
     baseHref: '/dashboard/planes',
     items: [
       { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
-      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer' },
+      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer', modoMinimo: 'intermedio' },
       { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
       { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
     ]
@@ -86,10 +91,10 @@ const navigationGroups: NavGroup[] = [
     baseHref: '/dashboard/disciplinas',
     items: [
       // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
-      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange },
+      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
       { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
       { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
-      { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer' },
+      { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
       { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
   },
@@ -101,9 +106,9 @@ const navigationGroups: NavGroup[] = [
       { name: 'Reportes Diarios', href: '/dashboard/reportes', icon: FileText },
       { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
       { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
-      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer' },
-      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer' },
-      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer' }
+      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer', modoMinimo: 'intermedio' },
+      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer', modoMinimo: 'intermedio' },
+      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer', modoMinimo: 'intermedio' }
     ]
   },
   {
@@ -111,8 +116,8 @@ const navigationGroups: NavGroup[] = [
     icon: Settings,
     baseHref: '/dashboard/usuarios',
     items: [
-      { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
-      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer' },
+      { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer', modoMinimo: 'intermedio' },
+      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
       { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings }
     ]
@@ -151,6 +156,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
+  const { alMenos } = useModoUso();
 
   // Filter groups based on tenant configuration
   const filteredNavigationGroups = useMemo(() => {
@@ -158,6 +164,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       return {
         ...group,
         items: group.items.filter(item => {
+          if (item.modoMinimo && !alMenos(item.modoMinimo)) return false;
           if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
           if (item.name === 'Agenda') {
             return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
@@ -171,7 +178,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         })
       };
     }).filter(group => group.items.length > 0);
-  }, [modulos, hasPermission]);
+  }, [modulos, hasPermission, alMenos]);
 
   // Active Group logic
   const activeGroup: ActiveGroup = useMemo(() => {
@@ -430,6 +437,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {children}
           </div>
           <CommandPalette />
+          <AsistenteInicio />
         </main>
       </div>
     </div>

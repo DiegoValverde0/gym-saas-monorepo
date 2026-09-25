@@ -14,6 +14,7 @@ import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, L
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { MODOS_USO, ModoUso, useModoUso } from '@/hooks/use-modo-uso';
 
 const organizacionSchema = z.object({
   nombre: z.string().min(3, "El nombre debe tener al menos 3 caracteres").max(150),
@@ -132,6 +133,23 @@ export default function ConfiguracionPage() {
     },
   });
 
+  // Modo de uso (plan de simplificación, sección 4): se guarda al tocarlo,
+  // aparte del resto del formulario. El backend combina la configuración, así
+  // que guardar esta pantalla después no lo pisa.
+  const { modo, alMenos } = useModoUso();
+  const modoMutation = useMutation({
+    mutationFn: async (nuevo: ModoUso) => apiPut('/organizaciones/me/info', { configuracion: { modoUso: nuevo } }),
+    onSuccess: (_r, nuevo) => {
+      queryClient.invalidateQueries({ queryKey: ['organizacion'] });
+      toast({ title: 'Modo de uso actualizado', description: `Ahora el sistema trabaja en modo ${MODOS_USO.find((m) => m.valor === nuevo)?.nombre}. No se borró nada.`, variant: 'success' });
+    },
+    onError: (error: Error) => toast({ title: 'Error al cambiar el modo', description: error.message, variant: 'destructive' }),
+  });
+  const reabrirAsistente = useMutation({
+    mutationFn: async () => apiPut('/organizaciones/me/info', { configuracion: { onboarding: { completado: false } } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['organizacion'] }),
+  });
+
   const updateMutation = useMutation({
     mutationFn: async (values: OrganizacionFormValues) => apiPut('/organizaciones/me/info', values),
     onSuccess: () => {
@@ -180,11 +198,49 @@ export default function ConfiguracionPage() {
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-8">
         <Tabs defaultValue="empresa" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 mb-8">
+          <TabsList className={`grid w-full max-w-lg ${alMenos('intermedio') ? 'grid-cols-4' : 'grid-cols-3'} bg-slate-100 dark:bg-slate-800 p-1 mb-8`}>
             <TabsTrigger value="empresa" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Perfil</TabsTrigger>
+            <TabsTrigger value="modo" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Modo de uso</TabsTrigger>
             <TabsTrigger value="modulos" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Módulos</TabsTrigger>
-            <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Políticas</TabsTrigger>
+            {/* Reglas de clientes y clases: desde intermedio (plan 4.4). */}
+            {alMenos('intermedio') && (
+              <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Políticas</TabsTrigger>
+            )}
           </TabsList>
+
+          <TabsContent value="modo" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
+            <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">¿Cuánto detalle quieres ver?</CardTitle>
+                <CardDescription>
+                  El modo decide cuántas opciones muestra el sistema. Cambiarlo no borra datos ni reglas: lo que ya configuraste sigue ahí, solo se oculta o se vuelve a mostrar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {MODOS_USO.map((m) => (
+                  <button
+                    key={m.valor}
+                    type="button"
+                    onClick={() => m.valor !== modo && modoMutation.mutate(m.valor)}
+                    disabled={modoMutation.isPending}
+                    className={`w-full rounded-lg border p-4 text-left transition-colors ${m.valor === modo ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-300'}`}
+                  >
+                    <span className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-900 dark:text-white">{m.nombre}</span>
+                      {m.valor === modo && <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Modo actual</span>}
+                    </span>
+                    <span className="block text-sm text-zinc-600 dark:text-zinc-300 mt-1">{m.idea}</span>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400 mt-1">Para: {m.paraQuien}</span>
+                  </button>
+                ))}
+                <div className="pt-2">
+                  <Button type="button" variant="outline" onClick={() => reabrirAsistente.mutate()} disabled={reabrirAsistente.isPending}>
+                    Responder de nuevo las preguntas de inicio
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           
           <TabsContent value="empresa" className="space-y-6 mt-4">
             {/* Datos Generales / Comerciales */}

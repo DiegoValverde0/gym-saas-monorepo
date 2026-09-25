@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiGet } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Protect } from '@/components/ui/protect';
+import { PrimerosPasos } from '@/components/ui/primeros-pasos';
 import { Users, Wallet, Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -64,6 +65,8 @@ export default function DashboardPage() {
           Métricas y estado general del gimnasio en tiempo real.
         </p>
       </div>
+
+      <PrimerosPasos />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         

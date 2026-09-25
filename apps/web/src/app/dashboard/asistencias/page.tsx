@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { SoloEnModo } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { Protect } from '@/components/ui/protect';
 import { Input } from '@/components/ui/input';
@@ -313,9 +314,12 @@ export default function AsistenciasPage() {
                       <TabsTrigger value="miembro" className="flex-1 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
                         <UserCheck className="h-4 w-4 mr-1.5" /> Miembro
                       </TabsTrigger>
-                      <TabsTrigger value="visitante" className="flex-1 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
-                        <UserPlus className="h-4 w-4 mr-1.5" /> Visitante
-                      </TabsTrigger>
+                      {/* Visitantes y forzar ingreso: no en modo simple (plan 4.4). */}
+                      <SoloEnModo minimo="intermedio">
+                        <TabsTrigger value="visitante" className="flex-1 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
+                          <UserPlus className="h-4 w-4 mr-1.5" /> Visitante
+                        </TabsTrigger>
+                      </SoloEnModo>
                     </TabsList>
 
                     <TabsContent value="miembro" className="mt-6 space-y-6">
@@ -403,6 +407,7 @@ export default function AsistenciasPage() {
                                 </div>
                                 <p className="text-red-700 dark:text-red-300 font-bold text-lg">{validacion.reason}</p>
                                 {renderClasesReservadas(validacion.clasesReservadasHoy)}
+                                <SoloEnModo minimo="intermedio">
                                 <Protect permission="asistencias:forzar" fallbackType="hide">
                                   <div className="pt-4 border-t border-red-200 dark:border-red-900/50 space-y-3">
                                     <p className="text-sm font-semibold text-red-800 dark:text-red-200">Cortesía / Forzar ingreso</p>
@@ -417,6 +422,7 @@ export default function AsistenciasPage() {
                                     </Button>
                                   </div>
                                 </Protect>
+                                </SoloEnModo>
                               </div>
                             )
                           ) : validateMutation.isError ? (

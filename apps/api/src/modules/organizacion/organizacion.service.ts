@@ -8,7 +8,25 @@ import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
-import { UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+
+// La configuración es un JSON con varias secciones (modulos, modoUso,
+// onboarding, requerimientosCliente...). Guardar desde una pantalla que solo
+// conoce algunas no debe borrar las demás: se combinan sección por sección.
+function combinarConfiguracion(actual: unknown, cambios: object): Prisma.InputJsonValue {
+  const base = (actual && typeof actual === 'object' && !Array.isArray(actual) ? actual : {}) as Record<string, unknown>;
+  const resultado: Record<string, unknown> = { ...base };
+  for (const [clave, valor] of Object.entries(cambios)) {
+    if (valor === undefined) continue;
+    const previo = base[clave];
+    const ambosObjetos = valor && typeof valor === 'object' && !Array.isArray(valor) && previo && typeof previo === 'object' && !Array.isArray(previo);
+    // Los DTO de class-transformer traen las propiedades opcionales no
+    // enviadas como `undefined`: se descartan para no pisar lo guardado.
+    const definidos = (obj: object) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+    resultado[clave] = ambosObjetos ? { ...(previo as object), ...definidos(valor as object) } : valor;
+  }
+  return resultado as Prisma.InputJsonValue;
+}
 
 async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -114,6 +132,10 @@ export class OrganizacionService {
           data: {
             nombre: datos.nombreOrg,
             estado: 'ACTIVO',
+            // El administrador verá el asistente de inicio al entrar (plan
+            // 4.5). Las organizaciones que ya existían no tienen esta marca y
+            // no lo ven.
+            configuracion: { onboarding: { completado: false } },
           },
         });
 
@@ -204,12 +226,76 @@ export class OrganizacionService {
     const id = this.cls.get('organizacionId');
     if (!id) throw new BadRequestException('Contexto de organización no encontrado');
     const { configuracion, ...rest } = data;
+    const actual = configuracion !== undefined ? await this.getMiOrganizacion() : null;
     return this.prisma.organizacion.update({
       where: { id },
       data: {
         ...rest,
-        ...(configuracion !== undefined && { configuracion: configuracion as Prisma.InputJsonValue }),
+        ...(configuracion !== undefined && { configuracion: combinarConfiguracion(actual?.configuracion, configuracion) }),
       },
+    });
+  }
+
+  // Lista de primeros pasos del Dashboard (plan 4.5): cada paso se marca solo
+  // cuando se cumple. Conteos acotados a 1: solo importa si existe alguno.
+  async primerosPasos() {
+    const db = this.prisma.extendedClient;
+    const [planes, clientes, membresiasPagadas, ingresos] = await Promise.all([
+      db.plan.count({ take: 1 }),
+      db.cliente.count({ take: 1 }),
+      db.membresia.count({ where: { pagada: true }, take: 1 }),
+      db.registroAsistencia.count({ where: { clienteId: { not: null } }, take: 1 }),
+    ]);
+    return { plan: planes > 0, cliente: clientes > 0, venta: membresiasPagadas > 0, ingreso: ingresos > 0 };
+  }
+
+  // Asistente de inicio (plan de simplificación, 4.5).
+  async aplicarInicio(dto: InicioOrganizacionDto) {
+    const org = await this.getMiOrganizacion();
+    const configuracion = combinarConfiguracion(org.configuracion, {
+      modoUso: dto.modoUso,
+      modulos: dto.modulos,
+      onboarding: { ...dto.respuestas, completado: true },
+    });
+    await this.prisma.organizacion.update({ where: { id: org.id }, data: { configuracion } });
+
+    let ejemplos = { planes: 0, disciplinas: 0 };
+    if (dto.crearEjemplos) ejemplos = await this.crearDatosDeEjemplo(dto.respuestas.tipoGimnasio, !!dto.modulos.clasesGrupales);
+    return { ok: true, ejemplos };
+  }
+
+  // Un plan mensual y uno de 10 sesiones, más una disciplina según el tipo de
+  // gimnasio si da clases. No duplica: si ya hay planes o disciplinas con ese
+  // nombre, no los vuelve a crear.
+  private async crearDatosDeEjemplo(tipoGimnasio: string | undefined, conClases: boolean) {
+    const planes = [
+      { nombre: 'Mensual', tipoPlan: 'TIEMPO' as const, duracionDias: 30, cantidadSesiones: null, precio: 150 },
+      { nombre: '10 sesiones', tipoPlan: 'SESIONES' as const, duracionDias: 60, cantidadSesiones: 10, precio: 100 },
+    ];
+    const DISCIPLINA_POR_TIPO: Record<string, string> = {
+      musculacion: 'Funcional',
+      box: 'Cross training',
+      estudio: 'Yoga',
+      artes_marciales: 'Artes marciales',
+      otro: 'Clase grupal',
+    };
+
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      let creados = { planes: 0, disciplinas: 0 };
+      for (const plan of planes) {
+        if (await tx.plan.findFirst({ where: { nombre: plan.nombre } })) continue;
+        // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+        await tx.plan.create({ data: plan as unknown as Prisma.PlanUncheckedCreateInput });
+        creados = { ...creados, planes: creados.planes + 1 };
+      }
+      if (conClases) {
+        const nombre = DISCIPLINA_POR_TIPO[tipoGimnasio ?? 'otro'] ?? 'Clase grupal';
+        if (!(await tx.disciplina.findFirst({ where: { nombre } }))) {
+          await tx.disciplina.create({ data: { nombre } as unknown as Prisma.DisciplinaUncheckedCreateInput });
+          creados = { ...creados, disciplinas: 1 };
+        }
+      }
+      return creados;
     });
   }
 }

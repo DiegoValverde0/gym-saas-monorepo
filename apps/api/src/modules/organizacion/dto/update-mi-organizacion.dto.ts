@@ -1,4 +1,5 @@
-import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested, IsIn } from 'class-validator';
+import { MODOS_USO, ModoUso } from '../../../common/utils/modo.util';
 import { Type } from 'class-transformer';
 
 export class ModulosConfigDto {
@@ -68,7 +69,45 @@ export class PreferenciasOperativasConfigDto {
   notificacionesWhatsapp?: boolean;
 }
 
+export const TIPOS_GIMNASIO = ['musculacion', 'box', 'estudio', 'artes_marciales', 'otro'] as const;
+export const TAMANOS_EQUIPO = ['solo', 'pequeno', 'grande'] as const;
+
+// Respuestas del asistente de inicio (plan 4.5). Solo informativas: el modo y
+// los módulos que se eligieron se guardan aparte.
+export class OnboardingConfigDto {
+  @IsOptional()
+  @IsIn(TIPOS_GIMNASIO)
+  tipoGimnasio?: (typeof TIPOS_GIMNASIO)[number];
+
+  @IsOptional()
+  @IsIn(TAMANOS_EQUIPO)
+  tamanoEquipo?: (typeof TAMANOS_EQUIPO)[number];
+
+  @IsOptional()
+  @IsBoolean()
+  clasesGrupales?: boolean;
+
+  // true cuando el administrador terminó (o saltó) el asistente.
+  @IsOptional()
+  @IsBoolean()
+  completado?: boolean;
+
+  // true cuando cerró la lista de primeros pasos del Dashboard.
+  @IsOptional()
+  @IsBoolean()
+  primerosPasosOcultos?: boolean;
+}
+
 export class ConfiguracionTenantDto {
+  @IsOptional()
+  @IsIn(MODOS_USO)
+  modoUso?: ModoUso;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OnboardingConfigDto)
+  onboarding?: OnboardingConfigDto;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => ModulosConfigDto)
@@ -88,6 +127,24 @@ export class ConfiguracionTenantDto {
   @ValidateNested()
   @Type(() => PreferenciasOperativasConfigDto)
   preferenciasOperativas?: PreferenciasOperativasConfigDto;
+}
+
+// Asistente de inicio (plan 4.5): aplica modo y módulos elegidos, guarda las
+// respuestas y, si se pide, crea datos de ejemplo.
+export class InicioOrganizacionDto {
+  @IsIn(MODOS_USO)
+  modoUso: ModoUso;
+
+  @ValidateNested()
+  @Type(() => ModulosConfigDto)
+  modulos: ModulosConfigDto;
+
+  @ValidateNested()
+  @Type(() => OnboardingConfigDto)
+  respuestas: OnboardingConfigDto;
+
+  @IsBoolean()
+  crearEjemplos: boolean;
 }
 
 // Campos que el propio tenant (dueño de gym) puede editar de su organización.

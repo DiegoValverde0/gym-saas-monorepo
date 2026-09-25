@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
-import { UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
 
 interface RequestWithUser extends ExpressRequest {
   user?: {
@@ -92,6 +92,21 @@ export class OrganizacionController {
   async getMiOrganizacion(): Promise<unknown> {
     // Todos los usuarios autenticados de un tenant pueden ver la info de su propia org
     return this.organizacionService.getMiOrganizacion();
+  }
+
+  // Lista de primeros pasos del Dashboard: cualquier usuario del gimnasio.
+  @Get('me/primeros-pasos')
+  @UseGuards(JwtAuthGuard)
+  async primerosPasos(): Promise<unknown> {
+    return this.organizacionService.primerosPasos();
+  }
+
+  // Asistente de inicio: modo de uso, módulos y datos de ejemplo.
+  @Post('me/inicio')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @RequirePermissions({ accion: 'actualizar', modulo: 'organizaciones' })
+  async aplicarInicio(@Body() data: InicioOrganizacionDto): Promise<unknown> {
+    return this.organizacionService.aplicarInicio(data);
   }
 
   @Put('me/info')

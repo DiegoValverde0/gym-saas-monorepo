@@ -740,6 +740,12 @@ Cada fase se entrega sola, con su PR, y deja el sistema mejor que antes aunque n
 - **Criterio:** no hay ninguna pantalla donde el usuario tenga que elegir la sucursal que ya eligió en la barra superior, salvo las listadas en 5.1.5.
 
 ### Fase 2 · Modos de uso (4–5 días)
+- **Estado: hecha** (2026-09-25). Decisiones y pendientes:
+  - En **intermedio** no se oculta nada de lo que ya existía (Usuarios, Roles, promociones, forzar ingreso, pagos mixtos, contratación): como mucho pasa a "Más opciones". La matriz 4.4 ocultaba algunas cosas en intermedio, pero chocaba con la regla de que los gimnasios existentes no pierdan nada visible.
+  - **Cobro en modo simple:** no exige turno de caja y, si el pago no indica cuenta, va a la cuenta "Efectivo del gimnasio" (se crea sola). Es la "caja única automática" de 4.4.
+  - El asistente de inicio aparece solo en organizaciones creadas desde ahora (`onboarding.completado: false`); las existentes pueden abrirlo desde Configuración → Modo de uso.
+  - Guardar Configuración ahora combina el JSON `configuracion` sección por sección (antes lo reemplazaba entero y borraba claves que la pantalla no conocía).
+  - Pendiente: descuento manual en la venta simple (el alta de membresía solo admite descuentos por promoción); Productos, Gastos, Reportes, Cajas y Clases todavía no cambian por modo (fase 5 y fase 3).
 - `modoUso` en configuración, `useModoUso()`, `<SoloEnModo>`, selector en Configuración con explicación.
 - Aplicar la matriz 4.4 en Clientes, Planes, Venta, Control de acceso, Equipo, Configuración y el menú.
 - Asistente de inicio y lista de primeros pasos (4.5).

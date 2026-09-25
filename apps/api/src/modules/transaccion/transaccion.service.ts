@@ -7,6 +7,11 @@ import { QueryTransaccionDto } from './dto/query-transaccion.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { CONCEPTOS_INGRESO, CONCEPTOS_EGRESO } from './tipo-concepto.util';
 import { moduloEstaActivo } from '../../common/utils/modulo.util';
+import { obtenerModoUso } from '../../common/utils/modo.util';
+
+// Cuenta que se usa en modo simple cuando el cobro no indica una: la "caja"
+// del gimnasio. Se crea sola la primera vez (plan de simplificación, 4.4).
+const CUENTA_EFECTIVO_SIMPLE = { banco: 'Efectivo', numeroCuenta: 'Efectivo del gimnasio', tipoCuenta: 'EFECTIVO' };
 
 @Injectable()
 export class TransaccionService {
@@ -67,8 +72,19 @@ export class TransaccionService {
         }
     });
 
-    if (dto.tipo === 'INGRESO' && !aperturaCaja) {
+    // Modo simple (plan de simplificación, 4.4): no hay turnos de caja que
+    // abrir ni cuentas que configurar antes de cobrar. El dinero va a la
+    // cuenta "Efectivo del gimnasio" (o a la que se indique) sin exigir turno.
+    const organizacionId = this.cls.get('organizacionId');
+    const modoSimple = !!organizacionId && (await obtenerModoUso(this.prisma, organizacionId)) === 'simple';
+
+    if (dto.tipo === 'INGRESO' && !aperturaCaja && !modoSimple) {
         throw new BadRequestException('No puedes registrar una transacción de cobro sin tener un turno de caja abierto.');
+    }
+
+    if (modoSimple && dto.pagos.some((pago) => !pago.cuentaBancariaId)) {
+        const cuentaEfectivo = await this.cuentaEfectivoSimple();
+        for (const pago of dto.pagos) pago.cuentaBancariaId ??= cuentaEfectivo;
     }
 
     // 3. Resolver Sucursal. Si hay un turno de caja abierto, la sucursal SIEMPRE
@@ -208,6 +224,20 @@ export class TransaccionService {
 
         return transaccion;
     });
+  }
+
+  private async cuentaEfectivoSimple(): Promise<string> {
+    const existente = await this.prisma.extendedClient.cuentaBancaria.findFirst({
+      where: { banco: CUENTA_EFECTIVO_SIMPLE.banco, numeroCuenta: CUENTA_EFECTIVO_SIMPLE.numeroCuenta },
+      select: { id: true },
+    });
+    if (existente) return existente.id;
+    const creada = await this.prisma.extendedClient.cuentaBancaria.create({
+      // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+      data: CUENTA_EFECTIVO_SIMPLE as unknown as Prisma.CuentaBancariaUncheckedCreateInput,
+      select: { id: true },
+    });
+    return creada.id;
   }
 
   async findAll(query?: QueryTransaccionDto) {

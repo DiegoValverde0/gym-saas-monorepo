@@ -16,7 +16,8 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
-import { GlobalFormModal } from '@/components/ui/global-form-modal';
+import { FormSection, GlobalFormModal } from '@/components/ui/global-form-modal';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -181,6 +182,7 @@ export default function PersonalPage() {
   const miSucursalId = user?.sucursalId ?? null;
   const { sucursalId: sucursalActiva } = useSucursalActiva();
   const modulos = useModulosActivos();
+  const { modo } = useModoUso();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPersonal, setEditingPersonal] = useState<Staff | null>(null);
@@ -410,6 +412,37 @@ export default function PersonalPage() {
       onConfirm: () => deleteItem(staff.id),
     });
     setConfirmOpen(true);
+  };
+
+  // Formulario según el modo de uso (plan de simplificación, 4.4 y 6.3):
+  //  - Simple: una sola pantalla con nombre, correo, contraseña y rol (más
+  //    disciplinas si da clases). Sin horario ni contratación; el teléfono y
+  //    el estado van en "Más opciones".
+  //  - Intermedio: los pasos de siempre; "Contratación y pagos" pasa a "Más
+  //    opciones" al final.
+  //  - Experto: todo a la vista.
+  const seccionesSegunModo = (secciones: FormSection[]): FormSection[] => {
+    const porTitulo = (t: string) => secciones.find((sec) => sec.title === t);
+    const quien = porTitulo('¿Quién es?');
+    const que = porTitulo('¿Qué hace y dónde?');
+    const contratacion = porTitulo('Contratación y pagos');
+    const cuando = porTitulo('¿Cuándo trabaja?');
+    if (!quien || !que || !contratacion || !cuando) return secciones;
+    if (modo === 'experto') return secciones;
+    if (modo === 'intermedio') return [quien, que, cuando, { ...contratacion, plegable: true }];
+    const telefono = quien.fields.filter((f) => f.name === 'telefono');
+    const estado = editingPersonal ? contratacion.fields.filter((f) => f.name === 'estado') : [];
+    return [
+      {
+        title: editingPersonal ? 'Datos y rol' : '¿Quién es y qué hace?',
+        fields: [
+          ...quien.fields.filter((f) => f.name !== 'telefono'),
+          // Sin selector de sucursal: en simple se usa la predeterminada.
+          ...que.fields.filter((f) => f.name !== 'sucursalAccesoId'),
+        ],
+      },
+      { plegable: true, fields: [...telefono, ...estado] },
+    ];
   };
 
   if (!token) return null;
@@ -650,7 +683,7 @@ export default function PersonalPage() {
         form={form as unknown as UseFormReturn<FieldValues>}
         multiStep
         maxWidthClass="sm:max-w-[640px]"
-        sections={[
+        sections={seccionesSegunModo([
           {
             title: '¿Quién es?',
             fields: [
@@ -787,7 +820,7 @@ export default function PersonalPage() {
               { name: 'dias', label: '', type: 'custom', colSpan: 2, renderCustom: renderHorario },
             ],
           },
-        ]}
+        ])}
         onSubmit={onSubmit as unknown as (v: FieldValues) => void}
         isPending={saveMutation.isPending}
         submitLabel={editingPersonal ? 'Guardar cambios' : 'Agregar al equipo'}

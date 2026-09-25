@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
@@ -47,6 +48,7 @@ export default function ClientesPage() {
   const { activeTenantId } = useTenantStore();
 
   const userSucursalId = user?.sucursalId;
+  const { esSimple, esExperto } = useModoUso();
   // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
   // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
   const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
@@ -227,29 +229,31 @@ export default function ClientesPage() {
     );
   });
 
+  // Campos según el modo de uso (plan de simplificación, 4.4): nombre,
+  // teléfono y documento siempre a la vista; el resto, en simple e
+  // intermedio, bajo "Más opciones".
+  const campoCorreo = { name: 'correo', label: 'Correo Electrónico', type: 'email', placeholder: 'juan@ejemplo.com' };
+  const campoEstado = { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }, { label: 'Moroso', value: 'MOROSO' }, { label: 'Suspendido', value: 'SUSPENDIDO' }], colSpan: 2 };
+  const mostrarSucursal = !esSimple && !userSucursalId && (editingCliente ? variasSucursales : !sucursalActiva);
+  const campoSucursal = mostrarSucursal
+    ? [{ name: 'sucursalBaseId', label: 'Sucursal Base', type: 'select', options: (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id })), colSpan: 2 }]
+    : [];
+
   const formSections: any[] = [
     {
       fields: [
         { name: 'nombre', label: 'Nombre Completo', type: 'text', placeholder: 'Ej. Juan Pérez', colSpan: 2 },
-        { name: 'correo', label: 'Correo Electrónico', type: 'email', placeholder: 'juan@ejemplo.com' },
-        { name: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej. 77712345' },
+        ...(esSimple ? [] : [campoCorreo]),
+        { name: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej. 77712345', ...(esSimple ? { colSpan: 2 } : {}) },
         { name: 'tipoDocumento', label: 'Tipo Documento', type: 'select', options: [{ label: 'CI', value: 'CI' }, { label: 'Pasaporte', value: 'PASAPORTE' }, { label: 'Extranjero', value: 'CARNET_EXTRANJERO' }] },
         { name: 'numeroDocumento', label: 'Número de Documento', type: 'text', placeholder: 'Ej. 1234567' },
-        { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }, { label: 'Moroso', value: 'MOROSO' }, { label: 'Suspendido', value: 'SUSPENDIDO' }], colSpan: 2 },
-      ]
-    }
-  ];
-
-  if (!userSucursalId && (editingCliente ? variasSucursales : !sucursalActiva)) {
-    const options = (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id }));
-    formSections[0].fields.push({
-      name: 'sucursalBaseId',
-      label: 'Sucursal Base',
-      type: 'select',
-      options: options,
-      colSpan: 2
-    });
-  }
+        ...(esExperto ? [campoEstado, ...campoSucursal] : []),
+      ],
+    },
+    ...(esExperto
+      ? []
+      : [{ plegable: true, fields: [...(esSimple ? [campoCorreo] : []), ...(editingCliente ? [campoEstado] : []), ...campoSucursal] }]),
+  ].filter((seccion) => seccion.fields.length > 0);
 
   return (
     <Protect permission="clientes:leer" fallbackType="redirect">
