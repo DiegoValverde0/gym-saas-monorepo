@@ -7,21 +7,18 @@ import { apiGet } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Protect } from '@/components/ui/protect';
 import { PrimerosPasos } from '@/components/ui/primeros-pasos';
+import { PorVencer } from '@/components/ui/por-vencer';
+import { ResumenHoy } from '@/components/ui/resumen-hoy';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { AccionesRapidas } from '@/components/ui/acciones-rapidas';
-import { Users, Wallet, Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Users, Wallet, Activity, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-
-interface MembresiaReciente {
-  id: string;
-  estado: string;
-  montoFinal: number | string;
-  cliente?: { nombre: string };
-  plan?: { nombre: string };
-}
 
 export default function DashboardPage() {
   const { token } = useAuth();
   const { activeTenantId } = useTenantStore();
+  // Dashboard por modo (plan 11.13): en simple, lo del día y a quién avisar.
+  const { esSimple } = useModoUso();
 
   const { data: kpis, isLoading: loadingKpis } = useQuery({
     queryKey: ['dashboard-kpis', activeTenantId],
@@ -32,12 +29,6 @@ export default function DashboardPage() {
   const { data: chartData, isLoading: loadingCharts } = useQuery({
     queryKey: ['dashboard-charts', activeTenantId],
     queryFn: async () => apiGet('/dashboard/charts'),
-    enabled: !!token,
-  });
-
-  const { data: recent, isLoading: loadingRecent } = useQuery({
-    queryKey: ['dashboard-recent', activeTenantId],
-    queryFn: async () => apiGet('/dashboard/recent-activity'),
     enabled: !!token,
   });
 
@@ -60,10 +51,10 @@ export default function DashboardPage() {
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-500">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Command Center
+          Inicio
         </h2>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Métricas y estado general del gimnasio en tiempo real.
+          Lo que pasa hoy en tu gimnasio.
         </p>
       </div>
 
@@ -71,6 +62,11 @@ export default function DashboardPage() {
 
       <AccionesRapidas />
 
+      {esSimple && <ResumenHoy />}
+
+      <PorVencer />
+
+      {!esSimple && (<>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         
         {/* KPI: Clientes Activos (Vista Operativa) */}
@@ -244,6 +240,7 @@ export default function DashboardPage() {
           </Protect>
         </div>
       </div>
+      </>)}
     </div>
   );
 }

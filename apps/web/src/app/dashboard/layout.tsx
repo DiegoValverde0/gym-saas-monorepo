@@ -104,7 +104,7 @@ const navigationGroups: NavGroup[] = [
     icon: Wallet,
     baseHref: '/dashboard/reportes',
     items: [
-      { name: 'Reportes Diarios', href: '/dashboard/reportes', icon: FileText },
+      { name: 'Reportes', href: '/dashboard/reportes', icon: FileText, permission: 'transacciones:leer' },
       { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
       { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
       { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer', modoMinimo: 'intermedio' },
@@ -173,7 +173,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
           if (['Personal', 'Jornadas'].includes(item.name)) return modulos.controlPersonal;
           if (item.name === 'Asistencias') return modulos.controlAcceso;
-          if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
+          // Reportes: el resumen de hoy y del mes está en todos los modos; el
+          // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
           if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
           return true;
         })

@@ -207,22 +207,23 @@ export default function ConfiguracionPage() {
           <Settings className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Configuración Global</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Configuración</h2>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">
-            Administra los datos comerciales, módulos activos y políticas de tu franquicia o gimnasio.
+            Los datos de tu gimnasio, cuánto detalle muestra el sistema y las reglas del día a día.
           </p>
         </div>
       </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-8">
         <Tabs defaultValue="empresa" className="w-full">
-          <TabsList className={`grid w-full max-w-lg ${alMenos('intermedio') ? 'grid-cols-4' : 'grid-cols-3'} bg-slate-100 dark:bg-slate-800 p-1 mb-8`}>
-            <TabsTrigger value="empresa" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Perfil</TabsTrigger>
-            <TabsTrigger value="modo" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Modo de uso</TabsTrigger>
-            <TabsTrigger value="modulos" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Módulos</TabsTrigger>
-            {/* Reglas de clientes y clases: desde intermedio (plan 4.4). */}
+          {/* Pestañas de 11.12: Mi gimnasio, Modo y módulos y Reglas (desde
+              intermedio). "Avanzado" se agrega cuando haya opciones de experto
+              que no sean reglas (kiosco, horizonte de generación). */}
+          <TabsList className={`grid w-full max-w-lg ${alMenos('intermedio') ? 'grid-cols-3' : 'grid-cols-2'} bg-slate-100 dark:bg-slate-800 p-1 mb-8`}>
+            <TabsTrigger value="empresa" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Mi gimnasio</TabsTrigger>
+            <TabsTrigger value="modo" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Modo y módulos</TabsTrigger>
             {alMenos('intermedio') && (
-              <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Políticas</TabsTrigger>
+              <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Reglas</TabsTrigger>
             )}
           </TabsList>
 
@@ -255,6 +256,90 @@ export default function ConfiguracionPage() {
                   <Button type="button" variant="outline" onClick={() => reabrirAsistente.mutate()} disabled={reabrirAsistente.isPending}>
                     Responder de nuevo las preguntas de inicio
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-xs border-slate-200 dark:border-slate-800">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
+                  <Layers className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+                  Módulos Activos
+                </CardTitle>
+                <CardDescription>
+                  Enciende o apaga partes del sistema según las necesidades de tu gimnasio.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Punto de Venta e Inventario</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa las funciones de cajas, productos y ventas de artículos sueltos.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.puntoVenta')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.puntoVenta', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Clases Grupales y Disciplinas</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, entrenadores y capacidad para clases de zumba, spinning, etc.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.clasesGrupales')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.clasesGrupales', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Acceso</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Registra las entradas y salidas de miembros y visitantes, valida su membresía y marca la asistencia a clases reservadas.</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlAcceso')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlAcceso', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Personal</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios y turnos de trabajo, y la agenda de cobertura.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.controlPersonal')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlPersonal', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Reportes Avanzados</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa proyecciones financieras y métricas complejas en el panel de inicio.</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.reportesAvanzados')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.reportesAvanzados', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Gastos</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el catálogo de proveedores y el registro de gastos puntuales y recurrentes (alquiler, nómina, servicios).</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlGastos')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlGastos', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -395,99 +480,13 @@ export default function ConfiguracionPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="modulos" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
-            <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-              <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
-                  <Layers className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Módulos Activos
-                </CardTitle>
-                <CardDescription>
-                  Enciende o apaga partes del sistema según las necesidades de tu gimnasio.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Punto de Venta e Inventario</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa las funciones de cajas, productos y ventas de artículos sueltos.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.puntoVenta')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.puntoVenta', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Clases Grupales y Disciplinas</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, entrenadores y capacidad para clases de zumba, spinning, etc.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.clasesGrupales')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.clasesGrupales', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Acceso</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Registra las entradas y salidas de miembros y visitantes, valida su membresía y marca la asistencia a clases reservadas.</p>
-                  </div>
-                  <Switch
-                    checked={form.watch('configuracion.modulos.controlAcceso')}
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlAcceso', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Personal</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios y turnos de trabajo, y la agenda de cobertura.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.controlPersonal')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlPersonal', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Reportes Avanzados</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa proyecciones financieras y métricas complejas en el panel de inicio.</p>
-                  </div>
-                  <Switch
-                    checked={form.watch('configuracion.modulos.reportesAvanzados')}
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.reportesAvanzados', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Gastos</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el catálogo de proveedores y el registro de gastos puntuales y recurrentes (alquiler, nómina, servicios).</p>
-                  </div>
-                  <Switch
-                    checked={form.watch('configuracion.modulos.controlGastos')}
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlGastos', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="politicas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
             <Card className="shadow-xs border-slate-200 dark:border-slate-800">
               <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
                   <ShieldCheck className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Políticas de Registro de Clientes
+                  Datos obligatorios de los clientes
                 </CardTitle>
                 <CardDescription>
                   Define qué datos son estrictamente obligatorios al inscribir a una nueva persona.
@@ -552,7 +551,7 @@ export default function ConfiguracionPage() {
               <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
                   <Clock className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Políticas de Programación de Clases
+                  Reglas de clases y del equipo
                 </CardTitle>
                 <CardDescription>
                   Define qué tan estricta es la validación entre los turnos de tus entrenadores y las clases que se programan.
