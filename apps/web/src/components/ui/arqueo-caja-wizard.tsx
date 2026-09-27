@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Banknote, Coins, ArrowRight, ArrowLeft, AlertTriangle, CheckCircle2, Save } from 'lucide-react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -87,7 +87,7 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
       <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
         {/* Cabecera unificada: misma barra gris + puntos de progreso que el
             resto de los formularios paginados de la app (ver
-            membresia-wizard-modal.tsx y global-form-modal.tsx). */}
+            plan-wizard-modal.tsx y global-form-modal.tsx). */}
         <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
           <div>
             <DialogTitle className="text-xl">Arqueo y Cierre de Caja</DialogTitle>

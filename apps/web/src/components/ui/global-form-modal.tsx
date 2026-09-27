@@ -72,8 +72,8 @@ export interface GlobalFormModalProps {
   // "vender membresía": puntos de progreso arriba, Atrás/Siguiente abajo,
   // valida solo los campos del paso actual antes de avanzar) en vez de
   // apilarlas todas en un solo scroll. Pensado para formularios con muchos
-  // campos ya agrupados en secciones con nombre -- ver membresia-wizard-modal.tsx,
-  // el origen de este patrón.
+  // campos ya agrupados en secciones con nombre -- ver plan-wizard-modal.tsx,
+  // que usa el mismo patrón.
   multiStep?: boolean;
 }
 
@@ -287,7 +287,7 @@ function GlobalFormModalInner({
 
         <form
           onSubmit={form.handleSubmit((v) => !isPending && onSubmit(v))}
-          // Mismo fix que membresia-wizard-modal.tsx: en un formulario paginado,
+          // Mismo fix que plan-wizard-modal.tsx: en un formulario paginado,
           // Enter en el único input de texto de un paso intermedio puede
           // disparar el envío implícito nativo del navegador y saltarse los
           // pasos siguientes (incluida la revisión final). Solo se deja sin

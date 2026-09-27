@@ -179,7 +179,7 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
   // más abajo, que evita que Enter en el paso 2 -- que en los planes "Por
   // Tiempo"/"Por Sesiones" tiene un solo input numérico visible -- dispare el
   // envío implícito nativo del navegador y salte los pasos siguientes). Este
-  // era el mismo bug encontrado y corregido en membresia-wizard-modal.tsx.
+  // mismo bug se había corregido antes en el asistente de venta de membresías.
   const onFinalSubmit = form.handleSubmit((values) => {
     if (step !== ultimoPaso) return;
     onSubmit(values, incluidasTocadas ? incluidas : null);
@@ -268,7 +268,7 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
         {/* Misma barra gris + puntos de progreso que el resto de los
-            formularios paginados de la app (ver membresia-wizard-modal.tsx,
+            formularios paginados de la app (ver
             global-form-modal.tsx, arqueo-caja-wizard.tsx). */}
         <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
           <div>

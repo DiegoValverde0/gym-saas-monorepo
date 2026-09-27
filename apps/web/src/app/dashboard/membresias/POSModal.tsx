@@ -7,6 +7,7 @@ import { useTenantStore } from '@/store/use-tenant-store';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useModoUso } from '@/hooks/use-modo-uso';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
 
@@ -52,6 +53,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
   const userSucursalId = user?.sucursalId;
   // En modo simple no hay turnos de caja: el backend cobra sin exigirlo.
   const { esSimple } = useModoUso();
+  const { sucursalId: sucursalActiva } = useSucursalActiva();
 
   const montoTotal = item ? Number(item.montoFinal) : 0;
   
@@ -131,7 +133,8 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
       });
 
       const payload = {
-          sucursalId: item.sucursalId || userSucursalId || activeTenantId,
+          // Antes el último respaldo era activeTenantId (el id de la organización, no una sucursal).
+          sucursalId: item.sucursalId || userSucursalId || sucursalActiva || undefined,
           clienteId: item.clienteId,
           tipo: 'INGRESO',
           montoTotal: montoTotal,
@@ -154,7 +157,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Misma barra gris que el resto de los modales de la app (ver
-            global-form-modal.tsx / membresia-wizard-modal.tsx). El cuerpo de
+            global-form-modal.tsx / plan-wizard-modal.tsx). El cuerpo de
             este modal sigue siendo un layout de 2 paneles propio del punto de
             venta -- eso es intencional, no un formulario de campos comunes. */}
         <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 border-b flex justify-between items-center shrink-0">

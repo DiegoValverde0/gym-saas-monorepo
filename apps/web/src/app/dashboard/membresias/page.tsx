@@ -1,11 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
-import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
-import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { useListaPaginada } from '@/hooks/use-lista-paginada';
 import { Paginacion } from '@/components/ui/paginacion';
@@ -13,36 +10,24 @@ import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { MembresiaWizardModal, membresiaWizardSchema } from '@/components/ui/membresia-wizard-modal';
 import { Protect } from '@/components/ui/protect';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { IdCard, Plus, Trash2, Clock, CalendarDays, Search, Edit, Eye, Banknote, ArchiveRestore } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { POSModal } from './POSModal';
 import { VentaRapidaModal } from '@/components/ui/venta-rapida-modal';
-import { useModoUso } from '@/hooks/use-modo-uso';
-import type { z } from 'zod';
-
-type MembresiaFormValues = z.infer<typeof membresiaWizardSchema>;
 
 export default function MembresiasPage() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // Modo simple: venta en una sola pantalla (plan de simplificación, 4.4).
-  const { esSimple } = useModoUso();
+  // Venta en una sola pantalla en todos los modos (plan 11.3).
   const [ventaRapidaOpen, setVentaRapidaOpen] = useState(false);
-  // Membresía PENDIENTE_PAGO que se está "editando" (null = venta nueva). El
-  // wizard usa esto para precargarse y arrancar en el paso 2 -- antes esta
-  // página tenía su propio `form` desconectado del wizard (que tiene el
-  // suyo propio), así que "Editar" siempre abría un formulario en blanco,
-  // idéntico a "Nueva Venta". Ver membresia-wizard-modal.tsx.
+  // Venta PENDIENTE_PAGO que se está cambiando (null = venta nueva). No hay
+  // PATCH de plan/promoción: se vende de nuevo y el backend cancela la
+  // pendiente anterior del cliente (membresia.service.ts#create, paso 1).
   const [editingMembresia, setEditingMembresia] = useState<any | null>(null);
 
   const [detailsMembresia, setDetailsMembresia] = useState<any | null>(null);
@@ -50,11 +35,6 @@ export default function MembresiasPage() {
   const [itemToCobrar, setItemToCobrar] = useState<any>(null);
 
   const { activeTenantId } = useTenantStore();
-
-  const userSucursalId = user?.sucursalId;
-  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
-  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
-  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -75,69 +55,6 @@ export default function MembresiasPage() {
     filtros: { deleted: showDeleted ? 'true' : undefined },
   });
 
-  const { data: clientes } = useQuery({
-    queryKey: ['clientes', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/clientes')),
-    enabled: !!token,
-  });
-
-  const { data: planes } = useQuery({
-    queryKey: ['planes', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/planes')),
-    enabled: !!token,
-  });
-
-  const { data: promociones } = useQuery({
-    queryKey: ['promociones', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/promociones')),
-    enabled: !!token,
-  });
-
-  const { data: sucursales } = useQuery({
-    queryKey: ['sucursales', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/sucursales')),
-    enabled: !!token,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (values: MembresiaFormValues) => {
-      const payload: any = { ...values };
-      if (!payload.promocionId) delete payload.promocionId;
-
-      // Manejar el valor de la sucursal
-      if (userSucursalId) {
-        payload.sucursalId = userSucursalId;
-      }
-      if (!payload.sucursalId) {
-        delete payload.sucursalId;
-      }
-
-      payload.fechaInicio = new Date(payload.fechaInicio).toISOString();
-
-      return apiPost('/membresias', payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['membresias'] });
-      setIsDialogOpen(false);
-      setEditingMembresia(null);
-      toast({ title: 'Éxito', description: 'Membresía creada (Pendiente de Pago).', variant: 'success' });
-    },
-    onError: (err: any) => {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    }
-  });
-
-  // No existe un PATCH real para "editar" una membresía PENDIENTE_PAGO:
-  // UpdateMembresiaDto (backend) solo permite cambiar `estado` (transiciones
-  // como cancelar/congelar), no plan/promoción/fecha. Por eso "editar" sigue
-  // siendo un POST -- el backend cancela automáticamente la PENDIENTE_PAGO
-  // anterior del cliente antes de crear la nueva (ver membresia.service.ts,
-  // create(), paso 1). El wizard ahora sí precarga los valores anteriores y
-  // lo deja claro en el paso 2 (antes abría en blanco, como una venta nueva).
-  const onSubmit = (values: MembresiaFormValues) => {
-    createMutation.mutate(values);
-  };
-
   const { deleteItem, restoreItem, isRestoring } = useSoftDelete({
     queryKey: ['membresias', activeTenantId, showDeleted],
     endpoint: 'membresias',
@@ -146,17 +63,13 @@ export default function MembresiasPage() {
   });
 
   const handleAddNew = () => {
-    if (esSimple) {
-      setVentaRapidaOpen(true);
-      return;
-    }
     setEditingMembresia(null);
-    setIsDialogOpen(true);
+    setVentaRapidaOpen(true);
   };
 
   const handleEdit = (membresia: any) => {
     setEditingMembresia(membresia);
-    setIsDialogOpen(true);
+    setVentaRapidaOpen(true);
   };
 
   const handleDelete = (id: string) => {
@@ -169,9 +82,6 @@ export default function MembresiasPage() {
     setConfirmOpen(true);
   };
 
-  const clientesList = clientes || [];
-  const planesList = planes || [];
-  const promocionesList = promociones || [];
   const filteredMembresias = lista.items;
 
   if (!token) return null;
@@ -227,20 +137,15 @@ export default function MembresiasPage() {
           </div>
         </div>
 
-        <VentaRapidaModal open={ventaRapidaOpen} onOpenChange={setVentaRapidaOpen} />
-
-        <MembresiaWizardModal
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          onSubmit={onSubmit as any}
-          isPending={createMutation.isPending}
-          clientes={clientesList}
-          planes={planesList.filter((p: any) => p.estado === 'ACTIVO')}
-          promociones={promocionesList.filter((p: any) => p.estado === 'ACTIVO')}
-          sucursales={sucursales || []}
-          // Una venta nueva se registra en la sucursal activa, sin preguntar.
-          userSucursalId={userSucursalId || (editingMembresia && variasSucursales ? undefined : sucursalActiva) || undefined}
-          editingMembresia={editingMembresia}
+        <VentaRapidaModal
+          open={ventaRapidaOpen}
+          onOpenChange={(abierto) => { setVentaRapidaOpen(abierto); if (!abierto) setEditingMembresia(null); }}
+          {...(editingMembresia && {
+            clienteInicial: { id: editingMembresia.clienteId, nombre: editingMembresia.cliente?.nombre ?? '' },
+            planIdInicial: editingMembresia.planId,
+            promocionIdInicial: editingMembresia.promocionId,
+            reemplazaPendiente: true,
+          })}
         />
 
         {lista.cargando ? (
@@ -282,7 +187,7 @@ export default function MembresiasPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-bold text-slate-900 dark:text-white">${Number(membresia.montoFinal).toFixed(2)}</span>
+                    <span className="font-bold text-slate-900 dark:text-white">Bs. {Number(membresia.montoFinal).toFixed(2)}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
@@ -412,7 +317,7 @@ export default function MembresiasPage() {
                             <div className="space-y-1 text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-zinc-500 dark:text-zinc-400">Monto Base:</span>
-                                    <span>${Number(detailsMembresia.montoBase).toFixed(2)}</span>
+                                    <span>Bs. {Number(detailsMembresia.montoBase).toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-zinc-500 dark:text-zinc-400">Promoción Aplicada:</span>
@@ -420,11 +325,11 @@ export default function MembresiasPage() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-zinc-500 dark:text-zinc-400">Descuento:</span>
-                                    <span className="text-emerald-600 dark:text-emerald-400">-${Number(detailsMembresia.descuentoAplicado).toFixed(2)}</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400">-Bs. {Number(detailsMembresia.descuentoAplicado).toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between font-bold pt-2 border-t mt-2">
                                     <span>Cobro Total:</span>
-                                    <span>${Number(detailsMembresia.montoFinal).toFixed(2)}</span>
+                                    <span>Bs. {Number(detailsMembresia.montoFinal).toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>
