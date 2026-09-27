@@ -8,7 +8,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
+      className="relative w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
     >
       <div className="overflow-x-auto">
         <table
@@ -25,7 +25,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("bg-slate-50/90 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]", className)}
+      className={cn("bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]", className)}
       {...props}
     />
   )
@@ -35,7 +35,7 @@ function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   return (
     <tbody
       data-slot="table-body"
-      className={cn("divide-y divide-slate-100 font-normal", className)}
+      className={cn("divide-y divide-slate-100 dark:divide-slate-800 font-normal", className)}
       {...props}
     />
   )
@@ -59,7 +59,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "transition-colors hover:bg-slate-50/50 data-[state=selected]:bg-slate-50",
+        "transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/40 data-[state=selected]:bg-slate-50 dark:data-[state=selected]:bg-slate-800",
         className
       )}
       {...props}

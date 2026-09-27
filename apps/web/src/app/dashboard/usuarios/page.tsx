@@ -90,7 +90,7 @@ export default function UsuariosPage() {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       setIsSheetOpen(false);
       form.reset();
-      toast({ title: 'Éxito', description: 'Empleado registrado correctamente.', variant: 'success' });
+      toast({ title: 'Éxito', description: 'Cuenta creada correctamente.', variant: 'success' });
     },
     onError: (err: any) => {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -127,7 +127,7 @@ export default function UsuariosPage() {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       toast({ 
         title: 'Acceso Revocado', 
-        description: 'El empleado ya no tiene acceso a esta organización.', 
+        description: 'La cuenta ya no tiene acceso a esta organización.', 
         variant: 'success'
       });
     },
@@ -194,8 +194,8 @@ export default function UsuariosPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Usuarios</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona los empleados y sus niveles de acceso (RBAC).</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Accesos avanzados</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Cuentas con acceso al sistema y su rol (por ejemplo, el contador). Si usas el módulo de personal, el equipo del gimnasio se gestiona desde Equipo.</p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -203,7 +203,7 @@ export default function UsuariosPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
-                placeholder="Buscar empleado..."
+                placeholder="Buscar cuenta..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
@@ -213,17 +213,17 @@ export default function UsuariosPage() {
               <TenantRequiredButton
                 onClick={handleAddNew}
                 icon={<Plus className="mr-2 h-4 w-4" />}
-                label="Registrar Empleado"
+                label="Nueva cuenta"
               />
             </Protect>
           </div>
           <GlobalFormModal
             open={isSheetOpen}
             onOpenChange={setIsSheetOpen}
-            title={editingAsignacion ? 'Modificar Accesos del Empleado' : 'Registrar Nuevo Empleado'}
+            title={editingAsignacion ? 'Modificar acceso' : 'Nueva cuenta'}
             description={editingAsignacion 
               ? 'Actualiza el rol y la sucursal de este usuario.' 
-              : 'Crea una cuenta global para el empleado y asígnale un rol en tu organización.'}
+              : 'Crea la cuenta y asígnale un rol en tu organización.'}
             form={form as any}
             maxWidthClass="sm:max-w-xl"
             multiStep
@@ -241,7 +241,7 @@ export default function UsuariosPage() {
                     label: 'Contraseña Inicial',
                     type: 'password' as const,
                     placeholder: '******',
-                    description: 'El empleado podrá cambiarla después.',
+                    description: 'La persona podrá cambiarla después.',
                     colSpan: 2 as const,
                   }] : [])
                 ]
@@ -276,7 +276,7 @@ export default function UsuariosPage() {
             ]}
             onSubmit={onSubmit as any}
             isPending={createMutation.isPending || updateMutation.isPending}
-            submitLabel="Guardar Empleado"
+            submitLabel="Guardar"
           />
         </div>
 
@@ -293,17 +293,17 @@ export default function UsuariosPage() {
               <Users className="w-6 h-6" />
             </div>
             <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ningún empleado coincide con la búsqueda' : 'No hay personal registrado'}
+              {searchTerm ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas registradas'}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre, correo o rol.' : 'Registra a tu primer empleado en esta organización.'}
+              {searchTerm ? 'Prueba con otro nombre, correo o rol.' : 'Crea la primera cuenta de acceso.'}
             </p>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Empleado</TableHead>
+                <TableHead>Cuenta</TableHead>
                 <TableHead>Rol (Permisos)</TableHead>
                 <TableHead>Restricción de Sucursal</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
