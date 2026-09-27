@@ -8,7 +8,7 @@ const ROLES_BASE: Record<string, { nombre: string; descripcion: string }> = {
   },
   RECEPCIONISTA: {
     nombre: 'Recepción',
-    descripcion: 'Registra clientes, vende membresías, cobra y controla el ingreso.',
+    descripcion: 'Registra clientes, vende membresías y productos, cobra y controla el ingreso.',
   },
   ENTRENADOR: {
     nombre: 'Instructor',
