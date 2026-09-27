@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import { Ayuda } from '@/components/ui/ayuda';
 import { Protect } from '@/components/ui/protect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, ShieldCheck } from 'lucide-react';
+import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, ShieldCheck, Tablet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -620,6 +621,10 @@ export default function ConfiguracionPage() {
                 )}
               </CardContent>
             </Card>
+
+            {form.watch('configuracion.modulos.controlAcceso') && (
+              <PinKiosco tienePin={!!(organizacion as any)?.configuracion?.kiosco?.tienePin} />
+            )}
           </TabsContent>
         </Tabs>
 
@@ -638,5 +643,65 @@ export default function ConfiguracionPage() {
       </form>
     </div>
     </Protect>
+  );
+}
+
+// PIN para salir del modo kiosco de Control de acceso (plan 10.3). Se guarda
+// aparte del formulario: el servidor solo informa si existe, nunca el PIN.
+function PinKiosco({ tienePin }: { tienePin: boolean }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [pin, setPin] = useState('');
+  const pinValido = /^\d{4,6}$/.test(pin);
+
+  const guardar = useMutation({
+    mutationFn: async (valor: string | null) => apiPut('/asistencias/kiosco/pin', valor ? { pin: valor } : {}),
+    onSuccess: (_r, valor) => {
+      queryClient.invalidateQueries({ queryKey: ['organizacion'] });
+      setPin('');
+      toast({ title: valor ? 'PIN del kiosco guardado' : 'PIN del kiosco quitado', variant: 'success' });
+    },
+    onError: (err: Error) => toast({ title: 'No se guardó el PIN', description: err.message, variant: 'destructive' }),
+  });
+
+  return (
+    <Card className="shadow-xs border-slate-200 dark:border-slate-800">
+      <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
+        <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
+          <Tablet className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+          Kiosco de la entrada
+        </CardTitle>
+        <CardDescription>
+          En Control de acceso, &quot;Modo kiosco&quot; deja una tablet donde cada cliente marca su ingreso con su documento. Este PIN se pide
+          para salir del kiosco, así nadie más usa la sesión de recepción.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-6 space-y-3">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          {tienePin ? 'Hay un PIN definido. Puedes cambiarlo escribiendo uno nuevo.' : 'Todavía no hay PIN: cualquiera puede salir del kiosco.'}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            aria-label="PIN del kiosco"
+            placeholder="4 a 6 números"
+            maxLength={6}
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+            className="w-40"
+          />
+          <Button type="button" onClick={() => guardar.mutate(pin)} disabled={!pinValido || guardar.isPending}>
+            {tienePin ? 'Cambiar PIN' : 'Guardar PIN'}
+          </Button>
+          {tienePin && (
+            <Button type="button" variant="outline" onClick={() => guardar.mutate(null)} disabled={guardar.isPending}>
+              Quitar PIN
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+import { sinSecretos } from '../../common/utils/configuracion.util';
 
 interface RequestWithUser extends ExpressRequest {
   user?: {
@@ -34,7 +35,7 @@ export class OrganizacionController {
   @RequirePermissions({ accion: 'leer', modulo: 'organizaciones' })
   async getAllOrganizaciones(@Req() req: RequestWithUser): Promise<unknown> {
     this.assertSuperAdmin(req);
-    return this.organizacionService.getAllOrganizaciones();
+    return (await this.organizacionService.getAllOrganizaciones()).map(sinSecretos);
   }
 
   @Post()
@@ -50,7 +51,7 @@ export class OrganizacionController {
   @RequirePermissions({ accion: 'suspender', modulo: 'organizaciones' })
   async suspenderOrganizacion(@Req() req: RequestWithUser, @Param('id') id: string): Promise<unknown> {
     this.assertSuperAdmin(req);
-    return this.organizacionService.suspenderOrganizacion(id);
+    return sinSecretos(await this.organizacionService.suspenderOrganizacion(id));
   }
 
   @Post(':id/restore')
@@ -58,7 +59,7 @@ export class OrganizacionController {
   @RequirePermissions({ accion: 'suspender', modulo: 'organizaciones' })
   async reactivarOrganizacion(@Req() req: RequestWithUser, @Param('id') id: string): Promise<unknown> {
     this.assertSuperAdmin(req);
-    return this.organizacionService.reactivarOrganizacion(id);
+    return sinSecretos(await this.organizacionService.reactivarOrganizacion(id));
   }
 
   // Diagnóstico de acceso: dar acceso a todas las sucursales a un
@@ -91,7 +92,7 @@ export class OrganizacionController {
   @UseGuards(JwtAuthGuard)
   async getMiOrganizacion(): Promise<unknown> {
     // Todos los usuarios autenticados de un tenant pueden ver la info de su propia org
-    return this.organizacionService.getMiOrganizacion();
+    return sinSecretos(await this.organizacionService.getMiOrganizacion());
   }
 
   // Lista de primeros pasos del Dashboard: cualquier usuario del gimnasio.
@@ -113,6 +114,6 @@ export class OrganizacionController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'actualizar', modulo: 'organizaciones' })
   async updateMiOrganizacion(@Body() data: UpdateMiOrganizacionDto): Promise<unknown> {
-    return this.organizacionService.updateMiOrganizacion(data);
+    return sinSecretos(await this.organizacionService.updateMiOrganizacion(data));
   }
 }

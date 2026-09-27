@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, UserCheck, UserX, Clock, Ban, CheckCircle2, Play, Info, CalendarCheck, UserPlus, History, MapPin } from 'lucide-react';
+import { Search, UserCheck, UserX, Clock, Ban, CheckCircle2, Play, Info, CalendarCheck, UserPlus, History, MapPin, Tablet } from 'lucide-react';
+import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
@@ -250,6 +251,16 @@ export default function AsistenciasPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
+            {/* Tablet en la entrada donde el cliente marca solo (plan 10.3). */}
+            {sucursalId && (
+              <SoloEnModo minimo="intermedio">
+                <Protect permission="asistencias:crear">
+                  <Link href="/kiosco" className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:border-indigo-300">
+                    <Tablet className="w-4 h-4" /> Modo kiosco
+                  </Link>
+                </Protect>
+              </SoloEnModo>
+            )}
             {variasSucursales && sucursal && (
               <span className="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                 <MapPin className="w-4 h-4 text-zinc-400" /> {sucursal.nombre}

@@ -553,6 +553,8 @@ Hoy se generan 8 semanas fijas. Se hace configurable en `configuracion.clases.se
 
 Una pantalla a pantalla completa para una tablet en la entrada: el cliente escribe su documento, el sistema valida y muestra "Bienvenido, Juan" en verde o "Pasa por recepción" en rojo. Sale con un PIN del administrador (guardado en `configuracion.kiosco.pinHash`). Usa `MetodoValidacion.CODIGO_PIN` o `MANUAL`, que ya existen.
 
+**2026-09-27: hecho.** `/kiosco` (fuera del panel, sin menú, a pantalla completa), desde el botón "Modo kiosco" de Control de acceso en intermedio y experto. El cliente teclea su documento (exacto, sin búsquedas parciales) y ve "¡Bienvenido, Juan!" con su vencimiento, sesiones o clase del día; "Hola, Juan · Ya registraste tu ingreso hoy" en ámbar; o "Pasa por recepción" con el motivo en segunda persona. Solo se muestra el primer nombre. El kiosco aplica siempre un ingreso por día, aunque quien lo abrió tenga permiso de varios. Los ingresos quedan como `CODIGO_PIN`. El PIN de salida se define en Configuración → Reglas (`PUT /asistencias/kiosco/pin`); el hash no sale nunca del servidor (`configuracionPublica` lo reemplaza por `kiosco.tienePin`). Tras 10 documentos desconocidos o 5 PIN incorrectos seguidos, se bloquea 5 minutos (Redis).
+
 ---
 
 ## 11. Resto de módulos

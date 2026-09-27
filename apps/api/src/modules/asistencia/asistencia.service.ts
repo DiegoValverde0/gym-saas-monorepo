@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAsistenciaDto } from './dto/create-asistencia.dto';
 import { formatPermiso } from '../../common/utils/permiso.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
+import { MetodoValidacion, Prisma } from '@prisma/client';
 import { aHoraLocal, desdeHoraLocal, inicioDelDiaLocal } from '../../common/utils/zona-horaria.util';
 
 // Ventana en la que un ingreso al gimnasio cuenta como asistencia a una clase
@@ -67,7 +67,9 @@ export class AsistenciaService {
     );
   }
 
-  async validateAccess(clienteId: string, user: TokenPayload, sucursalId?: string) {
+  // `unoPorDia`: aplica el límite de un ingreso diario aunque quien usa la
+  // sesión tenga asistencias:multiple_por_dia (el kiosco lo atiende el público).
+  async validateAccess(clienteId: string, user: TokenPayload, sucursalId?: string, unoPorDia = false) {
     const zonaHoraria = await this.zonaHoraria(user?.organizacionId);
     const now = new Date();
     const local = aHoraLocal(now, zonaHoraria);
@@ -100,7 +102,7 @@ export class AsistenciaService {
 
     if (plan.diasPermitidos && plan.diasPermitidos.length > 0) {
       if (!plan.diasPermitidos.includes(currentDay)) {
-        return { allowed: false, reason: 'El plan de este cliente no permite el ingreso el día de hoy.', clasesReservadasHoy };
+        return { allowed: false, codigo: 'DIA_NO_PERMITIDO', reason: 'El plan de este cliente no permite el ingreso el día de hoy.', clasesReservadasHoy };
       }
     }
 
@@ -129,6 +131,7 @@ export class AsistenciaService {
       if (diasDistintos.size >= plan.limiteDiasSemana) {
         return {
           allowed: false,
+          codigo: 'LIMITE_SEMANAL',
           reason: `El plan permite un máximo de ${plan.limiteDiasSemana} día(s) por semana, y ya se alcanzó ese límite esta semana.`,
           clasesReservadasHoy,
         };
@@ -149,6 +152,7 @@ export class AsistenciaService {
         if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
             return { 
                 allowed: false, 
+                codigo: 'FUERA_DE_HORARIO',
                 reason: `El ingreso está fuera del horario permitido (${inicioDate.getUTCHours().toString().padStart(2,'0')}:${inicioDate.getUTCMinutes().toString().padStart(2,'0')} a ${finDate.getUTCHours().toString().padStart(2,'0')}:${finDate.getUTCMinutes().toString().padStart(2,'0')}).`,
                 clasesReservadasHoy,
             };
@@ -164,7 +168,7 @@ export class AsistenciaService {
 
     // 4. Validar 1 ingreso por día -- por defecto aplica a todos; solo se
     // exime quien tenga el permiso explícito asistencias:multiple_por_dia.
-    const puedeMultiplesIngresos = user && (await this.tienePermiso(user, 'asistencias', 'multiple_por_dia'));
+    const puedeMultiplesIngresos = !unoPorDia && user && (await this.tienePermiso(user, 'asistencias', 'multiple_por_dia'));
     if (user && !puedeMultiplesIngresos) {
         const ingresoHoy = await this.prisma.extendedClient.registroAsistencia.findFirst({
             where: {
@@ -176,7 +180,7 @@ export class AsistenciaService {
         });
 
         if (ingresoHoy) {
-            return { allowed: false, reason: 'El cliente ya registró un ingreso el día de hoy.', clasesReservadasHoy };
+            return { allowed: false, codigo: 'YA_INGRESO', reason: 'El cliente ya registró un ingreso el día de hoy.', clasesReservadasHoy };
         }
     }
 
@@ -189,7 +193,8 @@ export class AsistenciaService {
     };
   }
 
-  async checkIn(dto: CreateAsistenciaDto, user: TokenPayload) {
+  // `metodo`: cómo se identificó al cliente (el kiosco usa CODIGO_PIN: lo tecleó él mismo).
+  async checkIn(dto: CreateAsistenciaDto, user: TokenPayload, metodo: MetodoValidacion = 'MANUAL') {
     let membresiaId = null;
     let descontarSesion = false;
     const userId = user.sub;
@@ -203,7 +208,7 @@ export class AsistenciaService {
     }
 
     if (dto.clienteId && esMiembro) {
-        const validation = await this.validateAccess(dto.clienteId, user, dto.sucursalId);
+        const validation = await this.validateAccess(dto.clienteId, user, dto.sucursalId, metodo === 'CODIGO_PIN');
 
         if (!validation.allowed) {
             if (!dto.forzarIngreso) {
@@ -238,7 +243,7 @@ export class AsistenciaService {
                 membresiaId: membresiaId,
                 tipoAsistencia: dto.tipoAsistencia || 'MIEMBRO',
                 nombreVisitante: dto.nombreVisitante || null,
-                metodoValidacion: 'MANUAL',
+                metodoValidacion: metodo,
                 registradoPorId: userId,
                 motivoAnulacion: dto.forzarIngreso ? (dto.motivoForzado || 'Ingreso Forzado Manualmente') : null
             } as unknown as Prisma.RegistroAsistenciaUncheckedCreateInput,
