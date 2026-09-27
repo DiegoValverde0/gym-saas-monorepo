@@ -114,7 +114,9 @@ const navigationGroups: NavGroup[] = [
     title: 'Administración',
     icon: Settings,
     items: [
-      { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer', modoMinimo: 'intermedio' },
+      // D5: cuentas que no son empleados (contador, portal). Solo en experto,
+      // o cuando no hay Equipo (módulo de personal apagado) para dar accesos.
+      { name: 'Accesos avanzados', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
       { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
       // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
@@ -171,6 +173,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
           if (['Equipo', 'Jornadas', 'Tablet de marcaje'].includes(item.name)) return modulos.controlPersonal;
           if (item.name === 'Control de acceso') return modulos.controlAcceso;
+          if (item.name === 'Accesos avanzados') return alMenos('experto') || !modulos.controlPersonal;
           // Reportes: el resumen de hoy y del mes está en todos los modos; el
           // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
           if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;

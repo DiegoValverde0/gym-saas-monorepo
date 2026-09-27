@@ -929,7 +929,7 @@ Feature: Modo simple
 - **D2:** "clase abierta" = reservable con la membresía de **cualquier sucursal**; sigue exigiendo membresía.
 - **D3:** reglas de reserva **por disciplina** (nivel A, sin cambio de base de datos).
 - **D4:** **configurable**: por defecto solo el ingreso descuenta sesión; en experto se puede elegir que las clases también descuenten.
-- **D5:** pendiente de confirmar (hoy Usuarios sigue visible desde intermedio).
+- **D5:** **Accesos avanzados** (2026-09-27): la pantalla Usuarios pasa a llamarse así y solo aparece en experto, o en cualquier modo si el módulo de personal está apagado (sin Equipo no habría otro lugar para dar accesos).
 - **D7:** marcaje del equipo **desde el celular** (sin cambio de base de datos).
 
 Necesito tu respuesta en estas antes de empezar las fases indicadas:
