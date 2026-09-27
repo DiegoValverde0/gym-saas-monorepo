@@ -62,6 +62,14 @@ export class ClasesConfigDto {
   @IsOptional()
   @IsBoolean()
   descontarSesionEnClase?: boolean;
+
+  // Plan 8.6: cuántas semanas por adelantado se generan las clases de las
+  // series (por defecto 8). Solo se muestra en experto.
+  @IsOptional()
+  @IsInt()
+  @Min(4)
+  @Max(12)
+  semanasProyeccion?: number;
 }
 
 // Jornadas del equipo (plan 7.2): minutos de gracia antes de mostrar a

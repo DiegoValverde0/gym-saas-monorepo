@@ -13,7 +13,13 @@ import { choqueDeSalaSerie, choqueDeSerie } from '../../common/utils/choques-cla
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de clases a
 // partir de las plantillas activas (mismo default que turno-plantilla.service.ts).
+// Cada organización puede cambiarlo entre 4 y 12 (configuracion.clases.semanasProyeccion, plan 8.6).
 const SEMANAS_PROYECCION_DEFAULT = 8;
+
+function semanasDeLaConfiguracion(configuracion: unknown): number {
+  const valor = (configuracion as { clases?: { semanasProyeccion?: unknown } } | null)?.clases?.semanasProyeccion;
+  return typeof valor === 'number' && Number.isInteger(valor) && valor >= 4 && valor <= 12 ? valor : SEMANAS_PROYECCION_DEFAULT;
+}
 
 const INCLUDE_PLANTILLA = {
   disciplina: { select: { nombre: true } },
@@ -113,7 +119,7 @@ export class ClasePlantillaService {
     await this.guardarPlanesAcceso(creadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
     // Solo las de esta clase: si no, el aviso sumaba sesiones de otras clases
     // que el generador completaba en la misma pasada (las completa el cron).
-    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, creadas);
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), undefined, creadas);
     return { plantillasCreadas: diasSemana.length, ...generacion };
   }
 
@@ -148,7 +154,7 @@ export class ClasePlantillaService {
     if (quitadas.length > 0) await db.clasePlantilla.deleteMany({ where: { id: { in: quitadas } } });
 
     const sincronizacion = await this.sincronizarClasesFuturas(actualizadas, quitadas);
-    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, actualizadas);
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), undefined, actualizadas);
     return { plantillasCreadas, plantillasQuitadas: quitadas.length, ...sincronizacion, ...generacion };
   }
 
@@ -289,7 +295,8 @@ export class ClasePlantillaService {
 
   // Disparado manualmente desde el frontend ("Generar clases ahora"), con el
   // contexto de tenant de la request ya resuelto en el CLS.
-  async generarAhora(semanas: number = SEMANAS_PROYECCION_DEFAULT) {
+  // Sin `semanas`, las de la configuración de la organización.
+  async generarAhora(semanas?: number) {
     const organizacionId = this.cls.get('organizacionId');
     if (!organizacionId) return { clasesCreadas: 0, clasesOmitidas: 0 };
     return this.generarParaOrganizacion(organizacionId, semanas);
@@ -340,7 +347,7 @@ export class ClasePlantillaService {
   // con lo que ya hace ClaseProgramadaService.create() para el alta manual.
   // `soloPlantillas`: limita la generación a esas plantillas (alta o edición
   // de una clase), para que el conteo devuelto sea solo de esa clase.
-  async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT, soloPlantillas?: string[]) {
+  async generarParaOrganizacion(organizacionId: string, semanasPedidas?: number, soloPlantillas?: string[]) {
     const org = await this.prisma.organizacion.findUnique({
       where: { id: organizacionId },
       select: { configuracion: true, zonaHoraria: true },
@@ -350,6 +357,7 @@ export class ClasePlantillaService {
     // con la fecha UTC, de noche (UTC-4, desde las 20:00) la ventana
     // arrancaba un día tarde y no se generaba la clase de esa misma noche.
     const hoy = aHoraLocal(new Date(), zonaHoraria).fechaSolo;
+    const semanas = semanasPedidas ?? semanasDeLaConfiguracion(org?.configuracion);
     const finVentana = new Date(hoy);
     finVentana.setUTCDate(finVentana.getUTCDate() + semanas * 7);
 

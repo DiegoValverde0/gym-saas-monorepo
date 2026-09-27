@@ -517,6 +517,8 @@ Las reglas se guardan en `Organizacion.configuracion.accesoClases`:
 
 Hoy se generan 8 semanas fijas. Se hace configurable en `configuracion.clases.semanasProyeccion` (4 a 12) 🔧 experto. El hallazgo menciona "el próximo mes se generan solos": con 8 semanas ya se cumple, y el cron nocturno mantiene siempre esa ventana hacia adelante.
 
+**2026-09-27: hecho.** Configuración → Reglas → "Semanas de clases generadas por adelantado" (solo experto y con el módulo de clases). Lo usan el alta y la edición de series, "Generar clases ahora" sin parámetro y la generación de cada noche; el resumen del asistente "Nueva clase" también. Al aumentarlo se generan en el acto las sesiones que faltan; al reducirlo, las ya creadas se conservan. Las jornadas del equipo siguen con 8 semanas fijas.
+
 ---
 
 ## 9. Agenda

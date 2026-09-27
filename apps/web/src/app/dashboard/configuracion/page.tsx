@@ -5,7 +5,7 @@ import { Ayuda } from '@/components/ui/ayuda';
 import { Protect } from '@/components/ui/protect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, apiPut } from '@/lib/api-client';
+import { apiGet, apiPost, apiPut } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -47,6 +47,7 @@ const organizacionSchema = z.object({
     }),
     clases: z.object({
       descontarSesionEnClase: z.boolean(),
+      semanasProyeccion: z.number({ message: 'Ingresa un número de semanas' }).int().min(4, 'Mínimo 4').max(12, 'Máximo 12'),
     }),
     jornadas: z.object({
       toleranciaAtrasoMinutos: z.number({ message: 'Ingresa un número de minutos' }).int().min(0, 'Mínimo 0').max(120, 'Máximo 120'),
@@ -102,6 +103,7 @@ export default function ConfiguracionPage() {
         },
         clases: {
           descontarSesionEnClase: (organizacion as any).configuracion?.clases?.descontarSesionEnClase ?? false,
+          semanasProyeccion: (organizacion as any).configuracion?.clases?.semanasProyeccion ?? 8,
         },
         jornadas: {
           toleranciaAtrasoMinutos: (organizacion as any).configuracion?.jornadas?.toleranciaAtrasoMinutos ?? 10,
@@ -141,6 +143,7 @@ export default function ConfiguracionPage() {
         },
         clases: {
           descontarSesionEnClase: false,
+          semanasProyeccion: 8,
         },
         jornadas: {
           toleranciaAtrasoMinutos: 10,
@@ -173,8 +176,21 @@ export default function ConfiguracionPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (values: OrganizacionFormValues) => apiPut('/organizaciones/me/info', values),
-    onSuccess: () => {
+    onSuccess: async (_r, values) => {
       queryClient.invalidateQueries({ queryKey: ['organizacion'] });
+      // Más semanas por adelantado: se generan ya las clases que faltan, sin
+      // esperar a la generación de cada noche (plan 8.6).
+      const antes = (organizacion as any)?.configuracion?.clases?.semanasProyeccion ?? 8;
+      if (values.configuracion.modulos.clasesGrupales && values.configuracion.clases.semanasProyeccion > antes) {
+        try {
+          const r = await apiPost<{ clasesCreadas: number }>('/clases-plantilla/generar');
+          queryClient.invalidateQueries({ queryKey: ['clases'] });
+          queryClient.invalidateQueries({ queryKey: ['agenda'] });
+          if (r.clasesCreadas > 0) toast({ title: 'Clases generadas', description: `Se agregaron ${r.clasesCreadas} sesiones hasta ${values.configuracion.clases.semanasProyeccion} semanas por adelantado.`, variant: 'success' });
+        } catch {
+          // Si falla, las genera la tarea de cada noche.
+        }
+      }
       toast({
         title: 'Organización actualizada',
         description: 'Los cambios se han guardado correctamente.',
@@ -597,6 +613,30 @@ export default function ConfiguracionPage() {
                       </p>
                       {form.formState.errors.configuracion?.jornadas?.toleranciaAtrasoMinutos && (
                         <p className="text-xs text-red-500 dark:text-red-400">{form.formState.errors.configuracion.jornadas.toleranciaAtrasoMinutos.message}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* Plan 8.6: horizonte de generación de las clases que se repiten. Solo en experto. */}
+                {alMenos('experto') && form.watch('configuracion.modulos.clasesGrupales') && (
+                  <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Input
+                      id="semanasProyeccion"
+                      type="number"
+                      min={4}
+                      max={12}
+                      {...form.register('configuracion.clases.semanasProyeccion', { valueAsNumber: true })}
+                      disabled={isLoading || updateMutation.isPending}
+                      className="w-20 shrink-0"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="semanasProyeccion" className="font-medium text-slate-900 dark:text-white">Semanas de clases generadas por adelantado</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Las clases que se repiten se crean solas con esta anticipación (de 4 a 12 semanas; por defecto 8), así los clientes
+                        pueden reservar con tiempo. Si lo aumentas, las sesiones que faltan se crean al guardar. Si lo reduces, las ya creadas se conservan.
+                      </p>
+                      {form.formState.errors.configuracion?.clases?.semanasProyeccion && (
+                        <p className="text-xs text-red-500 dark:text-red-400">{form.formState.errors.configuracion.clases.semanasProyeccion.message}</p>
                       )}
                     </div>
                   </div>

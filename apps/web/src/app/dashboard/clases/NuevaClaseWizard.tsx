@@ -29,7 +29,8 @@ const DURACIONES = [30, 45, 60, 90];
 const PRIMERA_HORA = 6 * 60;
 const ULTIMA_HORA = 22 * 60;
 const PASO_GRILLA = 30;
-const SEMANAS_PROYECCION = 8;
+// Semanas que se generan por adelantado si la organización no eligió otro valor (plan 8.6).
+const SEMANAS_PROYECCION_DEFAULT = 8;
 
 // Prellenado desde la Agenda o un clic en el calendario.
 export interface InicioAsistente {
@@ -44,10 +45,10 @@ const hoyISO = () => {
 };
 
 // Sesiones que se programarán en las próximas semanas (para el resumen).
-function contarSesiones(selecciones: Seleccion[], desde: string) {
+function contarSesiones(selecciones: Seleccion[], desde: string, semanas: number) {
   const inicio = new Date(`${desde}T00:00:00`);
   let total = 0;
-  for (let i = 0; i < SEMANAS_PROYECCION * 7; i++) {
+  for (let i = 0; i < semanas * 7; i++) {
     const d = new Date(inicio.getTime() + i * 86400000);
     total += selecciones.filter((s) => s.dia === d.getDay()).length;
   }
@@ -619,13 +620,14 @@ export function NuevaClaseWizard({
     </div>
   );
 
-  const sesionesPrevistas = esUnica ? 1 : contarSesiones(selecciones, vigenciaDesde);
+  const semanasProyeccion = Number((organizacion as { configuracion?: { clases?: { semanasProyeccion?: number } } } | undefined)?.configuracion?.clases?.semanasProyeccion) || SEMANAS_PROYECCION_DEFAULT;
+  const sesionesPrevistas = esUnica ? 1 : contarSesiones(selecciones, vigenciaDesde, semanasProyeccion);
   const paso5 = (
     <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
       <p className="text-base">
         {esUnica ? 'Se programará ' : `Se programarán ${editarSerie ? 'hasta ' : ''}`}
         <span className="font-semibold">{esUnica ? '1 sesión' : `${sesionesPrevistas} sesiones`}</span> de <span className="font-semibold">{nombre}</span>
-        {esUnica ? '' : ` en las próximas ${SEMANAS_PROYECCION} semanas`}
+        {esUnica ? '' : ` en las próximas ${semanasProyeccion} semanas`}
         {sucursalElegida ? <> en <span className="font-semibold">{sucursalElegida.nombre}</span></> : null}
         {salas.find((s) => s.id === salaId) ? <> ({salas.find((s) => s.id === salaId)?.nombre})</> : null}
         {entrenadorElegido ? <> con <span className="font-semibold">{entrenadorElegido.nombre}</span></> : ' sin instructor por ahora'}.
