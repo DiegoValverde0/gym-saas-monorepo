@@ -9,6 +9,11 @@ import { hashContrasena } from '../../common/utils/contrasena.util';
 import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
 import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 
+// El filtro de organización (prisma.service.ts) deja pasar también las
+// asignaciones globales (organizacionId null), que son las del superadmin de
+// plataforma. Un gimnasio no debe verlas, cambiarlas ni revocarlas.
+const SOLO_DE_LA_ORGANIZACION = { organizacionId: { not: null } } satisfies Prisma.AsignacionAccesoWhereInput;
+
 @Injectable()
 export class UsuarioService {
   constructor(
@@ -19,6 +24,7 @@ export class UsuarioService {
 
   async listarUsuarios() {
     return this.prisma.extendedClient.asignacionAcceso.findMany({
+      where: SOLO_DE_LA_ORGANIZACION,
       include: {
         usuario: {
             select: {
@@ -88,7 +94,7 @@ export class UsuarioService {
   async updateAsignacion(asignacionId: string, nuevoRolId: string, sucursalId?: string | null) {
     // Verificar que la asignación existe y pertenece al tenant
     const actual = assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
+      await this.prisma.extendedClient.asignacionAcceso.findFirst({ where: { id: asignacionId, ...SOLO_DE_LA_ORGANIZACION }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
     await assertSucursalAsignable(this.prisma, this.cls, sucursalId);
@@ -118,7 +124,7 @@ export class UsuarioService {
 
   async removerEmpleado(asignacionId: string) {
     const actual = assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
+      await this.prisma.extendedClient.asignacionAcceso.findFirst({ where: { id: asignacionId, ...SOLO_DE_LA_ORGANIZACION }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
     await assertQuedaOtroAdministrador(this.prisma.extendedClient as unknown as Prisma.TransactionClient, actual);
