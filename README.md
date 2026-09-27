@@ -12,7 +12,7 @@ pnpm db:reset                 # crea todas las tablas y carga los datos iniciale
 pnpm dev                      # API en :3001 y web en :3000
 ```
 
-`pnpm db:reset` **BORRA TODA LA BASE** y la deja como nueva: estructura, restricciones (`prisma/constraints.sql`) y datos iniciales (`prisma/seed.ts`: permisos, los 5 roles base, el superadmin y el gimnasio de ejemplo Gym Titan). Las cuentas y claves de prueba están en `seed.ts`.
+`pnpm db:reset` **BORRA TODA LA BASE** y la deja como nueva: estructura, restricciones (`prisma/constraints.sql`) y datos iniciales (`prisma/seed.ts`: permisos, los 5 roles base, el superadmin y el gimnasio de ejemplo Gym Titan, con su dueño, una recepcionista, una caja, la cuenta "Efectivo del gimnasio", un plan y un cliente con su membresía activa ya cobrada). Las cuentas y claves de prueba están en `seed.ts`.
 
 ## Cambios en el esquema
 

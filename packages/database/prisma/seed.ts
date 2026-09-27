@@ -1,4 +1,4 @@
-import { PrismaClient, EstadoOrganizacion, MetodoPago, TipoConceptoVenta, TipoTransaccion, TipoPlan, Genero } from '@prisma/client';
+import { PrismaClient, EstadoOrganizacion, MetodoPago, TipoConceptoVenta, TipoTransaccion, TipoPlan, Genero, EstadoMembresia, EstadoAperturaCaja } from '@prisma/client';
 import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
@@ -310,8 +310,18 @@ async function main() {
   // =======================================================
   // 5. FLUJO BÁSICO (CAJA, PLAN, CLIENTE, VENTA)
   // =======================================================
+  // Una venta de ejemplo completa y coherente: Ana (recepción) abrió la caja,
+  // le vendió a Juan un plan mensual en efectivo y cerró su turno. Así Juan
+  // aparece como cliente activo y la caja queda libre para abrirla de nuevo.
   const cajaTitan = await prisma.cajaRegistradora.create({
     data: { organizacionId: orgTitan.id, sucursalId: sucursalTitan.id, nombre: 'Caja Recepción Central' }
+  });
+
+  // Misma cuenta que crea el sistema en modo simple (transaccion.service.ts,
+  // CUENTA_EFECTIVO_SIMPLE): con ella también se puede cobrar en efectivo en
+  // intermedio y experto sin tener que crear una cuenta antes.
+  const cuentaEfectivo = await prisma.cuentaBancaria.create({
+    data: { organizacionId: orgTitan.id, banco: 'Efectivo', numeroCuenta: 'Efectivo del gimnasio', tipoCuenta: 'EFECTIVO' }
   });
 
   const planMensualTitan = await prisma.plan.create({
@@ -319,30 +329,46 @@ async function main() {
   });
 
   const clienteTitan = await prisma.cliente.create({
-    data: { organizacionId: orgTitan.id, sucursalBaseId: sucursalTitan.id, nombre: 'Juan Perez (Titan)', correo: 'juan.titan@ejemplo.com', genero: Genero.MASCULINO }
+    data: {
+      organizacionId: orgTitan.id, sucursalBaseId: sucursalTitan.id, nombre: 'Juan Perez (Titan)', correo: 'juan.titan@ejemplo.com',
+      telefono: '70000001', tipoDocumento: 'CI', numeroDocumento: '1234567', genero: Genero.MASCULINO,
+    }
   });
 
+  // Hoy en la hora de La Paz (zona horaria por defecto de la organización),
+  // como fecha sola: las membresías guardan fechaInicio/fechaFin como @db.Date.
+  const ahoraLaPaz = new Date(Date.now() - 4 * 60 * 60 * 1000);
+  const hoy = new Date(Date.UTC(ahoraLaPaz.getUTCFullYear(), ahoraLaPaz.getUTCMonth(), ahoraLaPaz.getUTCDate()));
+  const venceEl = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const aperturaTitan = await prisma.aperturaCaja.create({
-    data: { organizacionId: orgTitan.id, cajaId: cajaTitan.id, usuarioId: admin.id, montoInicial: 100.00 }
+    data: { organizacionId: orgTitan.id, cajaId: cajaTitan.id, usuarioId: recepcionistaUser.id, montoInicial: 100.00 }
   });
 
   const membresiaTitan = await prisma.membresia.create({
     data: {
-      organizacionId: orgTitan.id, clienteId: clienteTitan.id, planId: planMensualTitan.id,
-      montoBase: 300.00, descuentoAplicado: 0.00, montoFinal: 300.00, fechaInicio: new Date()
+      organizacionId: orgTitan.id, sucursalId: sucursalTitan.id, clienteId: clienteTitan.id, planId: planMensualTitan.id,
+      montoBase: 300.00, descuentoAplicado: 0.00, montoFinal: 300.00,
+      fechaInicio: hoy, fechaFin: venceEl, estado: EstadoMembresia.ACTIVA, pagada: true, creadoPorId: recepcionistaUser.id,
     }
   });
 
   const transaccionTitan = await prisma.transaccion.create({
-    data: { organizacionId: orgTitan.id, sucursalId: sucursalTitan.id, aperturaCajaId: aperturaTitan.id, clienteId: clienteTitan.id, tipo: TipoTransaccion.INGRESO, montoTotal: 300.00, creadoPorId: admin.id }
+    data: { organizacionId: orgTitan.id, sucursalId: sucursalTitan.id, aperturaCajaId: aperturaTitan.id, clienteId: clienteTitan.id, tipo: TipoTransaccion.INGRESO, montoTotal: 300.00, creadoPorId: recepcionistaUser.id }
   });
 
   await prisma.pago.create({
-    data: { organizacionId: orgTitan.id, transaccionId: transaccionTitan.id, metodoPago: MetodoPago.EFECTIVO, monto: 300.00 }
+    data: { organizacionId: orgTitan.id, transaccionId: transaccionTitan.id, metodoPago: MetodoPago.EFECTIVO, monto: 300.00, cuentaBancariaId: cuentaEfectivo.id }
   });
 
   await prisma.detalleTransaccion.create({
     data: { organizacionId: orgTitan.id, transaccionId: transaccionTitan.id, tipoConcepto: TipoConceptoVenta.MEMBRESIA, membresiaId: membresiaTitan.id, precioUnitario: 300.00, subtotal: 300.00, cantidad: 1 }
+  });
+
+  // Ana cierra su turno: 100 de apertura + 300 cobrados en efectivo.
+  await prisma.aperturaCaja.update({
+    where: { id: aperturaTitan.id },
+    data: { estado: EstadoAperturaCaja.CERRADA, fechaCierre: new Date(), montoCierreEsperado: 400.00, montoCierreReal: 400.00 }
   });
 
   console.log('✅ Base de datos sembrada correctamente con Permisos y 5 Roles base.');
