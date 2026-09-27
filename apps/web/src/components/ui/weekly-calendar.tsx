@@ -99,108 +99,113 @@ export function WeeklyCalendar({ classes, currentDate, onDateClick, onClassClick
   }, [classes, days]);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[700px]">
-      {/* Header Days */}
-      <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
-        <div className="p-4 flex items-center justify-center border-r border-slate-200">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Hora</span>
+    // Cabecera y grilla dentro del mismo scroll horizontal: en el celular la
+    // cabecera se apretaba al ancho de pantalla y los días no coincidían con
+    // sus columnas (la grilla mide 800px y se desplaza de lado).
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto overflow-y-hidden">
+      <div className="min-w-[800px] flex flex-col h-[700px]">
+        {/* Header Days */}
+        <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
+          <div className="p-4 flex items-center justify-center border-r border-slate-200">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Hora</span>
+          </div>
+          {days.map((day, idx) => {
+            const isToday = new Date().toDateString() === day.toDateString();
+            return (
+              <div key={idx} className={`p-3 flex flex-col items-center justify-center border-r border-slate-200 last:border-0 ${isToday ? 'bg-indigo-50/50' : ''}`}>
+                <span className={`text-xs font-semibold uppercase ${isToday ? 'text-indigo-600' : 'text-slate-500'}`}>
+                  {day.toLocaleDateString('es-ES', { weekday: 'short' })}
+                </span>
+                <span className={`text-lg font-bold ${isToday ? 'text-indigo-700' : 'text-slate-800'}`}>
+                  {day.getDate()}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        {days.map((day, idx) => {
-          const isToday = new Date().toDateString() === day.toDateString();
-          return (
-            <div key={idx} className={`p-3 flex flex-col items-center justify-center border-r border-slate-200 last:border-0 ${isToday ? 'bg-indigo-50/50' : ''}`}>
-              <span className={`text-xs font-semibold uppercase ${isToday ? 'text-indigo-600' : 'text-slate-500'}`}>
-                {day.toLocaleDateString('es-ES', { weekday: 'short' })}
-              </span>
-              <span className={`text-lg font-bold ${isToday ? 'text-indigo-700' : 'text-slate-800'}`}>
-                {day.getDate()}
-              </span>
-            </div>
-          );
-        })}
-      </div>
 
-      {/* Grid */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-8 min-w-[800px]">
-          {/* Times Column */}
-          <div className="flex flex-col border-r border-slate-200 bg-slate-50/50 sticky left-0 z-10">
-            {HOURS.map(hour => (
-              <div key={hour} className="h-24 flex items-start justify-center p-2 border-b border-slate-200/50">
-                <span className="text-xs font-medium text-slate-400">{hour.toString().padStart(2, '0')}:00</span>
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-8">
+            {/* Times Column */}
+            <div className="flex flex-col border-r border-slate-200 bg-slate-50/50 sticky left-0 z-10">
+              {HOURS.map(hour => (
+                <div key={hour} className="h-24 flex items-start justify-center p-2 border-b border-slate-200/50">
+                  <span className="text-xs font-medium text-slate-400">{hour.toString().padStart(2, '0')}:00</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Days Columns */}
+            {days.map((day, dayIndex) => (
+              <div key={dayIndex} className="flex flex-col border-r border-slate-200 last:border-0">
+                {HOURS.map(hour => {
+                  const key = `${dayIndex}-${hour}`;
+                  const slotClasses = classesByDayAndHour.get(key) || [];
+                
+                  const handleSlotClick = (e: React.MouseEvent) => {
+                    // If clicked directly on the slot (not a class card), trigger new class
+                    if (e.target === e.currentTarget) {
+                      const newDate = new Date(day);
+                      newDate.setHours(hour, 0, 0, 0);
+                      onDateClick(newDate);
+                    }
+                  };
+
+                  return (
+                    <div 
+                      key={hour} 
+                      className="h-24 border-b border-slate-200/50 p-1 relative hover:bg-slate-50 transition-colors cursor-pointer group"
+                      onClick={handleSlotClick}
+                    >
+                      {/* Add Class Hover Button */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-indigo-50/50 transition-opacity pointer-events-none">
+                        <span className="text-xs font-semibold text-indigo-600 bg-white px-2 py-1 rounded-full shadow-sm">
+                          + Agregar
+                        </span>
+                      </div>
+
+                      {/* Classes in this slot */}
+                      <div className="absolute inset-1 flex flex-col gap-1 z-10 overflow-hidden">
+                        {slotClasses.map(c => {
+                          const reservasCount = c.reservas?.length || 0;
+                          const isFull = reservasCount >= c.capacidadMaxima;
+                          return (
+                            <div 
+                              key={c.id} 
+                              onClick={(e) => { e.stopPropagation(); onClassClick(c); }}
+                              className={`flex flex-col p-1.5 rounded-md border text-xs leading-tight transition-transform hover:scale-[1.02] shadow-sm cursor-pointer ${
+                                isFull ? 'bg-orange-50 border-orange-200' : 'bg-indigo-50 border-indigo-200'
+                              }`}
+                            >
+                              <span className="font-semibold text-slate-800 truncate" title={c.nombreClase}>{c.nombreClase}</span>
+                              <span className="text-[10px] text-slate-500 truncate">{c.entrenador?.usuario?.nombreCompleto || 'Sin profe'}</span>
+                            
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                                  <Clock className="w-3 h-3" /> {c.duracionMinutos}m
+                                </span>
+                              
+                                <button 
+                                  onClick={(e) => onReservaClick(c.id, e)}
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full font-medium text-[10px] ${
+                                    isFull ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                                  }`}
+                                >
+                                  <Users className="w-3 h-3" />
+                                  {reservasCount}/{c.capacidadMaxima}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             ))}
           </div>
-
-          {/* Days Columns */}
-          {days.map((day, dayIndex) => (
-            <div key={dayIndex} className="flex flex-col border-r border-slate-200 last:border-0">
-              {HOURS.map(hour => {
-                const key = `${dayIndex}-${hour}`;
-                const slotClasses = classesByDayAndHour.get(key) || [];
-                
-                const handleSlotClick = (e: React.MouseEvent) => {
-                  // If clicked directly on the slot (not a class card), trigger new class
-                  if (e.target === e.currentTarget) {
-                    const newDate = new Date(day);
-                    newDate.setHours(hour, 0, 0, 0);
-                    onDateClick(newDate);
-                  }
-                };
-
-                return (
-                  <div 
-                    key={hour} 
-                    className="h-24 border-b border-slate-200/50 p-1 relative hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={handleSlotClick}
-                  >
-                    {/* Add Class Hover Button */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-indigo-50/50 transition-opacity pointer-events-none">
-                      <span className="text-xs font-semibold text-indigo-600 bg-white px-2 py-1 rounded-full shadow-sm">
-                        + Agregar
-                      </span>
-                    </div>
-
-                    {/* Classes in this slot */}
-                    <div className="absolute inset-1 flex flex-col gap-1 z-10 overflow-hidden">
-                      {slotClasses.map(c => {
-                        const reservasCount = c.reservas?.length || 0;
-                        const isFull = reservasCount >= c.capacidadMaxima;
-                        return (
-                          <div 
-                            key={c.id} 
-                            onClick={(e) => { e.stopPropagation(); onClassClick(c); }}
-                            className={`flex flex-col p-1.5 rounded-md border text-xs leading-tight transition-transform hover:scale-[1.02] shadow-sm cursor-pointer ${
-                              isFull ? 'bg-orange-50 border-orange-200' : 'bg-indigo-50 border-indigo-200'
-                            }`}
-                          >
-                            <span className="font-semibold text-slate-800 truncate" title={c.nombreClase}>{c.nombreClase}</span>
-                            <span className="text-[10px] text-slate-500 truncate">{c.entrenador?.usuario?.nombreCompleto || 'Sin profe'}</span>
-                            
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                                <Clock className="w-3 h-3" /> {c.duracionMinutos}m
-                              </span>
-                              
-                              <button 
-                                onClick={(e) => onReservaClick(c.id, e)}
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full font-medium text-[10px] ${
-                                  isFull ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                                }`}
-                              >
-                                <Users className="w-3 h-3" />
-                                {reservasCount}/{c.capacidadMaxima}
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { usePermissions } from '@/hooks/use-permissions';
 import { useModoUso } from '@/hooks/use-modo-uso';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { useTenantStore } from '@/store/use-tenant-store';
@@ -37,6 +38,7 @@ export function VentaProductoModal({ open, onOpenChange }: { open: boolean; onOp
   const { activeTenantId } = useTenantStore();
   const { esSimple } = useModoUso();
   const { sucursalId } = useSucursalActiva();
+  const { hasPermission } = usePermissions();
   const [carrito, setCarrito] = useState<Record<string, number>>({});
   const [formaPago, setFormaPago] = useState('EFECTIVO');
   const [cuentaId, setCuentaId] = useState('');
@@ -49,7 +51,8 @@ export function VentaProductoModal({ open, onOpenChange }: { open: boolean; onOp
   const { data: inventarios } = useQuery({
     queryKey: ['inventarios', activeTenantId],
     queryFn: async () => unwrapList<Inventario>(await apiGet('/inventarios')),
-    enabled: !!token && open && !esSimple,
+    // Sin 'inventarios:leer' (p. ej. recepción) se vende igual, sin mostrar stock.
+    enabled: !!token && open && !esSimple && hasPermission('inventarios:leer'),
   });
   const { data: caja } = useQuery({
     queryKey: ['apertura-caja-me'],

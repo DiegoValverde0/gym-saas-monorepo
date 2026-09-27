@@ -597,7 +597,11 @@ export function NuevaClaseWizard({
       )}
       {reglaPropia ? (
         <>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Esta regla vale solo para esta clase; el resto de las clases de la disciplina siguen con la suya.</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {disciplinaId
+              ? 'Esta regla vale solo para esta clase; el resto de las clases de la disciplina siguen con la suya.'
+              : 'Esta regla vale solo para esta clase; las demás siguen con la regla general.'}
+          </p>
           {opcionesAcceso}
         </>
       ) : !disciplinaId ? (

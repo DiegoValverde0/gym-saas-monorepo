@@ -1,6 +1,7 @@
 "use client";
 
 import { Ayuda } from '@/components/ui/ayuda';
+import { Protect } from '@/components/ui/protect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPut } from '@/lib/api-client';
@@ -202,6 +203,7 @@ export default function ConfiguracionPage() {
   }
 
   return (
+    <Protect permission="organizaciones:actualizar" fallbackType="redirect">
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-500 pb-12">
       <div className="flex items-center gap-3">
         <div className="p-3 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
@@ -621,11 +623,13 @@ export default function ConfiguracionPage() {
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end sticky bottom-6 z-10 bg-white dark:bg-slate-900/80 backdrop-blur-sm p-4 -mx-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <Button 
-            type="submit" 
+        {/* Solo el botón flota: una franja ancha tapaba contenido (p. ej. la
+            tarjeta "Experto") en pantallas de poca altura. */}
+        <div className="flex justify-end sticky bottom-6 z-10 pointer-events-none">
+          <Button
+            type="submit"
             size="lg"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 rounded-full px-8 font-bold"
+            className="pointer-events-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-none rounded-full px-8 font-bold"
             disabled={updateMutation.isPending || isLoading || !form.formState.isDirty}
           >
             {updateMutation.isPending ? 'Guardando Cambios...' : 'Guardar Configuración'}
@@ -633,5 +637,6 @@ export default function ConfiguracionPage() {
         </div>
       </form>
     </div>
+    </Protect>
   );
 }

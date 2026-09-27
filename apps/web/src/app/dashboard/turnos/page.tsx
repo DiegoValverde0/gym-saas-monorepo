@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { usePermissions } from '@/hooks/use-permissions';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, unwrapList } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -35,13 +36,16 @@ export default function JornadasPage() {
   const { token } = useAuth();
   const { activeTenantId } = useTenantStore();
   const { sucursalId } = useSucursalActiva();
+  const { hasPermission } = usePermissions();
   const [vista, setVista] = useState('hoy');
   const [ausencia, setAusencia] = useState<{ abierto: boolean; staffId: string | null }>({ abierto: false, staffId: null });
 
   const { data: personal } = useQuery({
     queryKey: ['personal', activeTenantId],
     queryFn: async () => unwrapList<StaffBasico>(await apiGet('/personal')),
-    enabled: !!token,
+    // Solo lo usan los formularios de edición; sin 'staff:leer' la API da 403
+    // y se mostraba "No tienes permisos" a quien solo mira las jornadas.
+    enabled: !!token && hasPermission('staff:leer'),
   });
   const equipo = [...(personal ?? [])].sort((a, b) => (a.usuario?.nombreCompleto ?? '').localeCompare(b.usuario?.nombreCompleto ?? ''));
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { usePermissions } from '@/hooks/use-permissions';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
@@ -72,6 +73,7 @@ export default function ProductosPage() {
   const { toast } = useToast();
   const [showDeleted, setShowDeleted] = useState(false);
   const { token, user } = useAuth();
+  const { hasPermission } = usePermissions();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
   // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
@@ -195,7 +197,7 @@ export default function ProductosPage() {
   const { data: inventarios, isLoading: loadingInventarios } = useQuery({
     queryKey: ['inventarios', activeTenantId],
     queryFn: async () => unwrapList(await apiGet('/inventarios')),
-    enabled: !!token,
+    enabled: !!token && hasPermission('inventarios:leer'),
   });
 
   const { data: sucursales } = useQuery({

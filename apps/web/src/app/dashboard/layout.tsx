@@ -61,7 +61,6 @@ interface NavItem {
 interface NavGroup {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
-  baseHref: string;
   items: NavItem[];
 }
 
@@ -69,7 +68,6 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Operaciones',
     icon: Activity,
-    baseHref: '/dashboard/clientes',
     items: [
       { name: 'Clientes', href: '/dashboard/clientes', icon: Users, permission: 'clientes:leer' },
       { name: 'Control de acceso', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
@@ -78,7 +76,6 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Comercial',
     icon: Tag,
-    baseHref: '/dashboard/planes',
     items: [
       { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
       { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer', modoMinimo: 'intermedio' },
@@ -89,7 +86,6 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Equipo',
     icon: Dumbbell,
-    baseHref: '/dashboard/disciplinas',
     items: [
       // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
       { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
@@ -105,7 +101,6 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Finanzas',
     icon: Wallet,
-    baseHref: '/dashboard/reportes',
     items: [
       { name: 'Reportes', href: '/dashboard/reportes', icon: FileText, permission: 'transacciones:leer' },
       { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
@@ -118,12 +113,12 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Administración',
     icon: Settings,
-    baseHref: '/dashboard/usuarios',
     items: [
       { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer', modoMinimo: 'intermedio' },
       { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
-      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings }
+      // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
+      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
     ]
   }
 ];
@@ -250,15 +245,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
         
         {filteredNavigationGroups.map((group) => {
-          const hasAccess = group.items.some(item => !item.permission || hasPermission(item.permission));
-          if (!hasAccess) return null;
+          // El grupo lleva a su primera página visible: la primera de la lista
+          // puede estar oculta por el modo, un módulo apagado o falta de permiso.
+          const primeraVisible = group.items.find(item => !item.permission || hasPermission(item.permission));
+          if (!primeraVisible) return null;
 
           const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.title === group.title;
 
           return (
             <div key={group.title}>
               <Link
-                href={group.baseHref}
+                href={primeraVisible.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'

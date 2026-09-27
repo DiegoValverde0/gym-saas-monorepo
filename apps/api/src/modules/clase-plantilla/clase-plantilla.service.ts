@@ -111,7 +111,9 @@ export class ClasePlantillaService {
       creadas.push(p.id);
     }
     await this.guardarPlanesAcceso(creadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
-    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
+    // Solo las de esta clase: si no, el aviso sumaba sesiones de otras clases
+    // que el generador completaba en la misma pasada (las completa el cron).
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, creadas);
     return { plantillasCreadas: diasSemana.length, ...generacion };
   }
 
@@ -146,7 +148,7 @@ export class ClasePlantillaService {
     if (quitadas.length > 0) await db.clasePlantilla.deleteMany({ where: { id: { in: quitadas } } });
 
     const sincronizacion = await this.sincronizarClasesFuturas(actualizadas, quitadas);
-    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'));
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, actualizadas);
     return { plantillasCreadas, plantillasQuitadas: quitadas.length, ...sincronizacion, ...generacion };
   }
 
@@ -336,7 +338,9 @@ export class ClasePlantillaService {
   // organización exige turno asignado (`requerimientosClase.exigirTurnoEntrenador`),
   // esa ocurrencia puntual se omite en vez de crearse sin cobertura -- coherente
   // con lo que ya hace ClaseProgramadaService.create() para el alta manual.
-  async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT) {
+  // `soloPlantillas`: limita la generación a esas plantillas (alta o edición
+  // de una clase), para que el conteo devuelto sea solo de esa clase.
+  async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT, soloPlantillas?: string[]) {
     const org = await this.prisma.organizacion.findUnique({
       where: { id: organizacionId },
       select: { configuracion: true, zonaHoraria: true },
@@ -352,6 +356,7 @@ export class ClasePlantillaService {
     const plantillas = await this.prisma.clasePlantilla.findMany({
       where: {
         organizacionId,
+        ...(soloPlantillas ? { id: { in: soloPlantillas } } : {}),
         activa: true,
         deletedAt: null,
         vigenciaDesde: { lte: finVentana },
