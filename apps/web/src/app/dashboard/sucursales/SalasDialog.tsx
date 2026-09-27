@@ -68,7 +68,7 @@ export function SalasDialog({ sucursal, onClose }: { sucursal: { id: string; nom
                 edicion?.id === s.id ? (
                   <li key={s.id} className="flex items-center gap-2 p-2">
                     <Input value={edicion.nombre} onChange={(e) => setEdicion({ ...edicion, nombre: e.target.value })} aria-label="Nombre de la sala" />
-                    <Input type="number" min={1} value={edicion.capacidad} onChange={(e) => setEdicion({ ...edicion, capacidad: e.target.value })} placeholder="Cupo" aria-label="Cupo" className="w-20" />
+                    <Input type="number" min={1} value={edicion.capacidad} onChange={(e) => setEdicion({ ...edicion, capacidad: e.target.value })} placeholder="Cupo" aria-label="Cupo" className="w-20 shrink-0" />
                     <Button size="icon" variant="ghost" onClick={() => guardar.mutate()} disabled={!edicion.nombre.trim() || guardar.isPending} aria-label="Guardar"><Check className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" onClick={() => setEdicion(null)} aria-label="Cancelar"><X className="h-4 w-4" /></Button>
                   </li>
@@ -96,7 +96,7 @@ export function SalasDialog({ sucursal, onClose }: { sucursal: { id: string; nom
 
           <div className="flex items-center gap-2">
             <Input value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} placeholder="Ej. Sala de spinning" aria-label="Nombre de la sala nueva" />
-            <Input type="number" min={1} value={nueva.capacidad} onChange={(e) => setNueva({ ...nueva, capacidad: e.target.value })} placeholder="Cupo" aria-label="Cupo de la sala nueva" className="w-20" />
+            <Input type="number" min={1} value={nueva.capacidad} onChange={(e) => setNueva({ ...nueva, capacidad: e.target.value })} placeholder="Cupo" aria-label="Cupo de la sala nueva" className="w-20 shrink-0" />
             <Button onClick={() => crear.mutate()} disabled={nueva.nombre.trim().length < 2 || crear.isPending}>
               <Plus className="h-4 w-4 mr-1" /> Agregar
             </Button>

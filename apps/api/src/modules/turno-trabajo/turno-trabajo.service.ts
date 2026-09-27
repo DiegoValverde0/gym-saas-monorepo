@@ -239,8 +239,15 @@ export class TurnoTrabajoService {
     };
   }
 
+  // La barra superior lo consulta en cada pantalla: no ser del equipo o no
+  // trabajar hoy es lo normal (el dueño, un día libre), no un error.
   async miTurnoDeHoy(usuarioId: string) {
-    return this.encontrarTurnoDeHoy(usuarioId);
+    try {
+      return await this.encontrarTurnoDeHoy(usuarioId);
+    } catch (error) {
+      if (error instanceof NotFoundException) return null;
+      throw error;
+    }
   }
 
   async marcarIngreso(usuarioId: string) {

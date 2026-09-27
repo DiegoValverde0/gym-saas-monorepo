@@ -95,13 +95,15 @@ export class ReservaClaseService {
         if (!evaluacion.permitido) throw new BadRequestException(evaluacion.motivo);
       }
 
-      const yaReservada = await tx.reservaClase.findFirst({
-        where: { claseId: createReservaClaseDto.claseId, clienteId: createReservaClaseDto.clienteId, estado: { in: ['CONFIRMADA', 'ASISTIO', 'EN_ESPERA'] } },
-        select: { estado: true },
+      // Hay una sola fila por cliente y clase (@@unique): si canceló antes, se
+      // reutiliza esa fila en vez de crear otra.
+      const previa = await tx.reservaClase.findFirst({
+        where: { claseId: createReservaClaseDto.claseId, clienteId: createReservaClaseDto.clienteId },
+        select: { id: true, estado: true },
       });
-      if (yaReservada) {
+      if (previa && ['CONFIRMADA', 'ASISTIO', 'EN_ESPERA'].includes(previa.estado)) {
         throw new ConflictException(
-          yaReservada.estado === 'EN_ESPERA' ? 'Este cliente ya está en la lista de espera de esta clase.' : 'Este cliente ya tiene una reserva en esta clase.',
+          previa.estado === 'EN_ESPERA' ? 'Este cliente ya está en la lista de espera de esta clase.' : 'Este cliente ya tiene una reserva en esta clase.',
         );
       }
 
@@ -115,13 +117,22 @@ export class ReservaClaseService {
         throw new ConflictException('Esta clase está llena. Puedes anotar al cliente en la lista de espera.');
       }
 
+      // Con cupo libre se confirma aunque se haya pedido la lista de espera.
+      const estado = llena ? 'EN_ESPERA' : 'CONFIRMADA';
+      if (previa) {
+        // fechaReserva nueva: en la lista de espera vuelve a quedar al final.
+        return tx.reservaClase.update({
+          where: { id: previa.id },
+          data: { estado, fechaReserva: new Date() },
+          include: INCLUDE_RESERVA,
+        });
+      }
       return tx.reservaClase.create({
         // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
         data: {
           claseId: createReservaClaseDto.claseId,
           clienteId: createReservaClaseDto.clienteId,
-          // Con cupo libre se confirma aunque se haya pedido la lista de espera.
-          estado: llena ? 'EN_ESPERA' : 'CONFIRMADA',
+          estado,
         } as unknown as Prisma.ReservaClaseUncheckedCreateInput,
         include: INCLUDE_RESERVA,
       });

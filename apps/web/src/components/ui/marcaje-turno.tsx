@@ -33,9 +33,9 @@ export function MarcajeTurno() {
 
   const { data: jornada } = useQuery({
     queryKey: ['mi-turno-hoy', user?.sub],
-    queryFn: async () => apiGet<MiJornada>('/turnos/mi-turno/hoy'),
+    queryFn: async () => apiGet<MiJornada | null>('/turnos/mi-turno/hoy'),
     enabled: !!token && !isSuperAdmin && controlPersonal,
-    retry: false, // 404 = no es del equipo o no tiene jornada hoy
+    retry: false, // null = no es del equipo o no tiene jornada hoy
     refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });

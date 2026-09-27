@@ -64,7 +64,11 @@ export function WeeklyCalendar({ classes, currentDate, onDateClick, onClassClick
     const d = new Date(currentDate);
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    return new Date(d.setDate(diff));
+    d.setDate(diff);
+    // A las 00:00: con la hora actual, las clases del lunes anteriores a esa
+    // hora caían fuera de la semana y se mostraban las del lunes siguiente.
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, [currentDate]);
 
   const days = useMemo(() => {
