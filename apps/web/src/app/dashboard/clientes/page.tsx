@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -23,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Edit, Trash2, Mail, Phone, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
+import { FichaCliente, ESTADO_SEGMENTO, Segmento } from '@/components/ui/ficha-cliente';
 
 const clienteSchema = z.object({
   sucursalBaseId: z.string().optional(),
@@ -42,12 +43,18 @@ export default function ClientesPage() {
   const { toast } = useToast();
   const { token, user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Ficha 360 del cliente (plan 11.1): se abre tocando el nombre.
+  const [fichaId, setFichaId] = useState<string | null>(null);
   const [editingCliente, setEditingCliente] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
   const { activeTenantId } = useTenantStore();
 
   const userSucursalId = user?.sucursalId;
+  const { esSimple, esExperto } = useModoUso();
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -90,6 +97,8 @@ export default function ClientesPage() {
       // Si el usuario tiene una sucursal vinculada en el token, lo forzamos.
       if (userSucursalId) {
           payload.sucursalBaseId = userSucursalId;
+      } else if (!payload.sucursalBaseId && sucursalActiva) {
+          payload.sucursalBaseId = sucursalActiva;
       }
       // Eliminar si está vacío
       if (!payload.sucursalBaseId) {
@@ -194,7 +203,7 @@ export default function ClientesPage() {
       tipoDocumento: 'CI',
       numeroDocumento: '',
       estado: 'ACTIVO',
-      sucursalBaseId: userSucursalId || '',
+      sucursalBaseId: userSucursalId || sucursalActiva || '',
     });
     setIsDialogOpen(true);
   };
@@ -223,29 +232,31 @@ export default function ClientesPage() {
     );
   });
 
+  // Campos según el modo de uso (plan de simplificación, 4.4): nombre,
+  // teléfono y documento siempre a la vista; el resto, en simple e
+  // intermedio, bajo "Más opciones".
+  const campoCorreo = { name: 'correo', label: 'Correo Electrónico', type: 'email', placeholder: 'juan@ejemplo.com' };
+  const campoEstado = { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }, { label: 'Moroso', value: 'MOROSO' }, { label: 'Suspendido', value: 'SUSPENDIDO' }], colSpan: 2 };
+  const mostrarSucursal = !esSimple && !userSucursalId && (editingCliente ? variasSucursales : !sucursalActiva);
+  const campoSucursal = mostrarSucursal
+    ? [{ name: 'sucursalBaseId', label: 'Sucursal Base', type: 'select', options: (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id })), colSpan: 2 }]
+    : [];
+
   const formSections: any[] = [
     {
       fields: [
         { name: 'nombre', label: 'Nombre Completo', type: 'text', placeholder: 'Ej. Juan Pérez', colSpan: 2 },
-        { name: 'correo', label: 'Correo Electrónico', type: 'email', placeholder: 'juan@ejemplo.com' },
-        { name: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej. 77712345' },
+        ...(esSimple ? [] : [campoCorreo]),
+        { name: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej. 77712345', ...(esSimple ? { colSpan: 2 } : {}) },
         { name: 'tipoDocumento', label: 'Tipo Documento', type: 'select', options: [{ label: 'CI', value: 'CI' }, { label: 'Pasaporte', value: 'PASAPORTE' }, { label: 'Extranjero', value: 'CARNET_EXTRANJERO' }] },
         { name: 'numeroDocumento', label: 'Número de Documento', type: 'text', placeholder: 'Ej. 1234567' },
-        { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }, { label: 'Moroso', value: 'MOROSO' }, { label: 'Suspendido', value: 'SUSPENDIDO' }], colSpan: 2 },
-      ]
-    }
-  ];
-
-  if (!userSucursalId) {
-    const options = (sucursales || []).map((s: any) => ({ label: s.nombre, value: s.id }));
-    formSections[0].fields.push({
-      name: 'sucursalBaseId',
-      label: 'Sucursal Base',
-      type: 'select',
-      options: options,
-      colSpan: 2
-    });
-  }
+        ...(esExperto ? [campoEstado, ...campoSucursal] : []),
+      ],
+    },
+    ...(esExperto
+      ? []
+      : [{ plegable: true, fields: [...(esSimple ? [campoCorreo] : []), ...(editingCliente ? [campoEstado] : []), ...campoSucursal] }]),
+  ].filter((seccion) => seccion.fields.length > 0);
 
   return (
     <Protect permission="clientes:leer" fallbackType="redirect">
@@ -322,7 +333,7 @@ export default function ClientesPage() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Contacto</TableHead>
                 <TableHead>Documento</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead>Membresía</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -335,8 +346,14 @@ export default function ClientesPage() {
                         {cliente.nombre.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{cliente.nombre}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cliente.sucursalBaseId ? 'Sede local' : 'Global'}</p>
+                        {showDeleted ? (
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">{cliente.nombre}</p>
+                        ) : (
+                          <button type="button" onClick={() => setFichaId(cliente.id)} className="font-semibold text-slate-900 dark:text-white text-sm hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline text-left">
+                            {cliente.nombre}
+                          </button>
+                        )}
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cliente.sucursalBaseId ? 'Con sucursal base' : 'Todas las sucursales'}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -352,10 +369,17 @@ export default function ClientesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {cliente.estado === 'ACTIVO' && <Badge variant="success">Activo</Badge>}
-                    {cliente.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
-                    {cliente.estado === 'MOROSO' && <Badge variant="warning">Moroso</Badge>}
-                    {cliente.estado === 'SUSPENDIDO' && <Badge variant="destructive">Suspendido</Badge>}
+                    {/* Estado calculado de sus membresías (plan 11.1); el estado manual
+                        solo se muestra si alguien lo cambió a mano. */}
+                    <div className="flex flex-wrap gap-1">
+                      {(() => {
+                        const e = ESTADO_SEGMENTO[cliente.segmento as Segmento] ?? ESTADO_SEGMENTO.PROSPECTO;
+                        return <Badge variant={e.variante}>{e.texto}</Badge>;
+                      })()}
+                      {cliente.estado === 'INACTIVO' && <Badge variant="default">Inactivo</Badge>}
+                      {cliente.estado === 'MOROSO' && <Badge variant="warning">Moroso</Badge>}
+                      {cliente.estado === 'SUSPENDIDO' && <Badge variant="destructive">Suspendido</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -393,6 +417,8 @@ export default function ClientesPage() {
           </Table>
         )}
         
+        <FichaCliente clienteId={fichaId} onClose={() => setFichaId(null)} />
+
         <GlobalConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}

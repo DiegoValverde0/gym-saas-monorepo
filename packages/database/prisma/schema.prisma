@@ -30,7 +30,8 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["relationJoins"]
+  // omitApi: PerfilStaff.pinHash se omite en todas las consultas (ver PrismaService).
+  previewFeatures = ["relationJoins", "omitApi"]
 }
 
 datasource db {
@@ -155,6 +156,17 @@ enum EstadoReserva {
   CANCELADA
   ASISTIO
   NO_ASISTIO
+  // Fase 6 (DB-3): la clase estaba llena; sube sola a CONFIRMADA cuando se
+  // libera un cupo (ver common/utils/lista-espera.util.ts).
+  EN_ESPERA
+}
+
+// Fase 6 (DB-1): quién puede reservar una clase concreta. Sin valor, vale la
+// regla de su disciplina (Organizacion.configuracion.accesoClases).
+enum AccesoClase {
+  ABIERTA
+  MIEMBROS
+  PLANES
 }
 
 enum EstadoTurno {
@@ -214,6 +226,7 @@ model Organizacion {
 
   // Relaciones
   sucursales          Sucursal[]
+  salas               Sala[]
   cajasRegistradoras  CajaRegistradora[]
   roles               Rol[]
   asignacionesAcceso  AsignacionAcceso[]
@@ -228,6 +241,7 @@ model Organizacion {
   clientes            Cliente[]
   promociones         Promocion[]
   planes              Plan[]
+  clasesPlantillaPlanes ClasePlantillaPlan[]
   membresias          Membresia[]
   pausasMembresia     PausaMembresia[]
   registrosAsistencia RegistroAsistencia[]
@@ -263,12 +277,14 @@ model Sucursal {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  usuariosQueLaPrefieren Usuario[]         @relation("SucursalPreferida")
   cajasRegistradoras  CajaRegistradora[]
   asignacionesAcceso  AsignacionAcceso[]
   turnosTrabajo       TurnoTrabajo[]
   turnosPlantilla     TurnoPlantilla[]
   clasesProgramadas   ClaseProgramada[]
   clasesPlantilla     ClasePlantilla[]
+  salas               Sala[]
   clientesBase        Cliente[]
   registrosAsistencia RegistroAsistencia[]
   transacciones       Transaccion[]
@@ -319,6 +335,10 @@ model Usuario {
   fechaNacimiento DateTime?      @map("fecha_nacimiento") @db.Date
   estado          EstadoUsuario  @default(ACTIVO)
   isSuperAdmin    Boolean        @default(false) @map("is_superadmin")
+  // Fase 6 (DB-5): última sucursal elegida en la barra superior, para que la
+  // preferencia viaje entre dispositivos. Solo se usa si es de la
+  // organización con la que se trabaja (una persona puede estar en varias).
+  sucursalPreferidaId String?    @map("sucursal_preferida_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -326,6 +346,7 @@ model Usuario {
 
   asignacionesAcceso      AsignacionAcceso[]
   perfilStaff             PerfilStaff?
+  sucursalPreferida       Sucursal?          @relation("SucursalPreferida", fields: [sucursalPreferidaId], references: [id], onDelete: SetNull)
   aperturasCaja           AperturaCaja[]
   auditorias              Auditoria[]
   notificacionesRecibidas Notificacion[]
@@ -434,6 +455,10 @@ model PerfilStaff {
   costoPorHora       Decimal               @default(0.00) @map("costo_por_hora") @db.Decimal(10, 2)
   comisionPorcentaje Decimal?              @map("comision_porcentaje") @db.Decimal(5, 2) // para entrenadores independientes
   estado             EstadoGeneral         @default(ACTIVO)
+  // Fase 6 (DB-4): PIN para marcar entrada/salida en la tablet de recepción
+  // ("salt:hash" scrypt). Nunca sale en las respuestas: omitido de forma
+  // global en PrismaService.
+  pinHash            String?               @map("pin_hash") @db.VarChar(200)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -528,6 +553,46 @@ model TurnoPlantilla {
   @@map("turnos_plantilla")
 }
 
+// Fase 6 (DB-2): salas de una sucursal, para detectar choques de horario por
+// sala (dos clases a la misma hora en la misma sala). Opcional: sin salas,
+// todo funciona como antes.
+model Sala {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizacionId String        @map("organizacion_id") @db.Uuid
+  sucursalId     String        @map("sucursal_id") @db.Uuid
+  nombre         String        @db.VarChar(80)
+  capacidad      Int?
+  estado         EstadoGeneral @default(ACTIVO)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organizacion      Organizacion      @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  sucursal          Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  clasesPlantilla   ClasePlantilla[]
+  clasesProgramadas ClaseProgramada[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId, sucursalId])
+  @@map("salas")
+}
+
+// Fase 6 (DB-1): planes que pueden reservar una clase con acceso = PLANES.
+model ClasePlantillaPlan {
+  organizacionId   String @map("organizacion_id") @db.Uuid
+  clasePlantillaId String @map("clase_plantilla_id") @db.Uuid
+  planId           String @map("plan_id") @db.Uuid
+
+  organizacion   Organizacion   @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  clasePlantilla ClasePlantilla @relation(fields: [clasePlantillaId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+  plan           Plan           @relation(fields: [planId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
+
+  @@id([clasePlantillaId, planId])
+  @@index([organizacionId])
+  @@map("clases_plantilla_planes")
+}
+
 model ClaseProgramada {
   id               String        @id @default(uuid()) @db.Uuid
   organizacionId   String        @map("organizacion_id") @db.Uuid
@@ -544,6 +609,11 @@ model ClaseProgramada {
   // ClasePlantillaService.generarParaOrganizacion). Null en clases creadas
   // manualmente, una por una, como antes.
   clasePlantillaId String?       @map("clase_plantilla_id") @db.Uuid
+  // Fase 6 (DB-2): sala de esta sesión (se copia de la clase al generarla).
+  salaId           String?       @map("sala_id") @db.Uuid
+  // Fase 6 (DB-1): regla propia (se copia de la clase; los planes se leen de
+  // ClasePlantillaPlan). null = la de su disciplina.
+  acceso           AccesoClase?
   nombreClase      String        @map("nombre_clase") @db.VarChar(100)
   descripcion      String?       @db.Text
   capacidadMaxima  Int           @default(20) @map("capacidad_maxima")
@@ -569,6 +639,7 @@ model ClaseProgramada {
   turno          TurnoTrabajo?   @relation(fields: [turnoId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   // Mismo motivo de Restrict que arriba (FK compuesta + organizacionId NOT NULL).
   clasePlantilla ClasePlantilla? @relation(fields: [clasePlantillaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  sala           Sala?           @relation(fields: [salaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   reservas       ReservaClase[]
 
   @@unique([id, organizacionId])
@@ -598,6 +669,10 @@ model ClasePlantilla {
   vigenciaDesde   DateTime  @map("vigencia_desde") @db.Date
   vigenciaHasta   DateTime? @map("vigencia_hasta") @db.Date
   activa          Boolean   @default(true)
+  // Fase 6 (DB-2): sala opcional; dos clases no pueden usar la misma sala a la vez.
+  salaId          String?   @map("sala_id") @db.Uuid
+  // Fase 6 (DB-1): regla propia de esta clase; null = la de su disciplina.
+  acceso          AccesoClase?
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -607,7 +682,10 @@ model ClasePlantilla {
   sucursal        Sucursal          @relation(fields: [sucursalId, organizacionId], references: [id, organizacionId], onDelete: Cascade)
   disciplina      Disciplina?       @relation(fields: [disciplinaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   entrenador      PerfilStaff?      @relation(fields: [entrenadorId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  // Restrict por el mismo motivo que disciplina/entrenador (FK compuesta).
+  sala            Sala?             @relation(fields: [salaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   clasesGeneradas ClaseProgramada[]
+  planesAcceso    ClasePlantillaPlan[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId, sucursalId])
@@ -722,6 +800,7 @@ model Plan {
 
   organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   membresias   Membresia[]
+  clasesPlantilla ClasePlantillaPlan[]
 
   @@unique([id, organizacionId])
   @@index([organizacionId])

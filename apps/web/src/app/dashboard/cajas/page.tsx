@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPut, unwrapList } from '@/lib/api-client';
 import { Protect } from '@/components/ui/protect';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Checkbox } from '@/components/ui/checkbox';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
@@ -35,12 +35,16 @@ type CajaFormValues = z.infer<typeof cajaSchema>;
 export default function CajasPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingCaja, setEditingCaja] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
   const { activeTenantId } = useTenantStore();
+  const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -180,7 +184,7 @@ export default function CajasPage() {
 
   const handleAddNew = () => {
     setEditingCaja(null);
-    form.reset({ nombre: '', sucursalId: '', estado: 'CERRADA' });
+    form.reset({ nombre: '', sucursalId: userSucursalId || sucursalActiva || '', estado: 'CERRADA' });
     setIsSheetOpen(true);
   };
 
@@ -250,14 +254,14 @@ export default function CajasPage() {
               {
                 fields: [
                   { name: 'nombre', label: 'Nombre o Identificador', type: 'text', placeholder: 'Ej. Caja Principal', colSpan: 2 },
-                  { 
-                    name: 'sucursalId', 
-                    label: 'Sucursal (Ubicación)', 
-                    type: 'select', 
+                  ...(!userSucursalId && (editingCaja ? variasSucursales : !sucursalActiva) ? [{
+                    name: 'sucursalId',
+                    label: 'Sucursal (Ubicación)',
+                    type: 'select' as const,
                     placeholder: 'Selecciona una sucursal',
                     options: sucursales?.map((s: any) => ({ label: s.nombre, value: s.id })) || [],
-                    colSpan: 2
-                  },
+                    colSpan: 2 as const,
+                  }] : []),
                   ...(editingCaja ? [
                     { 
                       name: 'estado', 

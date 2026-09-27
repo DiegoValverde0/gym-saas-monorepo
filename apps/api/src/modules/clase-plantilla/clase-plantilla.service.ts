@@ -1,12 +1,15 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClasePlantillaDto } from './dto/create-clase-plantilla.dto';
 import { UpdateClasePlantillaDto } from './dto/update-clase-plantilla.dto';
+import { ActualizarSerieClaseDto, SerieClaseDto } from './dto/serie-clase.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
+import { choqueDeSalaSerie, choqueDeSerie } from '../../common/utils/choques-clase.util';
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de clases a
 // partir de las plantillas activas (mismo default que turno-plantilla.service.ts).
@@ -16,6 +19,7 @@ const INCLUDE_PLANTILLA = {
   disciplina: { select: { nombre: true } },
   entrenador: { include: { usuario: { select: { nombreCompleto: true } } } },
   sucursal: { select: { nombre: true } },
+  planesAcceso: { select: { planId: true } },
 } as const;
 
 @Injectable()
@@ -91,6 +95,198 @@ export class ClasePlantillaService {
     });
   }
 
+  // =========================================================================
+  // SERIES: una clase recurrente = una plantilla por día con los mismos datos
+  // =========================================================================
+
+  // Crea la serie y genera sus clases de las próximas semanas en el acto.
+  async crearSerie(dto: SerieClaseDto) {
+    const { diasSemana, planIds, ...base } = dto;
+    await this.assertSinChoqueDeInstructor(dto);
+    this.assertAcceso(dto);
+    const data = this.normalizarHoras(base);
+    const creadas: string[] = [];
+    for (const diaSemana of diasSemana) {
+      const p = await this.prisma.extendedClient.clasePlantilla.create({ data: { ...data, diaSemana }, select: { id: true } });
+      creadas.push(p.id);
+    }
+    await this.guardarPlanesAcceso(creadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
+    // Solo las de esta clase: si no, el aviso sumaba sesiones de otras clases
+    // que el generador completaba en la misma pasada (las completa el cron).
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, creadas);
+    return { plantillasCreadas: diasSemana.length, ...generacion };
+  }
+
+  // Reemplaza la serie: actualiza los días que siguen, crea los nuevos, quita
+  // los que ya no están, y deja las clases futuras ya generadas coherentes
+  // con el cambio (ver sincronizarClasesFuturas).
+  async actualizarSerie(dto: ActualizarSerieClaseDto) {
+    const { ids, diasSemana, planIds, ...base } = dto;
+    const db = this.prisma.extendedClient;
+    await this.assertSinChoqueDeInstructor(dto, ids);
+    this.assertAcceso(dto);
+    const actuales: Array<{ id: string; diaSemana: number }> = await db.clasePlantilla.findMany({ where: { id: { in: ids } } });
+    if (actuales.length !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
+
+    const data = this.normalizarHoras(base);
+    const porDia = new Map(actuales.map((p) => [p.diaSemana, p]));
+    const actualizadas: string[] = [];
+    let plantillasCreadas = 0;
+    for (const diaSemana of diasSemana) {
+      const existente = porDia.get(diaSemana);
+      if (existente) {
+        await db.clasePlantilla.update({ where: { id: existente.id }, data });
+        actualizadas.push(existente.id);
+      } else {
+        const nueva = await db.clasePlantilla.create({ data: { ...data, diaSemana }, select: { id: true } });
+        actualizadas.push(nueva.id);
+        plantillasCreadas++;
+      }
+    }
+    await this.guardarPlanesAcceso(actualizadas, dto.acceso === 'PLANES' ? planIds ?? [] : []);
+    const quitadas = actuales.filter((p) => !actualizadas.includes(p.id)).map((p) => p.id);
+    if (quitadas.length > 0) await db.clasePlantilla.deleteMany({ where: { id: { in: quitadas } } });
+
+    const sincronizacion = await this.sincronizarClasesFuturas(actualizadas, quitadas);
+    const generacion = await this.generarParaOrganizacion(this.cls.get('organizacionId'), SEMANAS_PROYECCION_DEFAULT, actualizadas);
+    return { plantillasCreadas, plantillasQuitadas: quitadas.length, ...sincronizacion, ...generacion };
+  }
+
+  // Plan 8.3: un instructor no puede dar dos clases recurrentes que se solapan.
+  // Fase 6 (DB-2): tampoco puede haber dos clases en la misma sala a la vez.
+  private async assertSinChoqueDeInstructor(dto: SerieClaseDto, excluirIds: string[] = []) {
+    const db = this.prisma.extendedClient as unknown as Prisma.TransactionClient;
+    const datos = {
+      diasSemana: dto.diasSemana,
+      horaInicio: dto.horaInicio,
+      duracionMinutos: dto.duracionMinutos,
+      vigenciaDesde: `${dto.vigenciaDesde}T00:00:00Z`,
+      vigenciaHasta: dto.vigenciaHasta ? `${dto.vigenciaHasta}T00:00:00Z` : null,
+      excluirIds,
+    };
+    const choque = (await choqueDeSerie(db, { ...datos, entrenadorId: dto.entrenadorId })) ?? (await choqueDeSalaSerie(db, { ...datos, salaId: dto.salaId }));
+    if (choque) throw new BadRequestException(choque);
+    if (dto.salaId) {
+      const sala = await db.sala.findUnique({ where: { id: dto.salaId }, select: { sucursalId: true } });
+      if (!sala || sala.sucursalId !== dto.sucursalId) throw new BadRequestException('La sala elegida no es de esa sucursal.');
+    }
+  }
+
+  // Fase 6 (DB-1): regla propia de la clase. Con PLANES hay que elegir al
+  // menos uno.
+  private assertAcceso(dto: SerieClaseDto) {
+    if (dto.acceso === 'PLANES' && !(dto.planIds?.length)) {
+      throw new BadRequestException('Elige al menos un plan que pueda reservar esta clase.');
+    }
+  }
+
+  private async guardarPlanesAcceso(plantillaIds: string[], planIds: string[]) {
+    const db = this.prisma.extendedClient;
+    await db.clasePlantillaPlan.deleteMany({ where: { clasePlantillaId: { in: plantillaIds } } });
+    if (planIds.length === 0) return;
+    await db.clasePlantillaPlan.createMany({
+      data: plantillaIds.flatMap((clasePlantillaId) => planIds.map((planId) => ({ clasePlantillaId, planId }))),
+    });
+  }
+
+  // Borra la serie y sus clases futuras sin reservas (las que tienen reservas
+  // se conservan para no dejar a clientes con una reserva fantasma).
+  async eliminarSerie(ids: string[]) {
+    const db = this.prisma.extendedClient;
+    const existentes = await db.clasePlantilla.count({ where: { id: { in: ids } } });
+    if (existentes !== ids.length) throw new NotFoundException('Alguna de las plantillas de la serie ya no existe.');
+    await db.clasePlantilla.deleteMany({ where: { id: { in: ids } } });
+    return this.sincronizarClasesFuturas([], ids);
+  }
+
+  // Lleva las clases futuras (activas) ya generadas desde estas plantillas al
+  // estado actual de cada plantilla:
+  //  - Plantilla quitada, inactiva, o clase fuera de su vigencia: se elimina
+  //    la clase (a la papelera) si no tiene reservas; si tiene, se conserva.
+  //  - Plantilla vigente: se actualizan en el lugar nombre, entrenador, sala,
+  //    hora, duración, cupo y el turno vinculado. Se actualiza en vez de
+  //    borrar y regenerar porque una ocurrencia borrada cuenta como excepción
+  //    y no se vuelve a generar.
+  private async sincronizarClasesFuturas(actualizadas: string[], quitadas: string[]) {
+    const db = this.prisma.extendedClient;
+    const organizacionId = this.cls.get('organizacionId');
+    const org = await db.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const zonaHoraria = org?.zonaHoraria;
+
+    const plantillas: Array<{
+      id: string;
+      activa: boolean;
+      vigenciaDesde: Date;
+      vigenciaHasta: Date | null;
+      horaInicio: Date;
+      duracionMinutos: number;
+      entrenadorId: string | null;
+      sucursalId: string;
+      disciplinaId: string | null;
+      nombreClase: string;
+      descripcion: string | null;
+      capacidadMaxima: number;
+      salaId: string | null;
+      acceso: 'ABIERTA' | 'MIEMBROS' | 'PLANES' | null;
+    }> = actualizadas.length ? await db.clasePlantilla.findMany({ where: { id: { in: actualizadas } } }) : [];
+    const porId = new Map(plantillas.map((p) => [p.id, p]));
+
+    const clases: Array<{ id: string; clasePlantillaId: string; fechaHora: Date; _count: { reservas: number } }> =
+      await db.claseProgramada.findMany({
+        where: { clasePlantillaId: { in: [...actualizadas, ...quitadas] }, fechaHora: { gt: new Date() }, estado: 'ACTIVO' },
+        select: {
+          id: true,
+          clasePlantillaId: true,
+          fechaHora: true,
+          _count: { select: { reservas: { where: { estado: { in: ['CONFIRMADA', 'ASISTIO'] } } } } },
+        },
+      });
+
+    const aEliminar: string[] = [];
+    let clasesActualizadas = 0;
+    let clasesConservadas = 0;
+    for (const clase of clases) {
+      const plantilla = porId.get(clase.clasePlantillaId);
+      const fechaLocal = aHoraLocal(clase.fechaHora, zonaHoraria).fechaSolo;
+      const fueraDeVigencia =
+        !plantilla ||
+        !plantilla.activa ||
+        fechaLocal < plantilla.vigenciaDesde ||
+        (plantilla.vigenciaHasta !== null && fechaLocal > plantilla.vigenciaHasta);
+
+      if (fueraDeVigencia) {
+        if (clase._count.reservas > 0) clasesConservadas++;
+        else aEliminar.push(clase.id);
+        continue;
+      }
+
+      const minutosInicio = plantilla.horaInicio.getUTCHours() * 60 + plantilla.horaInicio.getUTCMinutes();
+      const turnoId = plantilla.entrenadorId
+        ? await this.buscarTurnoQueCubre(plantilla.entrenadorId, plantilla.sucursalId, fechaLocal, plantilla.horaInicio, plantilla.duracionMinutos)
+        : null;
+      await db.claseProgramada.update({
+        where: { id: clase.id },
+        data: {
+          nombreClase: plantilla.nombreClase,
+          descripcion: plantilla.descripcion,
+          disciplinaId: plantilla.disciplinaId,
+          entrenadorId: plantilla.entrenadorId,
+          sucursalId: plantilla.sucursalId,
+          salaId: plantilla.salaId,
+          acceso: plantilla.acceso,
+          capacidadMaxima: plantilla.capacidadMaxima,
+          duracionMinutos: plantilla.duracionMinutos,
+          fechaHora: desdeHoraLocal(fechaLocal, minutosInicio, zonaHoraria),
+          turnoId,
+        },
+      });
+      clasesActualizadas++;
+    }
+
+    if (aEliminar.length > 0) await db.claseProgramada.deleteMany({ where: { id: { in: aEliminar } } });
+    return { clasesActualizadas, clasesEliminadas: aEliminar.length, clasesConservadas };
+  }
+
   // Disparado manualmente desde el frontend ("Generar clases ahora"), con el
   // contexto de tenant de la request ya resuelto en el CLS.
   async generarAhora(semanas: number = SEMANAS_PROYECCION_DEFAULT) {
@@ -113,7 +309,9 @@ export class ClasePlantillaService {
     duracionMinutos: number,
   ): Promise<string | null> {
     const turnos = await this.prisma.turnoTrabajo.findMany({
-      where: { staffId: entrenadorId, sucursalId, fecha },
+      // Igual que en ClaseProgramadaService: un turno ausente o cancelado es
+      // una excepción puntual y no cubre la clase.
+      where: { staffId: entrenadorId, sucursalId, fecha, estado: { notIn: ['AUSENTE', 'CANCELADO'] } },
     });
 
     const minutosInicioClase = horaInicio.getUTCHours() * 60 + horaInicio.getUTCMinutes();
@@ -140,15 +338,25 @@ export class ClasePlantillaService {
   // organización exige turno asignado (`requerimientosClase.exigirTurnoEntrenador`),
   // esa ocurrencia puntual se omite en vez de crearse sin cobertura -- coherente
   // con lo que ya hace ClaseProgramadaService.create() para el alta manual.
-  async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT) {
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+  // `soloPlantillas`: limita la generación a esas plantillas (alta o edición
+  // de una clase), para que el conteo devuelto sea solo de esa clase.
+  async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT, soloPlantillas?: string[]) {
+    const org = await this.prisma.organizacion.findUnique({
+      where: { id: organizacionId },
+      select: { configuracion: true, zonaHoraria: true },
+    });
+    const zonaHoraria = org?.zonaHoraria;
+    // "Hoy" es la fecha LOCAL de la organización, como en turno-plantilla:
+    // con la fecha UTC, de noche (UTC-4, desde las 20:00) la ventana
+    // arrancaba un día tarde y no se generaba la clase de esa misma noche.
+    const hoy = aHoraLocal(new Date(), zonaHoraria).fechaSolo;
     const finVentana = new Date(hoy);
     finVentana.setUTCDate(finVentana.getUTCDate() + semanas * 7);
 
     const plantillas = await this.prisma.clasePlantilla.findMany({
       where: {
         organizacionId,
+        ...(soloPlantillas ? { id: { in: soloPlantillas } } : {}),
         activa: true,
         deletedAt: null,
         vigenciaDesde: { lte: finVentana },
@@ -157,10 +365,6 @@ export class ClasePlantillaService {
     });
     if (plantillas.length === 0) return { clasesCreadas: 0, clasesOmitidas: 0 };
 
-    const org = await this.prisma.organizacion.findUnique({
-      where: { id: organizacionId },
-      select: { configuracion: true },
-    });
     const exigirTurno =
       (org?.configuracion as { requerimientosClase?: { exigirTurnoEntrenador?: boolean } } | null)?.requerimientosClase
         ?.exigirTurnoEntrenador === true;
@@ -170,13 +374,21 @@ export class ClasePlantillaService {
       where: {
         organizacionId,
         clasePlantillaId: { in: plantillaIds },
-        fechaHora: { gte: hoy, lte: finVentana },
-        deletedAt: null,
+        // fechaHora es un instante: la ventana va del inicio del día local de
+        // hoy al final del día local de finVentana.
+        fechaHora: { gte: desdeHoraLocal(hoy, 0, zonaHoraria), lt: desdeHoraLocal(finVentana, 24 * 60, zonaHoraria) },
       },
       select: { clasePlantillaId: true, fechaHora: true },
     });
+    // Incluye a propósito las ocurrencias eliminadas (papelera), mismo motivo
+    // que turno-plantilla.service.ts: borrar una ocurrencia puntual de una
+    // clase recurrente no debe revertirse en la próxima corrida del cron.
+    // La clave usa la fecha LOCAL de la organización: una clase a las 20:30
+    // en UTC-4 cae al día siguiente en UTC y, con la fecha UTC, se duplicaría.
     const existentesSet = new Set(
-      existentes.map((c) => `${c.clasePlantillaId}|${c.fechaHora.toISOString().slice(0, 10)}`),
+      existentes.map(
+        (c) => `${c.clasePlantillaId}|${aHoraLocal(c.fechaHora, zonaHoraria).fechaSolo.toISOString().slice(0, 10)}`,
+      ),
     );
 
     const nuevas: Prisma.ClaseProgramadaCreateManyInput[] = [];
@@ -208,8 +420,13 @@ export class ClasePlantillaService {
           }
         }
 
-        const fechaHora = new Date(fecha);
-        fechaHora.setUTCHours(plantilla.horaInicio.getUTCHours(), plantilla.horaInicio.getUTCMinutes(), 0, 0);
+        // horaInicio es hora "de reloj" local; fechaHora debe ser el instante
+        // UTC real, o el frontend la mostraría corrida por el desfase horario.
+        const fechaHora = desdeHoraLocal(
+          new Date(fecha),
+          plantilla.horaInicio.getUTCHours() * 60 + plantilla.horaInicio.getUTCMinutes(),
+          zonaHoraria,
+        );
 
         nuevas.push({
           organizacionId,
@@ -218,6 +435,8 @@ export class ClasePlantillaService {
           entrenadorId: plantilla.entrenadorId,
           clasePlantillaId: plantilla.id,
           turnoId,
+          salaId: plantilla.salaId,
+          acceso: plantilla.acceso,
           nombreClase: plantilla.nombreClase,
           descripcion: plantilla.descripcion,
           capacidadMaxima: plantilla.capacidadMaxima,

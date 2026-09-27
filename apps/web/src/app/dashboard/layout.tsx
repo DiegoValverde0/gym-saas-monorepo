@@ -34,6 +34,7 @@ import {
   UserCog,
   Clock,
   CalendarDays,
+  CalendarRange,
   Receipt,
   Truck
 } from 'lucide-react';
@@ -41,18 +42,25 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { CommandPalette } from '@/components/ui/command-palette';
+import { nombreRol } from '@/lib/roles';
+import { AsistenteInicio } from '@/components/ui/asistente-inicio';
+import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
+import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
+import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
+  // Modo de uso mínimo para mostrarlo (plan de simplificación, 4.4). Sin
+  // valor: se muestra en todos los modos.
+  modoMinimo?: ModoUso;
 }
 
 interface NavGroup {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
-  baseHref: string;
   items: NavItem[];
 }
 
@@ -60,56 +68,57 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Operaciones',
     icon: Activity,
-    baseHref: '/dashboard/clientes',
     items: [
       { name: 'Clientes', href: '/dashboard/clientes', icon: Users, permission: 'clientes:leer' },
-      { name: 'Asistencias', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
+      { name: 'Control de acceso', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
     ]
   },
   {
     title: 'Comercial',
     icon: Tag,
-    baseHref: '/dashboard/planes',
     items: [
       { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
-      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer' },
+      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer', modoMinimo: 'intermedio' },
       { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
       { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
     ]
   },
   {
-    title: 'Personal',
+    title: 'Equipo',
     icon: Dumbbell,
-    baseHref: '/dashboard/disciplinas',
     items: [
-      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer' },
-      { name: 'Personal', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
-      { name: 'Turnos', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer' },
+      // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
+      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
+      // En simple no aparece: se crean desde el asistente de clase (plan 11.11).
+      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer', modoMinimo: 'intermedio' },
+      { name: 'Equipo', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
+      { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
+      // Tablet de recepción para marcar con PIN (fase 6, DB-4).
+      { name: 'Tablet de marcaje', href: '/dashboard/marcaje', icon: Clock, permission: 'asistencias:crear', modoMinimo: 'intermedio' },
       { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
     ]
   },
   {
     title: 'Finanzas',
     icon: Wallet,
-    baseHref: '/dashboard/reportes',
     items: [
-      { name: 'Reportes Diarios', href: '/dashboard/reportes', icon: FileText },
+      { name: 'Reportes', href: '/dashboard/reportes', icon: FileText, permission: 'transacciones:leer' },
       { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
       { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
-      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer' },
-      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer' },
-      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer' }
+      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer', modoMinimo: 'intermedio' },
+      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer', modoMinimo: 'intermedio' },
+      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer', modoMinimo: 'intermedio' }
     ]
   },
   {
     title: 'Administración',
     icon: Settings,
-    baseHref: '/dashboard/usuarios',
     items: [
-      { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
-      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer' },
+      { name: 'Usuarios', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer', modoMinimo: 'intermedio' },
+      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
-      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings }
+      // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
+      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
     ]
   }
 ];
@@ -135,6 +144,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { activeTenantId, setActiveTenantId } = useTenantStore();
   const { hasPermission } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
+  useAvisoCambioAcceso(userData);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -145,6 +155,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
+  const { alMenos } = useModoUso();
 
   // Filter groups based on tenant configuration
   const filteredNavigationGroups = useMemo(() => {
@@ -152,15 +163,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       return {
         ...group,
         items: group.items.filter(item => {
+          if (item.modoMinimo && !alMenos(item.modoMinimo)) return false;
           if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
+          if (item.name === 'Agenda') {
+            return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
+          }
           if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Personal', 'Turnos', 'Asistencias'].includes(item.name)) return modulos.controlPersonal;
-          if (['Reportes Diarios'].includes(item.name)) return modulos.reportesAvanzados;
+          if (['Equipo', 'Jornadas', 'Tablet de marcaje'].includes(item.name)) return modulos.controlPersonal;
+          if (item.name === 'Control de acceso') return modulos.controlAcceso;
+          // Reportes: el resumen de hoy y del mes está en todos los modos; el
+          // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
+          if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
           return true;
         })
       };
     }).filter(group => group.items.length > 0);
-  }, [modulos]);
+  }, [modulos, hasPermission, alMenos]);
 
   // Active Group logic
   const activeGroup: ActiveGroup = useMemo(() => {
@@ -227,15 +245,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
         
         {filteredNavigationGroups.map((group) => {
-          const hasAccess = group.items.some(item => !item.permission || hasPermission(item.permission));
-          if (!hasAccess) return null;
+          // El grupo lleva a su primera página visible: la primera de la lista
+          // puede estar oculta por el modo, un módulo apagado o falta de permiso.
+          const primeraVisible = group.items.find(item => !item.permission || hasPermission(item.permission));
+          if (!primeraVisible) return null;
 
           const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.title === group.title;
 
           return (
             <div key={group.title}>
               <Link
-                href={group.baseHref}
+                href={primeraVisible.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
@@ -361,15 +381,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       <span className="truncate max-w-[120px]">{userData.organizacionNombre}</span>
                     </div>
                   )}
-                  {userData.sucursalNombre && (
-                    <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-500/20 border border-indigo-100 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-md px-2.5 py-1 text-xs font-bold">
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span className="truncate max-w-[120px]">{userData.sucursalNombre}</span>
-                    </div>
-                  )}
+                  <SelectorSucursal />
+                  <IndicadorAlcance user={userData} />
                 </div>
               )
             )}
+
+            {/* Marcaje del equipo (plan 7.4): visible también en el celular. */}
+            <MarcajeTurno />
 
             <ThemeToggle />
 
@@ -387,7 +406,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     {userData?.nombre || userData?.email?.split('@')[0] || 'Usuario'}
                   </p>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                    {isSuperAdmin ? 'SuperAdmin' : userData?.rolNombre || 'Staff'}
+                    {isSuperAdmin ? 'SuperAdmin' : nombreRol(userData?.rolNombre) || 'Staff'}
                   </p>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 ml-1" />
@@ -423,6 +442,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {children}
           </div>
           <CommandPalette />
+          <AsistenteInicio />
         </main>
       </div>
     </div>

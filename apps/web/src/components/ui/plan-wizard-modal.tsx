@@ -6,7 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ArrowRight, ArrowLeft, Save, CalendarClock } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Save, CalendarClock, ChevronDown } from 'lucide-react';
+import { useModoUso } from '@/hooks/use-modo-uso';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet, unwrapList } from '@/lib/api-client';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -27,6 +31,19 @@ const planSchema = z.object({
 
 type PlanFormValues = z.infer<typeof planSchema>;
 
+// Plantillas rápidas al crear un plan (plan de simplificación, 11.2): cada
+// una prellena el formulario; el precio lo pone el gimnasio. Las que usan
+// restricciones de acceso solo se ofrecen desde intermedio, porque en simple
+// esos campos no se ven.
+const PLANTILLAS_PLAN: { etiqueta: string; modoMinimo?: 'intermedio'; valores: Partial<PlanFormValues> }[] = [
+  { etiqueta: 'Mensual libre', valores: { nombre: 'Mensual libre', tipoPlan: 'TIEMPO', duracionDias: 30 } },
+  { etiqueta: 'Trimestral', valores: { nombre: 'Trimestral', tipoPlan: 'TIEMPO', duracionDias: 90 } },
+  { etiqueta: '3 veces por semana', modoMinimo: 'intermedio', valores: { nombre: 'Mensual 3 veces por semana', tipoPlan: 'TIEMPO', duracionDias: 30, limiteDiasSemana: 3 } },
+  { etiqueta: 'Paquete de 10 sesiones', valores: { nombre: 'Paquete de 10 sesiones', tipoPlan: 'SESIONES', cantidadSesiones: 10, duracionDias: 60 } },
+  { etiqueta: 'Horario mañana', modoMinimo: 'intermedio', valores: { nombre: 'Mensual horario mañana', tipoPlan: 'TIEMPO', duracionDias: 30, horaInicioAcceso: '06:00', horaFinAcceso: '12:00' } },
+  { etiqueta: 'Pase de un día', valores: { nombre: 'Pase de un día', tipoPlan: 'VISITA', duracionDias: 1 } },
+];
+
 const DAYS_OF_WEEK = [
   { label: 'Lunes', value: 1 },
   { label: 'Martes', value: 2 },
@@ -37,16 +54,51 @@ const DAYS_OF_WEEK = [
   { label: 'Domingo', value: 0 },
 ];
 
+type ModoAcceso = 'ABIERTA' | 'MIEMBROS' | 'PLANES';
+interface AccesoClases { porDefecto: ModoAcceso; porDisciplina: Record<string, { modo: ModoAcceso; planIds?: string[] }> }
+
 interface PlanWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: PlanFormValues) => void;
+  // disciplinaIds: clases que incluye el plan (null si no se tocó o no hay
+  // módulo de clases). Se guarda aparte, en las reglas de reserva (plan 8.4).
+  onSubmit: (data: PlanFormValues, disciplinaIds: string[] | null) => void;
   initialData?: any;
   isPending?: boolean;
 }
 
 export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPending }: PlanWizardModalProps) {
   const [step, setStep] = useState(1);
+  const { modo, esExperto, alMenos } = useModoUso();
+  const ultimoPaso = esExperto ? 3 : 2;
+  const [masOpciones, setMasOpciones] = useState(false);
+
+  // "Este plan incluye: ☑ Spinning ☑ Yoga ☐ Pilates" (plan de simplificación, 8.4).
+  const modulos = useModulosActivos();
+  const { data: disciplinas = [] } = useQuery({
+    queryKey: ['disciplinas', 'plan'],
+    queryFn: async () => unwrapList<{ id: string; nombre: string }>(await apiGet('/disciplinas')),
+    enabled: isOpen && modulos.clasesGrupales,
+  });
+  const { data: acceso } = useQuery({
+    queryKey: ['acceso-clases'],
+    queryFn: async () => apiGet<AccesoClases>('/acceso-clases'),
+    enabled: isOpen && modulos.clasesGrupales,
+  });
+  const reglaDe = (id: string) => acceso?.porDisciplina[id] ?? { modo: acceso?.porDefecto ?? 'MIEMBROS' };
+  const [incluidas, setIncluidas] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!isOpen || !acceso) return;
+    setIncluidas(disciplinas.filter((d) => {
+      const regla = reglaDe(d.id);
+      return regla.modo !== 'PLANES' || (!!initialData?.id && (regla.planIds ?? []).includes(initialData.id));
+    }).map((d) => d.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, acceso, disciplinas, initialData]);
+  const [incluidasTocadas, setIncluidasTocadas] = useState(false);
+  useEffect(() => {
+    if (isOpen) setIncluidasTocadas(false);
+  }, [isOpen]);
   
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema) as any,
@@ -129,101 +181,15 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
   // envío implícito nativo del navegador y salte los pasos siguientes). Este
   // era el mismo bug encontrado y corregido en membresia-wizard-modal.tsx.
   const onFinalSubmit = form.handleSubmit((values) => {
-    if (step !== 3) return;
-    onSubmit(values);
+    if (step !== ultimoPaso) return;
+    onSubmit(values, incluidasTocadas ? incluidas : null);
   });
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
-        {/* Misma barra gris + puntos de progreso que el resto de los
-            formularios paginados de la app (ver membresia-wizard-modal.tsx,
-            global-form-modal.tsx, arqueo-caja-wizard.tsx). */}
-        <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
-          <div>
-            <DialogTitle className="text-xl">{initialData ? 'Editar Plan' : 'Nuevo Plan'}</DialogTitle>
-            <DialogDescription className="mt-1">
-              Paso {step}: {['Información', 'Reglas de Duración', 'Restricciones'][step - 1]}
-            </DialogDescription>
-          </div>
-          <div className="flex gap-2 shrink-0 pl-4">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className={`w-3 h-3 rounded-full ${step >= s ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
-            ))}
-          </div>
-        </div>
-
-        {/* Formulario */}
-        <div className="px-6 py-6">
-          <form
-            onSubmit={onFinalSubmit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && step !== 3) {
-                e.preventDefault();
-              }
-            }}
-            className="space-y-6"
-          >
-
-            {/* Paso 1: Información Básica */}
-            <div className={step === 1 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="col-span-2 space-y-2">
-                  <Label>Nombre del Plan <span className="text-red-500">*</span></Label>
-                  <Input placeholder="Ej. Plan Mensual Ilimitado" {...form.register('nombre')} className="bg-white" />
-                  {form.formState.errors.nombre && <p className="text-sm text-red-500">{form.formState.errors.nombre.message}</p>}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Tipo de Plan</Label>
-                  <Controller
-                    control={form.control}
-                    name="tipoPlan"
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={(val) => {
-                        field.onChange(val);
-                        // Reset defaults on change
-                        if (val === 'TIEMPO') form.setValue('duracionDias', 30);
-                        if (val === 'SESIONES') form.setValue('cantidadSesiones', 12);
-                      }}>
-                        <SelectTrigger className="bg-white">
-                          <SelectValue placeholder="Seleccionar..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="TIEMPO">Por Tiempo</SelectItem>
-                          <SelectItem value="SESIONES">Por Sesiones</SelectItem>
-                          <SelectItem value="VISITA">Pase de Visita</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Precio Total <span className="text-red-500">*</span></Label>
-                  <Input type="number" step="0.01" placeholder="0.00" {...form.register('precio')} className="bg-white" />
-                  {form.formState.errors.precio && <p className="text-sm text-red-500">{form.formState.errors.precio.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Estado</Label>
-                  <Controller
-                    control={form.control}
-                    name="estado"
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger className="bg-white">
-                          <SelectValue placeholder="Seleccionar..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ACTIVO">Activo</SelectItem>
-                          <SelectItem value="INACTIVO">Inactivo</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
-
+  // Renovación automática y restricciones de acceso: en experto, a la vista
+  // (paso 1 y paso 3); en intermedio, bajo "Más opciones" del paso 2; en
+  // simple no se muestran (plan de simplificación, 4.4). Ocultarlas no borra
+  // lo que un plan ya tenga configurado.
+  const bloqueRenovacion = (
                 <div className="space-y-2 flex flex-col justify-center mt-2 p-4 bg-white border border-slate-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label className="cursor-pointer font-semibold text-slate-700">Renovación Automática</Label>
@@ -237,42 +203,8 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                   </div>
                   <p className="text-xs text-slate-500">El plan se renovará automáticamente al vencer.</p>
                 </div>
-              </div>
-            </div>
-
-            {/* Paso 2: Reglas de Duración */}
-            <div className={step === 2 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
-              <div className="space-y-6">
-                {watchTipoPlan === 'TIEMPO' && (
-                  <div className="space-y-2 p-4 bg-white border border-slate-200 rounded-lg">
-                    <Label className="text-lg">Duración (Días)</Label>
-                    <p className="text-sm text-slate-500 mb-4">Ingresa la cantidad de días de vigencia (Ej. 30 para un mes, 365 para anual).</p>
-                    <Input type="number" placeholder="Ej. 30" {...form.register('duracionDias')} className="max-w-[200px] text-lg bg-slate-50" />
-                    {form.formState.errors.duracionDias && <p className="text-sm text-red-500">{form.formState.errors.duracionDias.message}</p>}
-                  </div>
-                )}
-
-                {watchTipoPlan === 'SESIONES' && (
-                  <div className="space-y-2 p-4 bg-white border border-slate-200 rounded-lg">
-                    <Label className="text-lg">Cantidad de Sesiones</Label>
-                    <p className="text-sm text-slate-500 mb-4">Ingresa el total de ingresos o clases permitidas.</p>
-                    <Input type="number" placeholder="Ej. 12" {...form.register('cantidadSesiones')} className="max-w-[200px] text-lg bg-slate-50" />
-                    {form.formState.errors.cantidadSesiones && <p className="text-sm text-red-500">{form.formState.errors.cantidadSesiones.message}</p>}
-                  </div>
-                )}
-
-                {watchTipoPlan === 'VISITA' && (
-                  <div className="p-8 text-center text-slate-500 bg-white border border-slate-200 rounded-lg">
-                    <CalendarClock className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                    <p>Los pases de visita son para un único ingreso al día de su compra.</p>
-                    <p className="text-sm">No requieren configurar reglas de duración adicionales.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Paso 3: Restricciones de Acceso */}
-            <div className={step === 3 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
+  );
+  const bloqueRestricciones = (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2 bg-white p-4 border border-slate-200 rounded-lg col-span-2 sm:col-span-1">
@@ -330,7 +262,208 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                   </div>
                 </div>
               </div>
+  );
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden">
+        {/* Misma barra gris + puntos de progreso que el resto de los
+            formularios paginados de la app (ver membresia-wizard-modal.tsx,
+            global-form-modal.tsx, arqueo-caja-wizard.tsx). */}
+        <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+          <div>
+            <DialogTitle className="text-xl">{initialData ? 'Editar Plan' : 'Nuevo Plan'}</DialogTitle>
+            <DialogDescription className="mt-1">
+              Paso {step}: {['Información', 'Duración', 'Restricciones'][step - 1]}
+            </DialogDescription>
+          </div>
+          <div className="flex gap-2 shrink-0 pl-4">
+            {[1, 2, 3].slice(0, ultimoPaso).map((s) => (
+              <div key={s} className={`w-3 h-3 rounded-full ${step >= s ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
+            ))}
+          </div>
+        </div>
+
+        {/* Formulario */}
+        <div className="px-6 py-6">
+          <form
+            onSubmit={onFinalSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && step !== ultimoPaso) {
+                e.preventDefault();
+              }
+            }}
+            className="space-y-6"
+          >
+
+            {/* Paso 1: Información Básica */}
+            <div className={step === 1 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
+              {!initialData && (
+                <div className="mb-6 space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Empieza desde una plantilla</p>
+                  <div className="flex flex-wrap gap-2">
+                    {PLANTILLAS_PLAN.filter((pl) => !pl.modoMinimo || alMenos(pl.modoMinimo)).map((pl) => (
+                      <button
+                        key={pl.etiqueta}
+                        type="button"
+                        onClick={() => {
+                          const precio = form.getValues('precio');
+                          form.reset({
+                            nombre: '', tipoPlan: 'TIEMPO', duracionDias: 30, cantidadSesiones: '', limiteDiasSemana: '', diasPermitidos: [],
+                            horaInicioAcceso: '', horaFinAcceso: '', esRenovableAutomaticamente: false, precio, estado: 'ACTIVO',
+                            ...pl.valores,
+                          });
+                        }}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-indigo-400 hover:text-indigo-700"
+                      >
+                        {pl.etiqueta}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500">Después solo ajusta el nombre y el precio.</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="col-span-2 space-y-2">
+                  <Label>Nombre del Plan <span className="text-red-500">*</span></Label>
+                  <Input placeholder="Ej. Plan Mensual Ilimitado" {...form.register('nombre')} className="bg-white" />
+                  {form.formState.errors.nombre && <p className="text-sm text-red-500">{form.formState.errors.nombre.message}</p>}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Tipo de Plan</Label>
+                  <Controller
+                    control={form.control}
+                    name="tipoPlan"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={(val) => {
+                        field.onChange(val);
+                        // Reset defaults on change
+                        if (val === 'TIEMPO') form.setValue('duracionDias', 30);
+                        if (val === 'SESIONES') form.setValue('cantidadSesiones', 12);
+                      }}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TIEMPO">Por Tiempo</SelectItem>
+                          <SelectItem value="SESIONES">Por Sesiones</SelectItem>
+                          <SelectItem value="VISITA">Pase de Visita</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Precio Total <span className="text-red-500">*</span></Label>
+                  <Input type="number" step="0.01" placeholder="0.00" {...form.register('precio')} className="bg-white" />
+                  {form.formState.errors.precio && <p className="text-sm text-red-500">{form.formState.errors.precio.message}</p>}
+                </div>
+
+                {(esExperto || initialData) && (
+                <div className="space-y-2">
+                  <Label>Estado</Label>
+                  <Controller
+                    control={form.control}
+                    name="estado"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ACTIVO">Activo</SelectItem>
+                          <SelectItem value="INACTIVO">Inactivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+
+                )}
+                {esExperto && bloqueRenovacion}
+              </div>
             </div>
+
+            {/* Paso 2: Reglas de Duración */}
+            <div className={step === 2 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
+              <div className="space-y-6">
+                {watchTipoPlan === 'TIEMPO' && (
+                  <div className="space-y-2 p-4 bg-white border border-slate-200 rounded-lg">
+                    <Label className="text-lg">Duración (Días)</Label>
+                    <p className="text-sm text-slate-500 mb-4">Ingresa la cantidad de días de vigencia (Ej. 30 para un mes, 365 para anual).</p>
+                    <Input type="number" placeholder="Ej. 30" {...form.register('duracionDias')} className="max-w-[200px] text-lg bg-slate-50" />
+                    {form.formState.errors.duracionDias && <p className="text-sm text-red-500">{form.formState.errors.duracionDias.message}</p>}
+                  </div>
+                )}
+
+                {watchTipoPlan === 'SESIONES' && (
+                  <div className="space-y-2 p-4 bg-white border border-slate-200 rounded-lg">
+                    <Label className="text-lg">Cantidad de Sesiones</Label>
+                    <p className="text-sm text-slate-500 mb-4">Ingresa el total de ingresos o clases permitidas.</p>
+                    <Input type="number" placeholder="Ej. 12" {...form.register('cantidadSesiones')} className="max-w-[200px] text-lg bg-slate-50" />
+                    {form.formState.errors.cantidadSesiones && <p className="text-sm text-red-500">{form.formState.errors.cantidadSesiones.message}</p>}
+                  </div>
+                )}
+
+                {modulos.clasesGrupales && disciplinas.length > 0 && incluidas && (
+                  <div className="space-y-2 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <Label className="font-semibold">Clases que incluye este plan</Label>
+                    <p className="text-xs text-slate-500">Los clientes con este plan podrán reservar estas clases.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {disciplinas.map((d) => {
+                        const abierta = reglaDe(d.id).modo === 'ABIERTA';
+                        return (
+                          <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={abierta || incluidas.includes(d.id)}
+                              disabled={abierta}
+                              onCheckedChange={(c) => {
+                                setIncluidasTocadas(true);
+                                setIncluidas(c ? [...incluidas, d.id] : incluidas.filter((x) => x !== d.id));
+                              }}
+                            />
+                            {d.nombre}
+                            {abierta && <span className="text-xs text-slate-500">(abierta a todos)</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {modo === 'intermedio' && (
+                  <div className="rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setMasOpciones(!masOpciones)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700"
+                      aria-expanded={masOpciones}
+                    >
+                      <span>Más opciones: renovación y restricciones de acceso</span>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${masOpciones ? 'rotate-180' : ''}`} />
+                    </button>
+                    {masOpciones && <div className="space-y-4 px-4 pb-4">{bloqueRenovacion}{bloqueRestricciones}</div>}
+                  </div>
+                )}
+
+                {watchTipoPlan === 'VISITA' && (
+                  <div className="p-8 text-center text-slate-500 bg-white border border-slate-200 rounded-lg">
+                    <CalendarClock className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Los pases de visita son para un único ingreso al día de su compra.</p>
+                    <p className="text-sm">No requieren configurar reglas de duración adicionales.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Paso 3: Restricciones de Acceso (solo experto; en intermedio van en "Más opciones" del paso 2) */}
+            {esExperto && (
+              <div className={step === 3 ? 'block animate-in fade-in slide-in-from-right-4' : 'hidden'}>
+                {bloqueRestricciones}
+              </div>
+            )}
 
           </form>
         </div>
@@ -350,7 +483,7 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
             )}
           </Button>
 
-          {step < 3 ? (
+          {step < ultimoPaso ? (
             <Button type="button" onClick={nextStep}>
               Siguiente <ArrowRight className="w-4 h-4 ml-2" />
             </Button>

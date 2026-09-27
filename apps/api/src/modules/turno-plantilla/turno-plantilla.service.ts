@@ -1,16 +1,25 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTurnoPlantillaDto } from './dto/create-turno-plantilla.dto';
 import { UpdateTurnoPlantillaDto } from './dto/update-turno-plantilla.dto';
+import { HorarioSemanalDto } from './dto/horario-semanal.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
+
+const aHoraTime = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
 
 // Cuántas semanas hacia adelante se mantiene "poblada" la agenda de turnos
 // a partir de las plantillas activas.
 const SEMANAS_PROYECCION_DEFAULT = 8;
+
+// Turno partido (plan 13.8): varios bloques no solapados en un mismo día.
+const MAX_BLOQUES_POR_DIA = 3;
+
+const minutosDe = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes();
 
 const INCLUDE_PLANTILLA = {
   staff: { include: { usuario: { select: { nombreCompleto: true } } } },
@@ -93,6 +102,127 @@ export class TurnoPlantillaService {
     });
   }
 
+  // Reglas que no expresa el DTO: salida > entrada y, si un día tiene varios
+  // bloques (turno partido, plan 13.8), que no se solapen.
+  // Público para que PersonalService valide ANTES de crear a la persona.
+  validarHorario(horario: HorarioSemanalDto) {
+    const porDia = new Map<number, { horaEntrada: string; horaSalida: string }[]>();
+    for (const d of horario.dias) {
+      if (d.horaSalida <= d.horaEntrada) {
+        throw new BadRequestException(`La hora de salida debe ser posterior a la de entrada (${d.horaEntrada}–${d.horaSalida}).`);
+      }
+      porDia.set(d.diaSemana, [...(porDia.get(d.diaSemana) ?? []), d]);
+    }
+    for (const bloques of porDia.values()) {
+      if (bloques.length > MAX_BLOQUES_POR_DIA) {
+        throw new BadRequestException(`Un día admite como máximo ${MAX_BLOQUES_POR_DIA} bloques de horario.`);
+      }
+      const ordenados = [...bloques].sort((a, b) => a.horaEntrada.localeCompare(b.horaEntrada));
+      for (let i = 1; i < ordenados.length; i++) {
+        if (ordenados[i].horaEntrada < ordenados[i - 1].horaSalida) {
+          throw new BadRequestException(
+            `Los bloques ${ordenados[i - 1].horaEntrada}–${ordenados[i - 1].horaSalida} y ${ordenados[i].horaEntrada}–${ordenados[i].horaSalida} se solapan.`,
+          );
+        }
+      }
+    }
+  }
+
+  // Reemplaza el horario semanal de una persona y deja sus turnos futuros
+  // coherentes con él, sin que nadie tenga que "generar turnos" a mano:
+  //  - Turnos futuros aún no iniciados (PROGRAMADO, sin ingreso marcado):
+  //    si el día sigue en el horario se les actualiza la hora/sucursal; si el
+  //    día salió del horario se eliminan.
+  //  - Se conservan siempre las excepciones (AUSENTE/CANCELADO o borradas),
+  //    los turnos ya iniciados y los que tienen clases vinculadas (salvo para
+  //    actualizarles la hora si siguen en la misma sucursal).
+  //  - Los días nuevos se generan en el acto (generarParaOrganizacion).
+  async reemplazarHorarioStaff(staffId: string, horario: HorarioSemanalDto) {
+    this.validarHorario(horario);
+    const organizacionId = this.cls.get('organizacionId');
+    const db = this.prisma.extendedClient;
+
+    const org = await db.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
+
+    await db.turnoPlantilla.deleteMany({ where: { staffId } }); // soft delete vía extensión
+    if (horario.dias.length > 0) {
+      await db.turnoPlantilla.createMany({
+        data: horario.dias.map((d) => ({
+          staffId,
+          sucursalId: horario.sucursalId,
+          diaSemana: d.diaSemana,
+          horaEntrada: aHoraTime(d.horaEntrada),
+          horaSalida: aHoraTime(d.horaSalida),
+          vigenciaDesde: hoy,
+        })),
+      });
+    }
+
+    const futuros: Array<{
+      id: string;
+      fecha: Date;
+      sucursalId: string;
+      horaEntrada: Date;
+      horaSalida: Date;
+      _count: { clases: number };
+    }> = await db.turnoTrabajo.findMany({
+      where: { staffId, fecha: { gte: hoy }, estado: 'PROGRAMADO', horaIngresoReal: null },
+      include: { _count: { select: { clases: true } } },
+    });
+
+    // Con turno partido un día tiene varios bloques: los turnos futuros de
+    // cada fecha se emparejan con los bloques del día en orden de entrada.
+    const bloquesPorDia = new Map<number, HorarioSemanalDto['dias']>();
+    for (const d of [...horario.dias].sort((a, b) => a.horaEntrada.localeCompare(b.horaEntrada))) {
+      bloquesPorDia.set(d.diaSemana, [...(bloquesPorDia.get(d.diaSemana) ?? []), d]);
+    }
+    const futurosPorFecha = new Map<string, typeof futuros>();
+    for (const turno of [...futuros].sort((a, b) => a.horaEntrada.getTime() - b.horaEntrada.getTime())) {
+      const clave = turno.fecha.toISOString().slice(0, 10);
+      futurosPorFecha.set(clave, [...(futurosPorFecha.get(clave) ?? []), turno]);
+    }
+
+    const aEliminar: string[] = [];
+    let turnosActualizados = 0;
+    let turnosConservados = 0;
+    for (const turnosDelDia of futurosPorFecha.values()) {
+      const bloques = bloquesPorDia.get(turnosDelDia[0].fecha.getUTCDay()) ?? [];
+      for (const [i, turno] of turnosDelDia.entries()) {
+        const tieneClases = turno._count.clases > 0;
+        const bloque = bloques[i];
+        if (!bloque) {
+          if (tieneClases) turnosConservados++;
+          else aEliminar.push(turno.id);
+          continue;
+        }
+        if (tieneClases && turno.sucursalId !== horario.sucursalId) {
+          turnosConservados++;
+          continue;
+        }
+        const entrada = aHoraTime(bloque.horaEntrada);
+        const salida = aHoraTime(bloque.horaSalida);
+        if (turno.horaEntrada.getTime() !== entrada.getTime() || turno.horaSalida.getTime() !== salida.getTime() || turno.sucursalId !== horario.sucursalId) {
+          await db.turnoTrabajo.update({
+            where: { id: turno.id },
+            data: { horaEntrada: entrada, horaSalida: salida, sucursalId: horario.sucursalId },
+          });
+          turnosActualizados++;
+        }
+      }
+    }
+
+    // Borrado físico a propósito (cliente crudo, organizacionId explícito): un
+    // soft delete quedaría como "excepción" y bloquearía para siempre la
+    // regeneración de ese día si vuelve a entrar al horario.
+    if (aEliminar.length > 0) {
+      await this.prisma.turnoTrabajo.deleteMany({ where: { id: { in: aEliminar }, organizacionId } });
+    }
+
+    const { turnosCreados } = await this.generarParaOrganizacion(organizacionId);
+    return { turnosCreados, turnosActualizados, turnosEliminados: aEliminar.length, turnosConservados };
+  }
+
   // Disparado manualmente desde el frontend ("Generar turnos ahora"), con el
   // contexto de tenant de la request ya resuelto en el CLS.
   async generarAhora(semanas: number = SEMANAS_PROYECCION_DEFAULT) {
@@ -108,8 +238,10 @@ export class TurnoPlantillaService {
   // para el mismo patrón) como desde `generarAhora`, y en ambos casos
   // necesitamos fijar `organizacionId` explícitamente en cada fila creada.
   async generarParaOrganizacion(organizacionId: string, semanas: number = SEMANAS_PROYECCION_DEFAULT) {
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    // "Hoy" en la zona horaria de la organización: con la fecha UTC, de noche
+    // (desde las 20:00 en La Paz) se saltaba el turno del día en curso.
+    const org = await this.prisma.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
     const finVentana = new Date(hoy);
     finVentana.setUTCDate(finVentana.getUTCDate() + semanas * 7);
 
@@ -125,27 +257,42 @@ export class TurnoPlantillaService {
     if (plantillas.length === 0) return { turnosCreados: 0 };
 
     const staffIds = [...new Set(plantillas.map((p) => p.staffId))];
+    // Incluye a propósito los turnos eliminados (papelera): borrar el turno
+    // proyectado de un día es una forma de registrar una excepción puntual
+    // (vacaciones, día libre). Si se ignoraran, el cron de la noche volvería
+    // a crear ese mismo turno y la excepción se perdería. Para recuperarlo,
+    // se restaura desde la papelera.
+    //
+    // Un bloque del horario no se genera si ese día ya hay una fila de la
+    // persona que se solapa con él (en cualquier estado): así conviven los
+    // bloques de un turno partido y un turno extra en otro horario, y una
+    // ausencia registrada con un horario anterior sigue bloqueando el día.
     const turnosExistentes = await this.prisma.turnoTrabajo.findMany({
       where: {
         organizacionId,
         staffId: { in: staffIds },
         fecha: { gte: hoy, lte: finVentana },
-        deletedAt: null,
       },
-      select: { staffId: true, fecha: true },
+      select: { staffId: true, fecha: true, horaEntrada: true, horaSalida: true },
     });
-    const existentes = new Set(turnosExistentes.map((t) => `${t.staffId}|${t.fecha.toISOString().slice(0, 10)}`));
+    const ocupados = new Map<string, { desde: number; hasta: number }[]>();
+    const ocupar = (clave: string, desde: number, hasta: number) => ocupados.set(clave, [...(ocupados.get(clave) ?? []), { desde, hasta }]);
+    for (const t of turnosExistentes) {
+      ocupar(`${t.staffId}|${t.fecha.toISOString().slice(0, 10)}`, minutosDe(t.horaEntrada), minutosDe(t.horaSalida));
+    }
 
     const nuevos: Prisma.TurnoTrabajoCreateManyInput[] = [];
     for (const plantilla of plantillas) {
       const desde = plantilla.vigenciaDesde > hoy ? plantilla.vigenciaDesde : hoy;
       const hasta = plantilla.vigenciaHasta && plantilla.vigenciaHasta < finVentana ? plantilla.vigenciaHasta : finVentana;
+      const inicio = minutosDe(plantilla.horaEntrada);
+      const fin = minutosDe(plantilla.horaSalida);
 
       for (const fecha = new Date(desde); fecha <= hasta; fecha.setUTCDate(fecha.getUTCDate() + 1)) {
         if (fecha.getUTCDay() !== plantilla.diaSemana) continue;
         const clave = `${plantilla.staffId}|${fecha.toISOString().slice(0, 10)}`;
-        if (existentes.has(clave)) continue;
-        existentes.add(clave); // dos plantillas del mismo staff no duplican el mismo día
+        if ((ocupados.get(clave) ?? []).some((o) => o.desde < fin && inicio < o.hasta)) continue;
+        ocupar(clave, inicio, fin); // dos plantillas solapadas no duplican el mismo horario
         nuevos.push({
           organizacionId,
           staffId: plantilla.staffId,

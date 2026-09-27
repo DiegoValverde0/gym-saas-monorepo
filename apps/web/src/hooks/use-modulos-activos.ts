@@ -7,14 +7,18 @@ export interface ModulosConfig {
   clasesGrupales: boolean;
   controlPersonal: boolean;
   reportesAvanzados: boolean;
+  controlGastos: boolean;
+  controlAcceso: boolean;
 }
 
-// Deben coincidir con los defaults del backend (ver modulo-activo.guard.ts).
+// Deben coincidir con los defaults del backend (ver modulo.util.ts).
 const MODULOS_POR_DEFECTO: ModulosConfig = {
   puntoVenta: true,
   clasesGrupales: false,
   controlPersonal: false,
   reportesAvanzados: true,
+  controlGastos: false,
+  controlAcceso: true,
 };
 
 // Antes esta lógica vivía duplicada solo en dashboard/layout.tsx, así que el

@@ -11,17 +11,20 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { 
-  Users, 
-  Wallet, 
-  Settings, 
-  ShieldCheck, 
-  ClipboardList, 
-  UserCog, 
+import {
+  Users,
+  Wallet,
+  Settings,
+  ShieldCheck,
+  ClipboardList,
+  UserCog,
   CreditCard,
   Building2,
   Calendar,
-  LayoutDashboard
+  LayoutDashboard,
+  Receipt,
+  Truck,
+  ScanFace
 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useModulosActivos } from "@/hooks/use-modulos-activos";
@@ -67,6 +70,13 @@ export function CommandPalette() {
             </CommandItem>
           )}
 
+          {modulos.controlAcceso && hasPermission('asistencias:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/asistencias')}>
+              <ScanFace className="mr-2 h-4 w-4" />
+              <span>Control de Acceso</span>
+            </CommandItem>
+          )}
+
           {modulos.puntoVenta && hasPermission('cajas_registradoras:leer') && (
             <CommandItem onSelect={() => navigateTo('/dashboard/cajas')}>
               <Wallet className="mr-2 h-4 w-4" />
@@ -84,7 +94,21 @@ export function CommandPalette() {
           {modulos.clasesGrupales && hasPermission('clases:leer') && (
             <CommandItem onSelect={() => navigateTo('/dashboard/clases')}>
               <Calendar className="mr-2 h-4 w-4" />
-              <span>Clases Programadas</span>
+              <span>Clases</span>
+            </CommandItem>
+          )}
+
+          {modulos.controlGastos && hasPermission('transacciones:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/gastos')}>
+              <Receipt className="mr-2 h-4 w-4" />
+              <span>Gastos</span>
+            </CommandItem>
+          )}
+
+          {modulos.controlGastos && hasPermission('transacciones:leer') && (
+            <CommandItem onSelect={() => navigateTo('/dashboard/proveedores')}>
+              <Truck className="mr-2 h-4 w-4" />
+              <span>Proveedores</span>
             </CommandItem>
           )}
         </CommandGroup>
@@ -95,7 +119,7 @@ export function CommandPalette() {
           {modulos.controlPersonal && hasPermission('staff:leer') && (
             <CommandItem onSelect={() => navigateTo('/dashboard/personal')}>
               <UserCog className="mr-2 h-4 w-4" />
-              <span>Personal (Staff)</span>
+              <span>Equipo</span>
             </CommandItem>
           )}
 

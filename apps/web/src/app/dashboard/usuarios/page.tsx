@@ -255,7 +255,8 @@ export default function UsuariosPage() {
                     label: 'Rol en la Organización', 
                     type: 'select', 
                     placeholder: 'Selecciona el rol',
-                    options: (roles as any[] | undefined)?.map((r: any) => ({ label: r.nombre, value: r.id })) || [],
+                    // SUPERADMIN es el rol de la cuenta de plataforma: no se asigna dentro de una organización (el backend también lo rechaza).
+                    options: (roles as any[] | undefined)?.filter((r: any) => r.nombre !== 'SUPERADMIN').map((r: any) => ({ label: r.nombre, value: r.id })) || [],
                     colSpan: 2
                   },
                   {
@@ -267,7 +268,7 @@ export default function UsuariosPage() {
                       { label: 'Acceso Global (Todas)', value: 'global', className: 'font-semibold text-indigo-600 dark:text-indigo-400' },
                       ...((sucursales as any[] | undefined)?.map((s: any) => ({ label: s.nombre, value: s.id })) || [])
                     ],
-                    description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de dicha sede.',
+                    description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de esa sucursal.',
                     colSpan: 2
                   }
                 ]

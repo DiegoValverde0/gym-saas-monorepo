@@ -17,6 +17,8 @@ export function usePermissions() {
     // Solo deshabilitamos si no hay tenantId y no es 'all', pero en general
     // activeTenantId null al principio está bien (el backend manejará 'all' o null)
     staleTime: 5 * 60 * 1000, // 5 minutos de cache
+    // Igual que /auth/me: un cambio de rol hecho por otra persona se ve al volver a la pestaña.
+    refetchOnWindowFocus: 'always',
   });
 
   const hasPermission = (permission: string) => {

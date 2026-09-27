@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
 
@@ -49,6 +50,8 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
   const queryClient = useQueryClient();
   const { token, user } = useAuth({ redirectIfUnauthenticated: false });
   const userSucursalId = user?.sucursalId;
+  // En modo simple no hay turnos de caja: el backend cobra sin exigirlo.
+  const { esSimple } = useModoUso();
 
   const montoTotal = item ? Number(item.montoFinal) : 0;
   
@@ -105,7 +108,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
   }
 
   const handleCobrar = () => {
-      if (!(estadoApertura as any)?.abierta) {
+      if (!esSimple && !(estadoApertura as any)?.abierta) {
           toast({ title: 'Caja Cerrada', description: 'Debes abrir tu turno de caja para cobrar.', variant: 'destructive' });
           return;
       }

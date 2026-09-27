@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ClsService } from 'nestjs-cls';
+import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 import { startOfDay, startOfMonth, subDays, format } from 'date-fns';
 import { calcularSegmentoCliente, SEGMENTOS_CLIENTE } from '../clientes/segmentacion-cliente.util';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cls: ClsService,
+  ) {}
 
   async getKpis(sucursalId?: string) {
     const today = startOfDay(new Date());
@@ -129,6 +134,47 @@ export class DashboardService {
     }
 
     return { total: clientes.length, porSegmento: conteos };
+  }
+
+  async getPorVencer(sucursalId?: string, dias = 7) {
+    const organizacionId = this.cls.get('organizacionId');
+    const org = organizacionId
+      ? await this.prisma.extendedClient.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } })
+      : null;
+    const hoy = aHoraLocal(new Date(), org?.zonaHoraria).fechaSolo;
+    const limite = new Date(hoy.getTime() + dias * 24 * 60 * 60_000);
+
+    const membresias: Array<{
+      clienteId: string;
+      fechaFin: Date | null;
+      plan: { nombre: string };
+      cliente: { nombre: string; telefono: string | null; membresias: { id: string }[] };
+    }> = await this.prisma.extendedClient.membresia.findMany({
+      where: {
+        estado: 'ACTIVA',
+        fechaFin: { gte: hoy, lte: limite },
+        ...(sucursalId ? { cliente: { sucursalBaseId: sucursalId } } : {}),
+      },
+      select: {
+        clienteId: true,
+        fechaFin: true,
+        plan: { select: { nombre: true } },
+        // Si ya tiene la siguiente membresía pagada en espera, ya renovó.
+        cliente: { select: { nombre: true, telefono: true, membresias: { where: { estado: 'EN_ESPERA' }, select: { id: true } } } },
+      },
+      orderBy: { fechaFin: 'asc' },
+    });
+
+    return membresias
+      .filter((m) => m.cliente.membresias.length === 0)
+      .map((m) => ({
+        clienteId: m.clienteId,
+        cliente: m.cliente.nombre,
+        telefono: m.cliente.telefono,
+        plan: m.plan.nombre,
+        fechaFin: m.fechaFin ? m.fechaFin.toISOString().slice(0, 10) : null,
+        diasRestantes: m.fechaFin ? Math.round((m.fechaFin.getTime() - hoy.getTime()) / 86_400_000) : null,
+      }));
   }
 
   async getRecentActivity(sucursalId?: string) {

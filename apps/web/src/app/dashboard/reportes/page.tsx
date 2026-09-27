@@ -1,128 +1,75 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
-import { useTenantStore } from '@/store/use-tenant-store';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { apiGet, unwrapList } from '@/lib/api-client';
+import { useModoUso } from '@/hooks/use-modo-uso';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { Protect } from '@/components/ui/protect';
-import { FileText, TrendingUp, DollarSign, CreditCard, Smartphone } from 'lucide-react';
-import { useMemo } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { VistaAsistencia, VistaClases, VistaEquipo, VistaPlanes, VistaResumen } from './vistas';
 
-interface TransaccionPago {
-  monto: number | string;
-  metodoPago: string;
-}
-
-interface Transaccion {
-  fechaHora: string;
-  tipo: string;
-  pagos?: TransaccionPago[];
-}
-
+/**
+ * Reportes por modo (plan de simplificación, 11.8):
+ *  - Simple: Hoy y Este mes.
+ *  - Intermedio (con "Reportes avanzados" activo): por plan, por clase y
+ *    asistencia por día y hora.
+ *  - Experto: además, horas y costo del equipo, y descarga en CSV.
+ */
 export default function ReportesPage() {
-  const { activeTenantId } = useTenantStore();
   const { token } = useAuth();
+  const { alMenos, esExperto } = useModoUso();
+  const modulos = useModulosActivos();
+  const { hasPermission } = usePermissions();
+  const { sucursalId, sucursal, puedeElegir } = useSucursalActiva();
+  const [todas, setTodas] = useState(false);
+  const [vista, setVista] = useState('resumen');
 
-  const { data: transacciones, isLoading } = useQuery({
-    queryKey: ['transacciones', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/transacciones')),
-    enabled: !!token,
-  });
-
-  const { totalHoy, efectivoHoy, digitalHoy } = useMemo(() => {
-    const list = Array.isArray(transacciones) ? transacciones : [];
-    
-    // Filtrar solo transacciones de HOY
-    const hoy = new Date().toISOString().split('T')[0];
-    const transaccionesHoy = (list as Transaccion[]).filter((t: Transaccion) => t.fechaHora.startsWith(hoy) && t.tipo === 'INGRESO');
-
-    let total = 0;
-    let efectivo = 0;
-    let digital = 0;
-
-    transaccionesHoy.forEach((t: Transaccion) => {
-        t.pagos?.forEach((p: TransaccionPago) => {
-            const val = Number(p.monto);
-            total += val;
-            if (p.metodoPago === 'EFECTIVO') {
-                efectivo += val;
-            } else {
-                digital += val;
-            }
-        });
-    });
-
-    return { totalHoy: total, efectivoHoy: efectivo, digitalHoy: digital };
-  }, [transacciones]);
+  if (!token) return null;
+  const filtro = todas ? null : sucursalId;
+  const avanzados = modulos.reportesAvanzados && alMenos('intermedio');
+  const pestanas = [
+    { valor: 'resumen', nombre: 'Hoy y este mes', visible: true },
+    { valor: 'planes', nombre: 'Por plan', visible: avanzados },
+    { valor: 'clases', nombre: 'Clases', visible: avanzados && modulos.clasesGrupales && hasPermission('clases:leer') },
+    { valor: 'asistencia', nombre: 'Asistencia', visible: avanzados && modulos.controlAcceso && hasPermission('asistencias:leer') },
+    { valor: 'equipo', nombre: 'Equipo', visible: avanzados && esExperto && modulos.controlPersonal && hasPermission('turnos:leer') },
+  ].filter((p) => p.visible);
 
   return (
     <Protect permission="transacciones:leer" fallbackType="redirect">
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
-            <FileText className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-            Reportes Financieros (Hoy)
-          </h2>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-1">Resumen de ingresos del día actual.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Reportes</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Cuánto entró, cuánto salió y cómo se mueve tu gimnasio.</p>
+          </div>
+          {puedeElegir && (
+            <div className="flex gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-xs font-medium" role="group" aria-label="Sucursal">
+              <button type="button" aria-pressed={!todas} onClick={() => setTodas(false)} className={`rounded-md px-3 py-1.5 ${!todas ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                {sucursal?.nombre ?? 'Esta sucursal'}
+              </button>
+              <button type="button" aria-pressed={todas} onClick={() => setTodas(true)} className={`rounded-md px-3 py-1.5 ${todas ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                Todas las sucursales
+              </button>
+            </div>
+          )}
         </div>
 
-        {isLoading ? (
-            <div className="flex items-center justify-center h-40">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
+        {pestanas.length === 1 ? (
+          <VistaResumen sucursalId={filtro} />
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* Ingreso Total */}
-                <div className="bg-white dark:bg-slate-900 border rounded-xl p-6 shadow-sm flex flex-col justify-between overflow-hidden relative group">
-                    <div className="absolute -right-6 -top-6 w-24 h-24 bg-indigo-50 dark:bg-indigo-500/20 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out -z-10" />
-                    <div>
-                        <p className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Ingreso Total Hoy</p>
-                        <h3 className="text-4xl font-black text-indigo-900 dark:text-indigo-100">
-                            <span className="text-indigo-400 mr-1">Bs.</span>
-                            {totalHoy.toFixed(2)}
-                        </h3>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400 font-medium">
-                        <TrendingUp className="w-4 h-4" />
-                        <span>Monitoreo en tiempo real</span>
-                    </div>
-                </div>
-
-                {/* Efectivo */}
-                <div className="bg-white dark:bg-slate-900 border rounded-xl p-6 shadow-sm flex flex-col justify-between overflow-hidden relative group">
-                    <div className="absolute -right-6 -top-6 w-24 h-24 bg-emerald-50 dark:bg-emerald-500/20 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out -z-10" />
-                    <div>
-                        <p className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Efectivo en Caja</p>
-                        <h3 className="text-4xl font-black text-emerald-900 dark:text-emerald-100">
-                            <span className="text-emerald-400 mr-1">Bs.</span>
-                            {efectivoHoy.toFixed(2)}
-                        </h3>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                        <DollarSign className="w-4 h-4" />
-                        <span>Físico recibido en gaveta</span>
-                    </div>
-                </div>
-
-                {/* Digital */}
-                <div className="bg-white dark:bg-slate-900 border rounded-xl p-6 shadow-sm flex flex-col justify-between overflow-hidden relative group">
-                    <div className="absolute -right-6 -top-6 w-24 h-24 bg-sky-50 dark:bg-sky-500/20 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out -z-10" />
-                    <div>
-                        <p className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Depósitos Bancarios (QR/Transfer)</p>
-                        <h3 className="text-4xl font-black text-sky-900 dark:text-sky-100">
-                            <span className="text-sky-400 mr-1">Bs.</span>
-                            {digitalHoy.toFixed(2)}
-                        </h3>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-sky-600 dark:text-sky-400 font-medium">
-                        <Smartphone className="w-4 h-4" />
-                        <CreditCard className="w-4 h-4" />
-                        <span>Abonos directos a cuenta</span>
-                    </div>
-                </div>
-
-            </div>
+          <Tabs value={vista} onValueChange={setVista}>
+            <TabsList className="bg-slate-100 dark:bg-slate-800 p-1 flex-wrap h-auto">
+              {pestanas.map((p) => <TabsTrigger key={p.valor} value={p.valor}>{p.nombre}</TabsTrigger>)}
+            </TabsList>
+            <TabsContent value="resumen" className="mt-4"><VistaResumen sucursalId={filtro} /></TabsContent>
+            <TabsContent value="planes" className="mt-4"><VistaPlanes sucursalId={filtro} csv={esExperto} /></TabsContent>
+            <TabsContent value="clases" className="mt-4"><VistaClases sucursalId={filtro} csv={esExperto} /></TabsContent>
+            <TabsContent value="asistencia" className="mt-4"><VistaAsistencia sucursalId={filtro} /></TabsContent>
+            <TabsContent value="equipo" className="mt-4"><VistaEquipo sucursalId={filtro} /></TabsContent>
+          </Tabs>
         )}
       </div>
     </Protect>

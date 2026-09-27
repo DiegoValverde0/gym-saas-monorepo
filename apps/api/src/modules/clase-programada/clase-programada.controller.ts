@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ClaseProgramadaService } from './clase-programada.service';
 import { CreateClaseProgramadaDto } from './dto/create-clase-programada.dto';
 import { UpdateClaseProgramadaDto } from './dto/update-clase-programada.dto';
 import { VerificarDisponibilidadDto } from './dto/verificar-disponibilidad.dto';
+import { EntrenadoresClaseDto } from './dto/entrenadores-clase.dto';
+import { HorariosDisponiblesDto } from './dto/horarios-disponibles.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
@@ -34,6 +36,27 @@ export class ClaseProgramadaController {
   @RequirePermissions({ accion: 'leer', modulo: 'clases' })
   verificarDisponibilidad(@Query() query: VerificarDisponibilidadDto) {
     return this.claseProgramadaService.verificarDisponibilidad(query);
+  }
+
+  // Selector de entrenador del formulario de clase (también antes de ':id').
+  @Get('entrenadores')
+  @RequirePermissions({ accion: 'leer', modulo: 'clases' })
+  entrenadores(@Query() query: EntrenadoresClaseDto) {
+    return this.claseProgramadaService.entrenadoresParaClase(query);
+  }
+
+  // Grilla del asistente "Nueva clase" (también antes de ':id').
+  @Get('horarios-disponibles')
+  @RequirePermissions({ accion: 'leer', modulo: 'clases' })
+  horariosDisponibles(@Query() query: HorariosDisponiblesDto) {
+    return this.claseProgramadaService.horariosDisponibles(query);
+  }
+
+  // Cancela solo esta sesión y sus reservas confirmadas.
+  @Post(':id/cancelar')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'clases' })
+  cancelarSesion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.claseProgramadaService.cancelarSesion(id);
   }
 
   @Get(':id')

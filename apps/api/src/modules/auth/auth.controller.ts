@@ -1,8 +1,9 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Get, Request, UseGuards, Res } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Get, Put, Request, UseGuards, Res } from '@nestjs/common';
 import { Response, Request as ExpressRequest } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignInDto } from './dto/sign-in.dto';
+import { SucursalPreferidaDto } from './dto/sucursal-preferida.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 interface RequestWithUser extends ExpressRequest {
@@ -71,6 +72,14 @@ export class AuthController {
   @Get('me')
   async me(@Request() req: RequestWithUser) {
     return this.authService.getMe(req.user);
+  }
+
+  // Fase 6 (DB-5): recuerda la sucursal elegida en la barra superior para
+  // todos los dispositivos de la persona.
+  @UseGuards(JwtAuthGuard)
+  @Put('me/sucursal-preferida')
+  async sucursalPreferida(@Request() req: RequestWithUser, @Body() dto: SucursalPreferidaDto) {
+    return this.authService.guardarSucursalPreferida(req.user, dto.sucursalId);
   }
 
   @UseGuards(JwtAuthGuard)

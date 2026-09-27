@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ReservaClaseService } from './reserva-clase.service';
 import { CreateReservaClaseDto } from './dto/create-reserva-clase.dto';
 import { UpdateReservaClaseDto } from './dto/update-reserva-clase.dto';
@@ -19,6 +19,21 @@ export class ReservaClaseController {
   @RequirePermissions({ accion: 'crear', modulo: 'reservas' })
   create(@Body() createReservaClaseDto: CreateReservaClaseDto) {
     return this.reservaClaseService.create(createReservaClaseDto);
+  }
+
+  // Reservar aunque el plan no incluya la clase (recepción): exige además el
+  // mismo permiso que forzar un ingreso en Control de acceso.
+  @Post('forzar')
+  @RequirePermissions({ accion: 'crear', modulo: 'reservas' }, { accion: 'forzar', modulo: 'asistencias' })
+  forzar(@Body() createReservaClaseDto: CreateReservaClaseDto) {
+    return this.reservaClaseService.create(createReservaClaseDto, true);
+  }
+
+  // Semáforo: ¿puede reservar este cliente esta clase? y, si no, por qué.
+  @Get('puede-reservar')
+  @RequirePermissions({ accion: 'crear', modulo: 'reservas' })
+  puedeReservar(@Query('claseId', ParseUUIDPipe) claseId: string, @Query('clienteId', ParseUUIDPipe) clienteId: string) {
+    return this.reservaClaseService.puedeReservar(claseId, clienteId);
   }
 
   @Get()

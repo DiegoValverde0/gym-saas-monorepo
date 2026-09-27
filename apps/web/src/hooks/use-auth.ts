@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { apiGet, apiPost } from '@/lib/api-client';
 
@@ -17,6 +17,8 @@ export interface AuthUser {
   sucursalNombre?: string | null;
   rolNombre?: string | null;
   is_superadmin?: boolean;
+  // Fase 6 (DB-5): sucursal elegida en la barra superior, guardada en el servidor.
+  sucursalPreferidaId?: string | null;
 }
 
 interface UseAuthOptions {
@@ -32,6 +34,14 @@ interface UseAuthOptions {
  * solo con la cookie. react-query dedupea/cachea la llamada entre los
  * múltiples componentes que llaman useAuth() en la misma página.
  */
+// Vuelve a pedir el acceso vigente (datos de sesión y permisos), por ejemplo
+// después de cambiar el rol o la sucursal de alguien del equipo: si era uno
+// mismo, la barra superior y el menú se actualizan en el acto.
+export function refrescarAcceso(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+  queryClient.invalidateQueries({ queryKey: ['permissions'] });
+}
+
 export function useAuth(options: UseAuthOptions = {}) {
   const { redirectIfUnauthenticated = true } = options;
   const router = useRouter();
@@ -41,6 +51,10 @@ export function useAuth(options: UseAuthOptions = {}) {
     queryKey: ['auth-me'],
     queryFn: () => apiGet<AuthUser>('/auth/me'),
     staleTime: 5 * 60 * 1000,
+    // El rol y la sucursal se resuelven en el servidor en cada petición: al
+    // volver a la pestaña se refresca para que un cambio de acceso hecho por
+    // otra persona se vea sin cerrar sesión.
+    refetchOnWindowFocus: 'always',
     retry: false,
   });
 

@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export type FieldType = 'text' | 'email' | 'password' | 'number' | 'select' | 'switch' | 'custom';
 
@@ -42,6 +42,10 @@ export interface FormSection {
   description?: string;
   icon?: ReactNode;
   fields: FieldConfig[];
+  // "Más opciones" (plan de simplificación, 4.4): la sección aparece cerrada
+  // al final del formulario (en el último paso si es por pasos) y se abre al
+  // tocarla. Se abre sola si alguno de sus campos tiene un error.
+  plegable?: boolean;
 }
 
 export interface GlobalFormModalProps {
@@ -115,7 +119,13 @@ function GlobalFormModalInner({
     if (!val && onClose) onClose();
   });
 
-  const actualSections = sections || (fields ? [{ fields }] : []);
+  const todasLasSecciones: FormSection[] = sections || (fields ? [{ fields }] : []);
+  const actualSections = todasLasSecciones.filter((s) => !s.plegable);
+  const seccionesPlegables = todasLasSecciones.filter((s) => s.plegable);
+  const [plegablesAbiertas, setPlegablesAbiertas] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (actualOpen) setPlegablesAbiertas({});
+  }, [actualOpen]);
   const isPaginated = !!multiStep && actualSections.length > 1;
   const totalSteps = actualSections.length;
 
@@ -307,6 +317,31 @@ function GlobalFormModalInner({
             </div>
           ))}
 
+          {isLastStep && seccionesPlegables.map((section, idx) => {
+            const clave = section.title || String(idx);
+            const conError = section.fields.some((f) => f.name.split('.').reduce<unknown>((acc, k) => (acc as Record<string, unknown> | undefined)?.[k], form.formState.errors));
+            const abierta = plegablesAbiertas[clave] || conError;
+            return (
+              <div key={clave} className="rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setPlegablesAbiertas((prev) => ({ ...prev, [clave]: !abierta }))}
+                  className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+                  aria-expanded={abierta}
+                >
+                  <span>Más opciones{section.title ? `: ${section.title}` : ''}</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${abierta ? 'rotate-180' : ''}`} />
+                </button>
+                {abierta && (
+                  <div className="space-y-3 px-4 pb-4">
+                    {section.description && <p className="text-sm text-zinc-500 dark:text-zinc-400">{section.description}</p>}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{section.fields.map(renderField)}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
           <div className="flex justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
             <Button
               type="button"
@@ -319,8 +354,14 @@ function GlobalFormModalInner({
               ) : 'Cancelar'}
             </Button>
 
+            {/* `key` distinto en cada botón: sin él React reutiliza el mismo
+                <button> y solo cambia su `type`. Al pulsar "Siguiente" en el
+                penúltimo paso, el paso avanza antes de que el navegador
+                ejecute la acción por defecto del clic, que para entonces ve un
+                type="submit" y envía (y cierra) el formulario. */}
             {isLastStep ? (
               <Button
+                key="submit"
                 type="submit"
                 className="bg-indigo-600 hover:bg-indigo-500 text-white"
                 disabled={isPending}
@@ -328,7 +369,7 @@ function GlobalFormModalInner({
                 {isPending ? submitLabelPending : submitLabel}
               </Button>
             ) : (
-              <Button type="button" onClick={goNext}>
+              <Button key="next" type="button" onClick={goNext}>
                 Siguiente <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             )}

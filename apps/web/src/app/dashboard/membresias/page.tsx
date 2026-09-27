@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { POSModal } from './POSModal';
+import { VentaRapidaModal } from '@/components/ui/venta-rapida-modal';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import type { z } from 'zod';
 
 type MembresiaFormValues = z.infer<typeof membresiaWizardSchema>;
@@ -30,6 +33,9 @@ export default function MembresiasPage() {
   const { token, user } = useAuth();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Modo simple: venta en una sola pantalla (plan de simplificación, 4.4).
+  const { esSimple } = useModoUso();
+  const [ventaRapidaOpen, setVentaRapidaOpen] = useState(false);
   // Membresía PENDIENTE_PAGO que se está "editando" (null = venta nueva). El
   // wizard usa esto para precargarse y arrancar en el paso 2 -- antes esta
   // página tenía su propio `form` desconectado del wizard (que tiene el
@@ -44,6 +50,9 @@ export default function MembresiasPage() {
   const { activeTenantId } = useTenantStore();
 
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
@@ -134,6 +143,10 @@ export default function MembresiasPage() {
   });
 
   const handleAddNew = () => {
+    if (esSimple) {
+      setVentaRapidaOpen(true);
+      return;
+    }
     setEditingMembresia(null);
     setIsDialogOpen(true);
   };
@@ -216,6 +229,8 @@ export default function MembresiasPage() {
           </div>
         </div>
 
+        <VentaRapidaModal open={ventaRapidaOpen} onOpenChange={setVentaRapidaOpen} />
+
         <MembresiaWizardModal
           open={isDialogOpen}
           onOpenChange={setIsDialogOpen}
@@ -225,7 +240,8 @@ export default function MembresiasPage() {
           planes={planesList.filter((p: any) => p.estado === 'ACTIVO')}
           promociones={promocionesList.filter((p: any) => p.estado === 'ACTIVO')}
           sucursales={sucursales || []}
-          userSucursalId={userSucursalId || undefined}
+          // Una venta nueva se registra en la sucursal activa, sin preguntar.
+          userSucursalId={userSucursalId || (editingMembresia && variasSucursales ? undefined : sucursalActiva) || undefined}
           editingMembresia={editingMembresia}
         />
 

@@ -1,12 +1,13 @@
-import { Injectable, BadRequestException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
-import { promisify } from 'util';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
-import * as crypto from 'crypto';
 import { CreateEmpleadoDto } from './dto/create-empleado.dto';
 import { assertFound } from '../../common/utils/assert-found.util';
+import { hashContrasena } from '../../common/utils/contrasena.util';
+import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
+import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 
 @Injectable()
 export class UsuarioService {
@@ -36,12 +37,9 @@ export class UsuarioService {
   }
 
   async registrarEmpleado(data: CreateEmpleadoDto) {
+    const sucursalId = (await assertSucursalAsignable(this.prisma, this.cls, data.sucursalId ?? undefined)) ?? this.cls.get('sucursalId');
     // 1. Hashear contraseña
-    const salt = crypto.randomBytes(16).toString('hex');
-    const scrypt = promisify(crypto.scrypt);
-    const hashBuffer = (await scrypt(data.contrasena, salt, 64)) as Buffer;
-    const hash = hashBuffer.toString('hex');
-    const contrasenaHash = `${salt}:${hash}`;
+    const contrasenaHash = await hashContrasena(data.contrasena);
 
     // 2. Crear usuario (Global) y su AsignacionAcceso (Tenant) en una transacción
     // NOTA ARQUITECTURA: organizacionId se inyecta por RLS en AsignacionAcceso
@@ -65,21 +63,15 @@ export class UsuarioService {
         }
 
         // Validar si el rol existe en esta organización (RLS aplica automáticamente)
-        const rol = await tx.rol.findUnique({
-          where: { id: data.rolId }
-        });
-
-        if (!rol) {
-          throw new BadRequestException('El rol especificado no existe o no pertenece a su organización.');
-        }
+        assertRolAsignableEnOrganizacion(await tx.rol.findUnique({ where: { id: data.rolId } }));
 
         // Crear asignación (organizacionId lo inyecta RLS)
         const asignacion = await tx.asignacionAcceso.create({
           data: {
             usuarioId: usuario.id,
             rolId: data.rolId,
-            // sucursalId es opcional
-            ...(data.sucursalId && { sucursalId: data.sucursalId })
+            // sucursalId es opcional (sin valor = todas)
+            ...(sucursalId && { sucursalId })
           }
         });
 
@@ -95,18 +87,18 @@ export class UsuarioService {
 
   async updateAsignacion(asignacionId: string, nuevoRolId: string, sucursalId?: string | null) {
     // Verificar que la asignación existe y pertenece al tenant
-    assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+    const actual = assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
+    await assertSucursalAsignable(this.prisma, this.cls, sucursalId);
 
     // Verificar que el rol existe y pertenece al tenant
-    const rol = await this.prisma.extendedClient.rol.findUnique({
-      where: { id: nuevoRolId },
-    });
+    assertRolAsignableEnOrganizacion(await this.prisma.extendedClient.rol.findUnique({ where: { id: nuevoRolId } }));
 
-    if (!rol) {
-      throw new BadRequestException('El rol especificado no existe en su organización.');
+    const sucursalFinal = sucursalId !== undefined ? sucursalId : actual.sucursalId;
+    if (sucursalFinal !== null || nuevoRolId !== actual.rolId) {
+      await assertQuedaOtroAdministrador(this.prisma.extendedClient as unknown as Prisma.TransactionClient, actual);
     }
 
     // Actualizar la asignación (extendedClient valida que la asignación pertenece al tenant)
@@ -118,29 +110,30 @@ export class UsuarioService {
       },
     });
 
-    // Invalidar caché de Redis
-    const cacheKey = `rbac:${asignacion.usuarioId}:${asignacion.organizacionId}`;
-    await this.redisClient.del(cacheKey);
+    // Invalidar el acceso vigente cacheado: aplica en su siguiente acción, sin cerrar sesión.
+    await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
 
     return asignacion;
   }
 
   async removerEmpleado(asignacionId: string) {
-    assertFound(
-      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId } }),
+    const actual = assertFound(
+      await this.prisma.extendedClient.asignacionAcceso.findUnique({ where: { id: asignacionId }, include: { rol: true } }),
       `Asignación con ID ${asignacionId} no encontrada`,
     );
+    await assertQuedaOtroAdministrador(this.prisma.extendedClient as unknown as Prisma.TransactionClient, actual);
 
     // Al eliminar la asignación, revocamos el acceso del usuario a este tenant, pero el usuario global se mantiene
     const asignacion = await this.prisma.extendedClient.asignacionAcceso.delete({
       where: { id: asignacionId },
     });
 
-    // Invalidar caché de Redis y revocar sesión activa
-    const cacheKey = `rbac:${asignacion.usuarioId}:${asignacion.organizacionId}`;
-    await this.redisClient.del(cacheKey);
-    // Revocar sesión activa por 7 días (TTL del JWT)
-    await this.redisClient.setEx(`user:revoked:${asignacion.usuarioId}`, 604800, 'true');
+    // Invalidar el acceso vigente cacheado: sin asignación, su siguiente
+    // petición en esta organización responde 401 (JwtAuthGuard). Antes se
+    // marcaba además `user:revoked`, que es global: lo dejaba fuera también
+    // de los otros gimnasios donde trabaja, y 7 días aunque se le volviera a
+    // dar acceso.
+    await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
 
     return asignacion;
   }

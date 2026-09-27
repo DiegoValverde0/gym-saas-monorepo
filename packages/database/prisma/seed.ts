@@ -154,6 +154,8 @@ async function main() {
     (p.modulo === 'planes' && p.accion === 'leer') ||
     (p.modulo === 'promociones' && p.accion === 'leer') ||
     (p.modulo === 'productos' && p.accion === 'leer') ||
+    // Vende productos: necesita ver el stock de su sucursal.
+    (p.modulo === 'inventarios' && p.accion === 'leer') ||
     (p.modulo === 'clases' && p.accion === 'leer') ||
     (p.modulo === 'cuentas_bancarias' && p.accion === 'leer') ||
     (p.modulo === 'disciplinas' && p.accion === 'leer') ||

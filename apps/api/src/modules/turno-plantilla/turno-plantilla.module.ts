@@ -5,5 +5,6 @@ import { TurnoPlantillaController } from './turno-plantilla.controller';
 @Module({
   controllers: [TurnoPlantillaController],
   providers: [TurnoPlantillaService],
+  exports: [TurnoPlantillaService],
 })
 export class TurnoPlantillaModule {}

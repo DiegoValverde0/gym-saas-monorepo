@@ -1,5 +1,7 @@
 "use client";
 
+import { Ayuda } from '@/components/ui/ayuda';
+import { Protect } from '@/components/ui/protect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPut } from '@/lib/api-client';
@@ -10,10 +12,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, Users, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Building, Settings, Globe, Briefcase, Mail, Phone, DollarSign, Clock, Layers, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { MODOS_USO, ModoUso, useModoUso } from '@/hooks/use-modo-uso';
 
 const organizacionSchema = z.object({
   nombre: z.string().min(3, "El nombre debe tener al menos 3 caracteres").max(150),
@@ -29,6 +32,8 @@ const organizacionSchema = z.object({
       clasesGrupales: z.boolean(),
       controlPersonal: z.boolean(),
       reportesAvanzados: z.boolean(),
+      controlGastos: z.boolean(),
+      controlAcceso: z.boolean(),
     }),
     requerimientosCliente: z.object({
       exigirDni: z.boolean(),
@@ -38,6 +43,12 @@ const organizacionSchema = z.object({
     }),
     requerimientosClase: z.object({
       exigirTurnoEntrenador: z.boolean(),
+    }),
+    clases: z.object({
+      descontarSesionEnClase: z.boolean(),
+    }),
+    jornadas: z.object({
+      toleranciaAtrasoMinutos: z.number({ message: 'Ingresa un número de minutos' }).int().min(0, 'Mínimo 0').max(120, 'Máximo 120'),
     }),
     preferenciasOperativas: z.object({
       renovacionAutomaticaPlanes: z.boolean(),
@@ -76,6 +87,8 @@ export default function ConfiguracionPage() {
           clasesGrupales: (organizacion as any).configuracion?.modulos?.clasesGrupales ?? false,
           controlPersonal: (organizacion as any).configuracion?.modulos?.controlPersonal ?? false,
           reportesAvanzados: (organizacion as any).configuracion?.modulos?.reportesAvanzados ?? true,
+          controlGastos: (organizacion as any).configuracion?.modulos?.controlGastos ?? false,
+          controlAcceso: (organizacion as any).configuracion?.modulos?.controlAcceso ?? true,
         },
         requerimientosCliente: {
           exigirDni: (organizacion as any).configuracion?.requerimientosCliente?.exigirDni ?? false,
@@ -85,6 +98,12 @@ export default function ConfiguracionPage() {
         },
         requerimientosClase: {
           exigirTurnoEntrenador: (organizacion as any).configuracion?.requerimientosClase?.exigirTurnoEntrenador ?? false,
+        },
+        clases: {
+          descontarSesionEnClase: (organizacion as any).configuracion?.clases?.descontarSesionEnClase ?? false,
+        },
+        jornadas: {
+          toleranciaAtrasoMinutos: (organizacion as any).configuracion?.jornadas?.toleranciaAtrasoMinutos ?? 10,
         },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: (organizacion as any).configuracion?.preferenciasOperativas?.renovacionAutomaticaPlanes ?? true,
@@ -107,6 +126,8 @@ export default function ConfiguracionPage() {
           clasesGrupales: false,
           controlPersonal: false,
           reportesAvanzados: true,
+          controlGastos: false,
+          controlAcceso: true,
         },
         requerimientosCliente: {
           exigirDni: false,
@@ -117,6 +138,12 @@ export default function ConfiguracionPage() {
         requerimientosClase: {
           exigirTurnoEntrenador: false,
         },
+        clases: {
+          descontarSesionEnClase: false,
+        },
+        jornadas: {
+          toleranciaAtrasoMinutos: 10,
+        },
         preferenciasOperativas: {
           renovacionAutomaticaPlanes: true,
           impresionTickets: 'NINGUNA',
@@ -124,6 +151,23 @@ export default function ConfiguracionPage() {
         }
       }
     },
+  });
+
+  // Modo de uso (plan de simplificación, sección 4): se guarda al tocarlo,
+  // aparte del resto del formulario. El backend combina la configuración, así
+  // que guardar esta pantalla después no lo pisa.
+  const { modo, alMenos } = useModoUso();
+  const modoMutation = useMutation({
+    mutationFn: async (nuevo: ModoUso) => apiPut('/organizaciones/me/info', { configuracion: { modoUso: nuevo } }),
+    onSuccess: (_r, nuevo) => {
+      queryClient.invalidateQueries({ queryKey: ['organizacion'] });
+      toast({ title: 'Modo de uso actualizado', description: `Ahora el sistema trabaja en modo ${MODOS_USO.find((m) => m.valor === nuevo)?.nombre}. No se borró nada.`, variant: 'success' });
+    },
+    onError: (error: Error) => toast({ title: 'Error al cambiar el modo', description: error.message, variant: 'destructive' }),
+  });
+  const reabrirAsistente = useMutation({
+    mutationFn: async () => apiPut('/organizaciones/me/info', { configuracion: { onboarding: { completado: false } } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['organizacion'] }),
   });
 
   const updateMutation = useMutation({
@@ -159,26 +203,150 @@ export default function ConfiguracionPage() {
   }
 
   return (
+    <Protect permission="organizaciones:actualizar" fallbackType="redirect">
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-500 pb-12">
       <div className="flex items-center gap-3">
         <div className="p-3 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
           <Settings className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Configuración Global</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Configuración</h2>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">
-            Administra los datos comerciales, módulos activos y políticas de tu franquicia o gimnasio.
+            Los datos de tu gimnasio, cuánto detalle muestra el sistema y las reglas del día a día.
           </p>
         </div>
       </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-8">
         <Tabs defaultValue="empresa" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 mb-8">
-            <TabsTrigger value="empresa" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Perfil</TabsTrigger>
-            <TabsTrigger value="modulos" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Módulos</TabsTrigger>
-            <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Políticas</TabsTrigger>
+          {/* Pestañas de 11.12: Mi gimnasio, Modo y módulos y Reglas (desde
+              intermedio). "Avanzado" se agrega cuando haya opciones de experto
+              que no sean reglas (kiosco, horizonte de generación). */}
+          <TabsList className={`grid w-full max-w-lg ${alMenos('intermedio') ? 'grid-cols-3' : 'grid-cols-2'} bg-slate-100 dark:bg-slate-800 p-1 mb-8`}>
+            <TabsTrigger value="empresa" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Mi gimnasio</TabsTrigger>
+            <TabsTrigger value="modo" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Modo y módulos</TabsTrigger>
+            {alMenos('intermedio') && (
+              <TabsTrigger value="politicas" className="data-[state=active]:bg-white dark:bg-slate-900 data-[state=active]:shadow-sm">Reglas</TabsTrigger>
+            )}
           </TabsList>
+
+          <TabsContent value="modo" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
+            <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">¿Cuánto detalle quieres ver? <Ayuda tema="modo" /></CardTitle>
+                <CardDescription>
+                  El modo decide cuántas opciones muestra el sistema. Cambiarlo no borra datos ni reglas: lo que ya configuraste sigue ahí, solo se oculta o se vuelve a mostrar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {MODOS_USO.map((m) => (
+                  <button
+                    key={m.valor}
+                    type="button"
+                    onClick={() => m.valor !== modo && modoMutation.mutate(m.valor)}
+                    disabled={modoMutation.isPending}
+                    className={`w-full rounded-lg border p-4 text-left transition-colors ${m.valor === modo ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-300'}`}
+                  >
+                    <span className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-900 dark:text-white">{m.nombre}</span>
+                      {m.valor === modo && <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Modo actual</span>}
+                    </span>
+                    <span className="block text-sm text-zinc-600 dark:text-zinc-300 mt-1">{m.idea}</span>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400 mt-1">Para: {m.paraQuien}</span>
+                  </button>
+                ))}
+                <div className="pt-2">
+                  <Button type="button" variant="outline" onClick={() => reabrirAsistente.mutate()} disabled={reabrirAsistente.isPending}>
+                    Responder de nuevo las preguntas de inicio
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-xs border-slate-200 dark:border-slate-800">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
+                  <Layers className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+                  Módulos Activos
+                </CardTitle>
+                <CardDescription>
+                  Enciende o apaga partes del sistema según las necesidades de tu gimnasio.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Punto de Venta e Inventario</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa las funciones de cajas, productos y ventas de artículos sueltos.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.puntoVenta')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.puntoVenta', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Clases Grupales y Disciplinas</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, instructores y cupos para clases de zumba, spinning, etc.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.clasesGrupales')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.clasesGrupales', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Acceso</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Registra las entradas y salidas de miembros y visitantes, valida su membresía y marca la asistencia a clases reservadas.</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlAcceso')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlAcceso', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Equipo y jornadas</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el equipo, sus horarios de trabajo, las jornadas y la agenda de cobertura.</p>
+                  </div>
+                  <Switch 
+                    checked={form.watch('configuracion.modulos.controlPersonal')} 
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlPersonal', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Reportes Avanzados</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa proyecciones financieras y métricas complejas en el panel de inicio.</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.reportesAvanzados')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.reportesAvanzados', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Gastos</Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita el catálogo de proveedores y el registro de gastos puntuales y recurrentes (alquiler, nómina, servicios).</p>
+                  </div>
+                  <Switch
+                    checked={form.watch('configuracion.modulos.controlGastos')}
+                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlGastos', c, { shouldDirty: true })}
+                    disabled={isLoading || updateMutation.isPending}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           
           <TabsContent value="empresa" className="space-y-6 mt-4">
             {/* Datos Generales / Comerciales */}
@@ -315,75 +483,13 @@ export default function ConfiguracionPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="modulos" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
-            <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-              <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
-                <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
-                  <Layers className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Módulos Activos
-                </CardTitle>
-                <CardDescription>
-                  Enciende o apaga partes del sistema según las necesidades de tu gimnasio.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Punto de Venta e Inventario</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa las funciones de cajas, productos y ventas de artículos sueltos.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.puntoVenta')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.puntoVenta', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Clases Grupales y Disciplinas</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Permite gestionar horarios, entrenadores y capacidad para clases de zumba, spinning, etc.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.clasesGrupales')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.clasesGrupales', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Control de Personal</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Habilita la gestión de asistencias, turnos laborales y permisos para tus empleados.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.controlPersonal')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.controlPersonal', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold text-slate-900 dark:text-white">Reportes Avanzados</Label>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Activa proyecciones financieras y métricas complejas en el panel de inicio.</p>
-                  </div>
-                  <Switch 
-                    checked={form.watch('configuracion.modulos.reportesAvanzados')} 
-                    onCheckedChange={(c) => form.setValue('configuracion.modulos.reportesAvanzados', c, { shouldDirty: true })}
-                    disabled={isLoading || updateMutation.isPending}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="politicas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">
             <Card className="shadow-xs border-slate-200 dark:border-slate-800">
               <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
                   <ShieldCheck className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Políticas de Registro de Clientes
+                  Datos obligatorios de los clientes
                 </CardTitle>
                 <CardDescription>
                   Define qué datos son estrictamente obligatorios al inscribir a una nueva persona.
@@ -448,7 +554,7 @@ export default function ConfiguracionPage() {
               <CardHeader className="bg-slate-50/50 dark:bg-slate-900 rounded-t-xl border-b border-slate-100 dark:border-slate-800">
                 <CardTitle className="flex items-center gap-2 text-lg text-slate-800 dark:text-slate-100">
                   <Clock className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-                  Políticas de Programación de Clases
+                  Reglas de clases y del equipo
                 </CardTitle>
                 <CardDescription>
                   Define qué tan estricta es la validación entre los turnos de tus entrenadores y las clases que se programan.
@@ -463,7 +569,7 @@ export default function ConfiguracionPage() {
                     className="mt-1"
                   />
                   <div className="space-y-1">
-                    <Label className="font-medium text-slate-900 dark:text-white">Exigir turno registrado para programar una clase</Label>
+                    <Label className="font-medium text-slate-900 dark:text-white">Exigir que el instructor trabaje a esa hora para programar una clase</Label>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Si está inactivo (recomendado para gimnasios pequeños), solo se muestra una advertencia cuando el entrenador
                       no tiene turno en ese horario, pero la clase se puede guardar igual. Actívalo en franquicias donde la cobertura
@@ -471,16 +577,59 @@ export default function ConfiguracionPage() {
                     </p>
                   </div>
                 </div>
+                {/* Jornadas del equipo (plan 7.2): tolerancia antes de mostrar a alguien como atrasado. */}
+                {form.watch('configuracion.modulos.controlPersonal') && (
+                  <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Input
+                      id="toleranciaAtraso"
+                      type="number"
+                      min={0}
+                      max={120}
+                      {...form.register('configuracion.jornadas.toleranciaAtrasoMinutos', { valueAsNumber: true })}
+                      disabled={isLoading || updateMutation.isPending}
+                      className="w-20 shrink-0"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="toleranciaAtraso" className="font-medium text-slate-900 dark:text-white">Minutos de tolerancia para llegar</Label> <Ayuda tema="tolerancia" />
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        En Jornadas, alguien aparece como atrasado si no marcó su entrada pasados estos minutos desde su hora de inicio.
+                      </p>
+                      {form.formState.errors.configuracion?.jornadas?.toleranciaAtrasoMinutos && (
+                        <p className="text-xs text-red-500 dark:text-red-400">{form.formState.errors.configuracion.jornadas.toleranciaAtrasoMinutos.message}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* Decisión D4: solo en experto; por defecto solo el ingreso al gimnasio descuenta sesión. */}
+                {alMenos('experto') && (
+                  <div className="flex items-start space-x-3 bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Switch
+                      checked={form.watch('configuracion.clases.descontarSesionEnClase')}
+                      onCheckedChange={(c) => form.setValue('configuracion.clases.descontarSesionEnClase', c, { shouldDirty: true })}
+                      disabled={isLoading || updateMutation.isPending}
+                      className="mt-1"
+                    />
+                    <div className="space-y-1">
+                      <Label className="font-medium text-slate-900 dark:text-white">Asistir a una clase descuenta una sesión</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Para planes por sesiones. Si está inactivo, solo el ingreso al gimnasio descuenta. Si lo activas, marcar a un
+                        cliente como &quot;asistió&quot; en una clase también le descuenta una sesión (y corregirlo se la devuelve).
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end sticky bottom-6 z-10 bg-white dark:bg-slate-900/80 backdrop-blur-sm p-4 -mx-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <Button 
-            type="submit" 
+        {/* Solo el botón flota: una franja ancha tapaba contenido (p. ej. la
+            tarjeta "Experto") en pantallas de poca altura. */}
+        <div className="flex justify-end sticky bottom-6 z-10 pointer-events-none">
+          <Button
+            type="submit"
             size="lg"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 rounded-full px-8 font-bold"
+            className="pointer-events-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-none rounded-full px-8 font-bold"
             disabled={updateMutation.isPending || isLoading || !form.formState.isDirty}
           >
             {updateMutation.isPending ? 'Guardando Cambios...' : 'Guardar Configuración'}
@@ -488,5 +637,6 @@ export default function ConfiguracionPage() {
         </div>
       </form>
     </div>
+    </Protect>
   );
 }

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
@@ -17,10 +19,11 @@ import { Protect } from '@/components/ui/protect';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, Plus, Edit, Trash2, Search, Warehouse, ArchiveRestore } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Search, Warehouse, ArchiveRestore, ShoppingCart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
-import { Label } from '@/components/ui/label';
+import { VentaProductoModal } from '@/components/ui/venta-producto-modal';
+import { useModoUso } from '@/hooks/use-modo-uso';
 
 const productoSchema = z.object({
   nombre: z.string({ message: 'El nombre es obligatorio' }).min(2, 'Mínimo 2 caracteres'),
@@ -70,10 +73,18 @@ export default function ProductosPage() {
   const { toast } = useToast();
   const [showDeleted, setShowDeleted] = useState(false);
   const { token, user } = useAuth();
+  const { hasPermission } = usePermissions();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [activeTab, setActiveTab] = useState('catalogo');
+  const [ventaOpen, setVentaOpen] = useState(false);
+  // Productos por modo (plan 11.5): simple = nombre + precio, sin stock;
+  // intermedio = stock simple con aviso de stock bajo; experto = todo.
+  const { esSimple, esExperto } = useModoUso();
   const [searchProducto, setSearchProducto] = useState('');
   const [searchInventario, setSearchInventario] = useState('');
 
@@ -186,7 +197,7 @@ export default function ProductosPage() {
   const { data: inventarios, isLoading: loadingInventarios } = useQuery({
     queryKey: ['inventarios', activeTenantId],
     queryFn: async () => unwrapList(await apiGet('/inventarios')),
-    enabled: !!token,
+    enabled: !!token && hasPermission('inventarios:leer'),
   });
 
   const { data: sucursales } = useQuery({
@@ -231,7 +242,7 @@ export default function ProductosPage() {
 
   const handleAddInventario = () => {
     setEditingInventario(null);
-    inventarioForm.reset({ productoId: '', sucursalId: userSucursalId || '', cantidadActual: 0, puntoReorden: 5, ubicacionBodega: '' });
+    inventarioForm.reset({ productoId: '', sucursalId: userSucursalId || sucursalActiva || '', cantidadActual: 0, puntoReorden: 5, ubicacionBodega: '' });
     setInventarioModalOpen(true);
   };
 
@@ -265,18 +276,29 @@ export default function ProductosPage() {
   return (
     <Protect permission="productos:leer" fallbackType="redirect">
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Productos e Inventario</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona el catálogo de productos y su stock por sucursal.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{esSimple ? 'Productos' : 'Productos e inventario'}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {esSimple ? 'Lo que vendes además de membresías: bebidas, suplementos, accesorios.' : 'El catálogo de productos y su stock en cada sucursal.'}
+            </p>
+          </div>
+          <Protect permission="transacciones:crear">
+            <Button onClick={() => setVentaOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              <ShoppingCart className="mr-2 h-4 w-4" /> Vender producto
+            </Button>
+          </Protect>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="catalogo">Catálogo</TabsTrigger>
-            <TabsTrigger value="inventario" badge={bajoStockCount > 0 ? bajoStockCount : undefined}>
-              Inventario por Sucursal
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={esSimple ? 'catalogo' : activeTab} onValueChange={setActiveTab}>
+          {!esSimple && (
+            <TabsList>
+              <TabsTrigger value="catalogo">Catálogo</TabsTrigger>
+              <TabsTrigger value="inventario" badge={bajoStockCount > 0 ? bajoStockCount : undefined}>
+                {esExperto ? 'Inventario por sucursal' : 'Stock'}
+              </TabsTrigger>
+            </TabsList>
+          )}
 
           {/* ================= CATÁLOGO ================= */}
           <TabsContent value="catalogo">
@@ -431,8 +453,8 @@ export default function ProductosPage() {
                       <TableHead>Producto</TableHead>
                       <TableHead>Sucursal</TableHead>
                       <TableHead>Cantidad Actual</TableHead>
-                      <TableHead>Punto de Reorden</TableHead>
-                      <TableHead>Ubicación</TableHead>
+                      <TableHead>Avisar con</TableHead>
+                      {esExperto && <TableHead>Ubicación</TableHead>}
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -460,9 +482,11 @@ export default function ProductosPage() {
                           <TableCell>
                             <span className="text-xs text-slate-600 dark:text-slate-400">{inv.puntoReorden}</span>
                           </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-slate-600 dark:text-slate-400">{inv.ubicacionBodega || '-'}</span>
-                          </TableCell>
+                          {esExperto && (
+                            <TableCell>
+                              <span className="text-xs text-slate-600 dark:text-slate-400">{inv.ubicacionBodega || '-'}</span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               <Protect permission="inventarios:actualizar">
@@ -497,14 +521,29 @@ export default function ProductosPage() {
           sections={[
             {
               fields: [
-                { name: 'nombre', label: 'Nombre del Producto', type: 'text', placeholder: 'Ej. Botella Shaker', colSpan: 2 },
-                { name: 'sku', label: 'SKU (Opcional)', type: 'text', placeholder: 'Ej. SHK-001' },
-                { name: 'precioVenta', label: 'Precio de Venta', type: 'number', placeholder: '0.00', allowDecimals: true },
-                { name: 'descripcion', label: 'Descripción (Opcional)', type: 'text', colSpan: 2 },
-                { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }], colSpan: 2 },
+                { name: 'nombre', label: 'Nombre del producto', type: 'text', placeholder: 'Ej. Botella Shaker', colSpan: 2 },
+                { name: 'precioVenta', label: 'Precio de venta', type: 'number', placeholder: '0.00', allowDecimals: true, ...(esExperto ? {} : { colSpan: 2 }) },
+                ...(esExperto
+                  ? [
+                      { name: 'sku', label: 'Código / SKU (opcional)', type: 'text', placeholder: 'Ej. SHK-001' },
+                      { name: 'descripcion', label: 'Descripción (opcional)', type: 'text', colSpan: 2 },
+                      { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }], colSpan: 2 },
+                    ]
+                  : []),
               ],
             },
-          ]}
+            // En simple e intermedio, lo demás va en "Más opciones".
+            ...(esExperto
+              ? []
+              : [{
+                  plegable: true,
+                  fields: [
+                    { name: 'sku', label: 'Código / SKU (opcional)', type: 'text', placeholder: 'Ej. SHK-001' },
+                    { name: 'descripcion', label: 'Descripción (opcional)', type: 'text', colSpan: 2 },
+                    ...(editingProducto ? [{ name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }], colSpan: 2 }] : []),
+                  ],
+                }]),
+          ] as any}
           onSubmit={onSubmitProducto as any}
           isPending={createProductoMutation.isPending || updateProductoMutation.isPending}
           submitLabel="Guardar Producto"
@@ -528,7 +567,7 @@ export default function ProductosPage() {
                   options: productosActivos.map((p: Producto) => ({ label: `${p.nombre}${p.sku ? ` (${p.sku})` : ''}`, value: p.id })),
                   colSpan: 2,
                 },
-                ...(!userSucursalId
+                ...(!userSucursalId && (editingInventario ? variasSucursales : !sucursalActiva)
                   ? [{
                       name: 'sucursalId',
                       label: 'Sucursal',
@@ -539,9 +578,9 @@ export default function ProductosPage() {
                       colSpan: 2 as const,
                     }]
                   : []),
-                { name: 'cantidadActual', label: 'Cantidad Actual', type: 'number', placeholder: '0' },
-                { name: 'puntoReorden', label: 'Punto de Reorden', type: 'number', placeholder: '5' },
-                { name: 'ubicacionBodega', label: 'Ubicación en Bodega (Opcional)', type: 'text', placeholder: 'Ej. Estante A-3', colSpan: 2 },
+                { name: 'cantidadActual', label: 'Cantidad actual', type: 'number', placeholder: '0' },
+                { name: 'puntoReorden', label: 'Avisar cuando queden', type: 'number', placeholder: '5' },
+                ...(esExperto ? [{ name: 'ubicacionBodega', label: 'Ubicación en bodega (opcional)', type: 'text' as const, placeholder: 'Ej. Estante A-3', colSpan: 2 as const }] : []),
               ],
             },
           ]}
@@ -549,6 +588,8 @@ export default function ProductosPage() {
           isPending={saveInventarioMutation.isPending}
           submitLabel="Guardar Inventario"
         />
+
+        <VentaProductoModal open={ventaOpen} onOpenChange={setVentaOpen} />
 
         <GlobalConfirmDialog
           open={confirmOpen}

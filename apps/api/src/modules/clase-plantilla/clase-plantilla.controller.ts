@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Put } from '@nestjs/common';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ClasePlantillaService } from './clase-plantilla.service';
 import { CreateClasePlantillaDto } from './dto/create-clase-plantilla.dto';
+import { ActualizarSerieClaseDto, EliminarSerieClaseDto, SerieClaseDto } from './dto/serie-clase.dto';
 import { UpdateClasePlantillaDto } from './dto/update-clase-plantilla.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -32,6 +33,27 @@ export class ClasePlantillaController {
   @RequirePermissions({ accion: 'crear', modulo: 'clases' })
   create(@Body() dto: CreateClasePlantillaDto) {
     return this.clasePlantillaService.create(dto);
+  }
+
+  // Series (clase recurrente con varios días). Crear y editar generan /
+  // sincronizan las clases futuras en el acto.
+  @Post('serie')
+  @RequirePermissions({ accion: 'crear', modulo: 'clases' })
+  crearSerie(@Body() dto: SerieClaseDto) {
+    return this.clasePlantillaService.crearSerie(dto);
+  }
+
+  @Put('serie')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'clases' })
+  actualizarSerie(@Body() dto: ActualizarSerieClaseDto) {
+    return this.clasePlantillaService.actualizarSerie(dto);
+  }
+
+  // POST y no DELETE: la lista de ids va en el body.
+  @Post('serie/eliminar')
+  @RequirePermissions({ accion: 'eliminar', modulo: 'clases' })
+  eliminarSerie(@Body() dto: EliminarSerieClaseDto) {
+    return this.clasePlantillaService.eliminarSerie(dto.ids);
   }
 
   @Get()

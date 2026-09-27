@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
+import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -141,6 +142,9 @@ export default function GastosPage() {
   const { token, user } = useAuth();
   const { activeTenantId } = useTenantStore();
   const userSucursalId = user?.sucursalId;
+  // Sucursal activa de la barra superior: al crear se usa esa y no se vuelve
+  // a preguntar. Al editar, quien tiene acceso a todas puede cambiarla.
+  const { sucursalId: sucursalActiva, variasSucursales } = useSucursalActiva();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,7 +191,7 @@ export default function GastosPage() {
     mutationFn: async (values: GastoFormValues) => {
       const monto = Number(values.monto);
       const payload: Record<string, unknown> = {
-        sucursalId: userSucursalId || values.sucursalId || undefined,
+        sucursalId: userSucursalId || values.sucursalId || sucursalActiva || undefined,
         tipo: 'EGRESO',
         proveedorId: values.proveedorId || undefined,
         beneficiario: values.beneficiario || undefined,
@@ -217,7 +221,7 @@ export default function GastosPage() {
 
   const handleAddNew = () => {
     form.reset({
-      sucursalId: userSucursalId || '',
+      sucursalId: userSucursalId || sucursalActiva || '',
       proveedorId: '',
       beneficiario: '',
       tipoConcepto: '',
@@ -264,7 +268,7 @@ export default function GastosPage() {
   const savePlantillaMutation = useMutation({
     mutationFn: async (values: GastoPlantillaFormValues) => {
       const payload: Record<string, unknown> = {
-        sucursalId: userSucursalId || values.sucursalId,
+        sucursalId: userSucursalId || values.sucursalId || sucursalActiva,
         proveedorId: values.proveedorId || undefined,
         beneficiario: values.beneficiario || undefined,
         tipoConcepto: values.tipoConcepto,
@@ -320,7 +324,7 @@ export default function GastosPage() {
   const handleAddNewPlantilla = () => {
     setEditingPlantilla(null);
     plantillaForm.reset({
-      sucursalId: userSucursalId || '',
+      sucursalId: userSucursalId || sucursalActiva || '',
       proveedorId: '',
       beneficiario: '',
       tipoConcepto: '',
@@ -639,7 +643,7 @@ export default function GastosPage() {
               { name: 'tipoConcepto', label: 'Categoría', type: 'select', options: CATEGORIAS_EGRESO, colSpan: 2 },
               { name: 'proveedorId', label: 'Proveedor (Opcional)', type: 'select', options: proveedorOptions },
               { name: 'beneficiario', label: 'Beneficiario (si no hay proveedor)', type: 'text', placeholder: 'Ej. Ferretería El Tornillo' },
-              ...(!userSucursalId
+              ...(!userSucursalId && !sucursalActiva
                 ? [{
                     name: 'sucursalId',
                     label: 'Sucursal',
@@ -672,7 +676,7 @@ export default function GastosPage() {
               { name: 'tipoConcepto', label: 'Categoría', type: 'select', options: CATEGORIAS_EGRESO, colSpan: 2 },
               { name: 'proveedorId', label: 'Proveedor (Opcional)', type: 'select', options: proveedorOptions },
               { name: 'beneficiario', label: 'Beneficiario (si no hay proveedor)', type: 'text', placeholder: 'Ej. Arrendador' },
-              ...(!userSucursalId
+              ...(!userSucursalId && (editingPlantilla ? variasSucursales : !sucursalActiva)
                 ? [{
                     name: 'sucursalId',
                     label: 'Sucursal',

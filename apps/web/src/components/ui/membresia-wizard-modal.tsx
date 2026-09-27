@@ -356,12 +356,14 @@ export function MembresiaWizardModal({
                         )}
                     </Button>
 
+                    {/* `key` distinto por botón: ver global-form-modal.tsx (sin él,
+                        el clic en "Siguiente" del paso 2 terminaba enviando el form). */}
                     {step < 3 ? (
-                        <Button type="button" onClick={nextStep} disabled={!watchClienteId && step === 1}>
+                        <Button key="next" type="button" onClick={nextStep} disabled={!watchClienteId && step === 1}>
                             Siguiente <ChevronRight className="w-4 h-4 ml-2" />
                         </Button>
                     ) : (
-                        <Button type="submit" disabled={isPending} className="bg-indigo-600 hover:bg-indigo-700">
+                        <Button key="submit" type="submit" disabled={isPending} className="bg-indigo-600 hover:bg-indigo-700">
                             {isPending ? 'Procesando...' : 'Confirmar Venta'}
                         </Button>
                     )}

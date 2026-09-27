@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateSucursalDto } from './dto/create-sucursal.dto';
@@ -10,11 +10,30 @@ import { paginar, resolverPaginacion } from '../../common/utils/pagination.util'
 export class SucursalService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Sede principal: es la sucursal con la que arranca todo el sistema para
+  // quien tiene acceso a todas (sucursal predeterminada, plan de
+  // simplificación 5.1). Reglas, sin cambio de base de datos:
+  //  - Hay una sola principal: marcar una desmarca las demás.
+  //  - La primera sucursal que se crea es la principal.
+  //  - La principal no se desmarca, desactiva ni elimina mientras haya otras:
+  //    primero se marca otra como principal.
   async create(createSucursalDto: CreateSucursalDto) {
-    return this.prisma.extendedClient.sucursal.create({
-      // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
-      data: createSucursalDto as unknown as Prisma.SucursalUncheckedCreateInput,
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      const hayPrincipal = await tx.sucursal.count({ where: { esPrincipal: true, estado: 'ACTIVO' } });
+      const esPrincipal = createSucursalDto.esPrincipal === true || hayPrincipal === 0;
+      if (esPrincipal) await tx.sucursal.updateMany({ where: { esPrincipal: true }, data: { esPrincipal: false } });
+      return tx.sucursal.create({
+        // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
+        data: { ...createSucursalDto, esPrincipal } as unknown as Prisma.SucursalUncheckedCreateInput,
+      });
     });
+  }
+
+  private async assertPuedeDejarDeSerPrincipal(tx: Prisma.TransactionClient, id: string, accion: string) {
+    const otras = await tx.sucursal.count({ where: { id: { not: id } } });
+    if (otras > 0) {
+      throw new BadRequestException(`Esta es la sede principal. Antes de ${accion}, marca otra sucursal como principal.`);
+    }
   }
 
   async findAll(query?: PaginationQueryDto) {
@@ -42,18 +61,27 @@ export class SucursalService {
 
   async update(id: string, updateSucursalDto: UpdateSucursalDto) {
     // Validar existencia en el tenant antes de actualizar
-    await this.findOne(id);
+    const actual = await this.findOne(id);
 
-    return this.prisma.extendedClient.sucursal.update({
-      where: { id },
-      data: updateSucursalDto,
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      if (actual.esPrincipal) {
+        if (updateSucursalDto.esPrincipal === false) await this.assertPuedeDejarDeSerPrincipal(tx, id, 'quitarle esa marca');
+        if (updateSucursalDto.estado && updateSucursalDto.estado !== 'ACTIVO') await this.assertPuedeDejarDeSerPrincipal(tx, id, 'desactivarla');
+      } else if (updateSucursalDto.esPrincipal === true) {
+        if ((updateSucursalDto.estado ?? actual.estado) !== 'ACTIVO') {
+          throw new BadRequestException('Una sucursal inactiva no puede ser la sede principal.');
+        }
+        await tx.sucursal.updateMany({ where: { esPrincipal: true, id: { not: id } }, data: { esPrincipal: false } });
+      }
+      return tx.sucursal.update({ where: { id }, data: updateSucursalDto });
     });
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.extendedClient.sucursal.delete({
-      where: { id },
+    const actual = await this.findOne(id);
+    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      if (actual.esPrincipal) await this.assertPuedeDejarDeSerPrincipal(tx, id, 'eliminarla');
+      return tx.sucursal.delete({ where: { id } });
     });
   }
 

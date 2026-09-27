@@ -15,10 +15,12 @@ import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { Protect } from '@/components/ui/protect';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { GlobalConfirmDialog } from '@/components/ui/global-confirm-dialog';
-import { Building2, Plus, Edit, Trash2, Search, ArchiveRestore } from 'lucide-react';
+import { Building2, Plus, Edit, Trash2, Search, ArchiveRestore, DoorOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { useModoUso } from '@/hooks/use-modo-uso';
+import { SalasDialog } from './SalasDialog';
 
 const sucursalSchema = z.object({
   nombre: z.string({ message: "El nombre es obligatorio" }).min(3, "El nombre es obligatorio"),
@@ -35,6 +37,8 @@ export default function SucursalesPage() {
   const { toast } = useToast();
   const { token } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [sucursalSalas, setSucursalSalas] = useState<{ id: string; nombre: string } | null>(null);
+  const { alMenos } = useModoUso();
   const [editingSucursal, setEditingSucursal] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { activeTenantId } = useTenantStore();
@@ -181,22 +185,22 @@ export default function SucursalesPage() {
             open={isDialogOpen}
             onOpenChange={setIsDialogOpen}
             title={editingSucursal ? 'Editar Sucursal' : 'Nueva Sucursal'}
-            description={editingSucursal ? 'Modifica los detalles de la sucursal.' : 'Agrega una nueva sede a tu organización.'}
+            description={editingSucursal ? 'Modifica los detalles de la sucursal.' : 'Agrega una nueva sucursal. Los planes y promociones ya valen para todas las sucursales.'}
             form={form as any}
             sections={[
               {
                 fields: [
-                  { name: 'nombre', label: 'Nombre de la Sede', type: 'text', placeholder: 'Ej. Sede Central', colSpan: 2 },
+                  { name: 'nombre', label: 'Nombre de la sucursal', type: 'text', placeholder: 'Ej. Sucursal Centro', colSpan: 2 },
                   { name: 'direccion', label: 'Dirección', type: 'text', placeholder: 'Ej. Av. Principal 123', colSpan: 2 },
                   { name: 'telefono', label: 'Teléfono (Solo números)', type: 'number', placeholder: 'Ej. 12345678' },
                   { name: 'estado', label: 'Estado', type: 'select', options: [{ label: 'Activo', value: 'ACTIVO' }, { label: 'Inactivo', value: 'INACTIVO' }] },
-                  { name: 'esPrincipal', label: 'Sede Principal', type: 'switch', description: 'Marcar esta sucursal como la central.', colSpan: 2 },
+                  { name: 'esPrincipal', label: 'Sucursal principal', type: 'switch', description: 'Es la sucursal con la que empieza a trabajar el sistema. Solo hay una: al marcar esta, se desmarca la anterior.', colSpan: 2 },
                 ]
               }
             ]}
             onSubmit={onSubmit as any}
             isPending={createMutation.isPending || updateMutation.isPending}
-            submitLabel="Guardar Sede"
+            submitLabel="Guardar sucursal"
           />
         </div>
 
@@ -216,14 +220,14 @@ export default function SucursalesPage() {
               {searchTerm ? 'Ninguna sucursal coincide con la búsqueda' : 'No hay sucursales registradas'}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre o dirección.' : 'Agrega tu primera sede.'}
+              {searchTerm ? 'Prueba con otro nombre o dirección.' : 'Agrega tu primera sucursal.'}
             </p>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Sede</TableHead>
+                <TableHead>Sucursal</TableHead>
                 <TableHead>Dirección</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Estado</TableHead>
@@ -240,7 +244,7 @@ export default function SucursalesPage() {
                       </div>
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-white text-sm">{sucursal.nombre}</p>
-                        {sucursal.esPrincipal && <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Sede principal</p>}
+                        {sucursal.esPrincipal && <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Sucursal principal</p>}
                       </div>
                     </div>
                   </TableCell>
@@ -269,6 +273,14 @@ export default function SucursalesPage() {
                         </Protect>
                       ) : (
                         <>
+                          {/* Salas (fase 6, DB-2): desde intermedio. */}
+                          {alMenos('intermedio') && (
+                            <Protect permission="sucursales:actualizar">
+                              <Button variant="ghost" size="sm" onClick={() => setSucursalSalas(sucursal)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 h-8 px-2">
+                                <DoorOpen className="h-4 w-4 mr-1" /> Salas
+                              </Button>
+                            </Protect>
+                          )}
                           <Protect permission="sucursales:actualizar">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(sucursal)} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
                               <Edit className="h-4 w-4" />
@@ -289,6 +301,8 @@ export default function SucursalesPage() {
           </Table>
         )}
         
+        <SalasDialog sucursal={sucursalSalas} onClose={() => setSucursalSalas(null)} />
+
         <GlobalConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
