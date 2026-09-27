@@ -8,6 +8,7 @@ import { paginar, resolverPaginacion } from '../../common/utils/pagination.util'
 import { CONCEPTOS_INGRESO, CONCEPTOS_EGRESO } from './tipo-concepto.util';
 import { moduloEstaActivo } from '../../common/utils/modulo.util';
 import { obtenerModoUso } from '../../common/utils/modo.util';
+import { desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 
 // Cuenta que se usa en modo simple cuando el cobro no indica una: la "caja"
 // del gimnasio. Se crea sola la primera vez (plan de simplificación, 4.4).
@@ -259,8 +260,11 @@ export class TransaccionService {
 
   async findAll(query?: QueryTransaccionDto) {
     const termino = query?.search?.trim();
-    const whereClause: Prisma.TransaccionWhereInput = {
-      ...(query?.tipo && { tipo: query.tipo }),
+    // Filtros comunes a la lista y a los totales (los totales ignoran `tipo`
+    // para mostrar siempre cobrado, gastado y neto del período).
+    const filtros: Prisma.TransaccionWhereInput = {
+      ...(query?.sucursalId && { sucursalId: query.sucursalId }),
+      ...((query?.desde || query?.hasta) && { fechaHora: await this.rangoLocal(query.desde, query.hasta) }),
       ...(termino && {
         OR: [
           { cliente: { nombre: { contains: termino, mode: 'insensitive' } } },
@@ -269,9 +273,10 @@ export class TransaccionService {
         ],
       }),
     };
+    const whereClause: Prisma.TransaccionWhereInput = { ...filtros, ...(query?.tipo && { tipo: query.tipo }) };
 
     const { page, limit, skip, take } = resolverPaginacion(query);
-    const [transacciones, total] = await Promise.all([
+    const [transacciones, total, ingresos, egresos] = await Promise.all([
       this.prisma.extendedClient.transaccion.findMany({
         where: whereClause,
         include: {
@@ -284,15 +289,43 @@ export class TransaccionService {
               cuentaBancaria: { select: { banco: true, numeroCuenta: true } }
             }
           },
-          detalles: true
+          // Nombre del plan o producto para mostrar el concepto en la lista.
+          detalles: {
+            include: {
+              membresia: { select: { plan: { select: { nombre: true } } } },
+              producto: { select: { nombre: true } },
+            },
+          },
         },
         orderBy: { fechaHora: 'desc' },
         skip,
         take,
       }),
       this.prisma.extendedClient.transaccion.count({ where: whereClause }),
+      this.prisma.extendedClient.transaccion.aggregate({ where: { ...filtros, tipo: 'INGRESO' }, _sum: { montoTotal: true } }),
+      this.prisma.extendedClient.transaccion.aggregate({ where: { ...filtros, tipo: 'EGRESO' }, _sum: { montoTotal: true } }),
     ]);
 
-    return paginar(transacciones, total, page, limit);
+    return {
+      ...paginar(transacciones, total, page, limit),
+      resumen: {
+        ingresos: Number(ingresos._sum.montoTotal ?? 0),
+        egresos: Number(egresos._sum.montoTotal ?? 0),
+      },
+    };
+  }
+
+  // [desde 00:00, hasta+1 00:00) en la hora local de la organización.
+  private async rangoLocal(desde?: string, hasta?: string): Promise<Prisma.DateTimeFilter> {
+    const organizacionId = this.cls.get('organizacionId');
+    const org = organizacionId
+      ? await this.prisma.extendedClient.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } })
+      : null;
+    const zona = org?.zonaHoraria ?? null;
+    const dia = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00Z`);
+    return {
+      ...(desde && { gte: desdeHoraLocal(dia(desde), 0, zona) }),
+      ...(hasta && { lt: desdeHoraLocal(new Date(dia(hasta).getTime() + 86_400_000), 0, zona) }),
+    };
   }
 }

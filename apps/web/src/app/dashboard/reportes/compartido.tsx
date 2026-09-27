@@ -3,21 +3,13 @@
 import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
+import { fechaISO } from '@/lib/formato';
 
-export const bs = (n: number) => `Bs. ${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-export const NOMBRE_PAGO: Record<string, string> = {
-  EFECTIVO: 'Efectivo',
-  QR: 'QR',
-  TARJETA: 'Tarjeta',
-  TRANSFERENCIA: 'Transferencia',
-  PAGO_MOVIL: 'Pago móvil',
-  OTRO: 'Otro',
-};
+export { bs, NOMBRE_PAGO } from '@/lib/formato';
 
 export type RangoPreset = 'mes' | 'mes_pasado' | 'tres_meses';
 
-const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const iso = fechaISO;
 
 // Rango de fechas locales del navegador para los reportes (el servidor
 // interpreta las fechas en la zona horaria de la organización).

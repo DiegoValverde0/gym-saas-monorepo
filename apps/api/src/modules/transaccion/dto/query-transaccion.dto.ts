@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { TipoTransaccion } from '@prisma/client';
 import { BusquedaQueryDto } from '../../../common/dto/busqueda-query.dto';
 
@@ -8,4 +8,18 @@ export class QueryTransaccionDto extends BusquedaQueryDto {
   @IsOptional()
   @IsEnum(TipoTransaccion)
   tipo?: TipoTransaccion;
+
+  // Fechas locales ("YYYY-MM-DD", ambas incluidas), interpretadas en la zona
+  // horaria de la organización, igual que en Reportes.
+  @IsOptional()
+  @IsDateString()
+  desde?: string;
+
+  @IsOptional()
+  @IsDateString()
+  hasta?: string;
+
+  @IsOptional()
+  @IsUUID()
+  sucursalId?: string;
 }
