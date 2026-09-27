@@ -56,20 +56,10 @@ export class DashboardService {
       }
     });
 
-    // 4. Membresías por vencer (próximos 5 días)
-    const next5Days = new Date();
-    next5Days.setDate(next5Days.getDate() + 5);
-    
-    const membresiasPorVencer = await this.prisma.extendedClient.membresia.count({
-      where: {
-        estado: 'ACTIVA',
-        fechaFin: {
-            gte: today,
-            lte: next5Days
-        },
-        cliente: sucursalId ? { sucursalBaseId: sucursalId } : undefined
-      }
-    });
+    // 4. Membresías por vencer: el mismo cálculo que la lista del Inicio
+    // (7 días en la hora local, sin contar a quien ya renovó). Antes la
+    // tarjeta contaba 5 días y la lista 7, y no coincidían.
+    const membresiasPorVencer = (await this.getPorVencer(sucursalId)).length;
 
     return {
       ingresosHoy: ingresosHoy._sum.montoTotal || 0,

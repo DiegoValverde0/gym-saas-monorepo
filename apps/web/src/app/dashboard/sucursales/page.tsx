@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { useModoUso } from '@/hooks/use-modo-uso';
 import { SalasDialog } from './SalasDialog';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const sucursalSchema = z.object({
   nombre: z.string({ message: "El nombre es obligatorio" }).min(3, "El nombre es obligatorio"),
@@ -212,17 +213,16 @@ export default function SucursalesPage() {
             </div>
           </div>
         ) : filteredSucursales.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ninguna sucursal coincide con la búsqueda' : 'No hay sucursales registradas'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre o dirección.' : 'Agrega tu primera sucursal.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Building2}
+            title={searchTerm ? 'Ninguna sucursal coincide con la búsqueda' : 'No hay sucursales registradas'}
+            description={searchTerm ? 'Prueba con otro nombre o dirección.' : 'Agrega tu primera sucursal.'}
+            actionLabel="Nueva Sucursal"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={handleAddNew}
+            permission="sucursales:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>

@@ -6,7 +6,7 @@ import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit, Truck, Trash2, Search, ArchiveRestore } from 'lucide-react';
+import { Edit, Truck, Trash2, Search, ArchiveRestore, Plus } from 'lucide-react';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
@@ -19,6 +19,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const CATEGORIAS_GASTO = [
   { label: 'Sin categoría por defecto', value: '' },
@@ -171,17 +172,16 @@ export default function ProveedoresPage() {
             </div>
           </div>
         ) : dataList.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Truck className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ningún proveedor coincide con la búsqueda' : 'No hay proveedores registrados'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre o documento.' : 'Registra tu primer proveedor para poder asociarlo a un gasto.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Truck}
+            title={searchTerm ? 'Ningún proveedor coincide con la búsqueda' : 'No hay proveedores registrados'}
+            description={searchTerm ? 'Prueba con otro nombre o documento.' : 'Registra tu primer proveedor para poder asociarlo a un gasto.'}
+            actionLabel="Nuevo Proveedor"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={() => handleOpenModal()}
+            permission="transacciones:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>

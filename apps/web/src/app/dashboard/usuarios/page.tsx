@@ -17,6 +17,8 @@ import { Users, Plus, Edit, Trash2, ShieldCheck, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { nombreRol } from '@/lib/roles';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const usuarioSchema = z.object({
   nombreCompleto: z.string().min(3, "El nombre es obligatorio"),
@@ -185,7 +187,7 @@ export default function UsuariosPage() {
     return (
       asign.usuario?.nombreCompleto?.toLowerCase().includes(lower) ||
       asign.usuario?.correo?.toLowerCase().includes(lower) ||
-      asign.rol?.nombre?.toLowerCase().includes(lower)
+      nombreRol(asign.rol?.nombre).toLowerCase().includes(lower)
     );
   });
 
@@ -256,7 +258,7 @@ export default function UsuariosPage() {
                     type: 'select', 
                     placeholder: 'Selecciona el rol',
                     // SUPERADMIN es el rol de la cuenta de plataforma: no se asigna dentro de una organización (el backend también lo rechaza).
-                    options: (roles as any[] | undefined)?.filter((r: any) => r.nombre !== 'SUPERADMIN').map((r: any) => ({ label: r.nombre, value: r.id })) || [],
+                    options: (roles as any[] | undefined)?.filter((r: any) => r.nombre !== 'SUPERADMIN').map((r: any) => ({ label: nombreRol(r.nombre), value: r.id })) || [],
                     colSpan: 2
                   },
                   {
@@ -265,7 +267,7 @@ export default function UsuariosPage() {
                     type: 'select',
                     placeholder: 'Acceso Global (Todas las sucursales)',
                     options: [
-                      { label: 'Acceso Global (Todas)', value: 'global', className: 'font-semibold text-indigo-600 dark:text-indigo-400' },
+                      { label: 'Todas las sucursales', value: 'global', className: 'font-semibold text-indigo-600 dark:text-indigo-400' },
                       ...((sucursales as any[] | undefined)?.map((s: any) => ({ label: s.nombre, value: s.id })) || [])
                     ],
                     description: 'Si seleccionas una sucursal, el usuario solo podrá ver información (clientes, ventas) de esa sucursal.',
@@ -288,24 +290,23 @@ export default function UsuariosPage() {
             </div>
           </div>
         ) : filteredAsignaciones.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Users className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas registradas'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre, correo o rol.' : 'Crea la primera cuenta de acceso.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Users}
+            title={searchTerm ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas registradas'}
+            description={searchTerm ? 'Prueba con otro nombre, correo o rol.' : 'Crea la primera cuenta de acceso.'}
+            actionLabel="Nueva cuenta"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={handleAddNew}
+            permission="usuarios:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Cuenta</TableHead>
-                <TableHead>Rol (Permisos)</TableHead>
-                <TableHead>Restricción de Sucursal</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Sucursal</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -326,14 +327,14 @@ export default function UsuariosPage() {
                   <TableCell>
                     <Badge variant="primary">
                       <ShieldCheck className="w-3 h-3 mr-1" />
-                      {asign.rol?.nombre}
+                      {nombreRol(asign.rol?.nombre)}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     {asign.sucursal ? (
                       <span className="text-xs text-slate-600 dark:text-slate-400">{asign.sucursal.nombre}</span>
                     ) : (
-                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Global (Todas)</span>
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Todas las sucursales</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

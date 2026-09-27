@@ -131,7 +131,7 @@ export default function DashboardPage() {
                     <div className="text-2xl font-black text-amber-950 dark:text-amber-100 mt-2">
                       {(kpis as any)?.membresiasPorVencer}
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Membresías expiran en 5 días</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Vencen en los próximos 7 días</p>
                   </>
                 )}
             </CardContent>

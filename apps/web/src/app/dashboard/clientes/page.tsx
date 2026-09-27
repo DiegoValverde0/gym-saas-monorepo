@@ -40,6 +40,8 @@ const clienteSchema = z.object({
 
 type ClienteFormValues = z.infer<typeof clienteSchema>;
 
+const NOMBRE_DOCUMENTO: Record<string, string> = { CI: 'CI', PASAPORTE: 'Pasaporte', CARNET_EXTRANJERO: 'Extranjero' };
+
 export default function ClientesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -361,7 +363,11 @@ export default function ClientesPage() {
                   </TableCell>
                   <TableCell>
                     <div className="text-xs text-slate-600 dark:text-slate-400">
-                      <span className="font-medium text-slate-900 dark:text-white">{cliente.tipoDocumento}</span>: {cliente.numeroDocumento || '-'}
+                      {cliente.numeroDocumento ? (
+                        <><span className="font-medium text-slate-900 dark:text-white">{NOMBRE_DOCUMENTO[cliente.tipoDocumento] ?? cliente.tipoDocumento ?? 'CI'}</span> {cliente.numeroDocumento}</>
+                      ) : (
+                        'Sin documento'
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

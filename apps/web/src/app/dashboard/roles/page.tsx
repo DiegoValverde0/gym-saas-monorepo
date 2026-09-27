@@ -17,7 +17,8 @@ import { Protect } from '@/components/ui/protect';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Edit, Trash2, ShieldCheck, Search, ArchiveRestore } from 'lucide-react';
+import { Plus, Edit, Trash2, ShieldCheck, Search, ArchiveRestore, Copy } from 'lucide-react';
+import { nombreRol, descripcionRol, nombreModulo, nombreAccion } from '@/lib/roles';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -137,6 +138,17 @@ export default function RolesPage() {
     setIsSheetOpen(true);
   };
 
+  // Crear un rol propio a partir de otro (plan 11.9): mismos permisos, nombre nuevo.
+  const handleDuplicar = (rol: any) => {
+    setEditingRol(null);
+    form.reset({
+      nombre: `${nombreRol(rol.nombre)} (copia)`,
+      descripcion: descripcionRol(rol.nombre) ?? rol.descripcion ?? '',
+      permisosIds: rol.rolPermisos.map((rp: any) => rp.permisoId),
+    });
+    setIsSheetOpen(true);
+  };
+
   const handleDelete = (id: string) => {
     setConfirmConfig({
       title: '¿Eliminar Rol?',
@@ -150,9 +162,11 @@ export default function RolesPage() {
   if (!token) return null;
 
   const filteredRoles = (roles || []).filter((rol: any) => {
+    // El rol de la plataforma no se asigna dentro de un gimnasio.
+    if (!isSuperAdmin && rol.nombre === 'SUPERADMIN') return false;
     if (!searchTerm) return true;
     const lower = searchTerm.toLowerCase();
-    return rol.nombre?.toLowerCase().includes(lower) || rol.descripcion?.toLowerCase().includes(lower);
+    return [rol.nombre, nombreRol(rol.nombre), rol.descripcion, descripcionRol(rol.nombre)].some((t) => t?.toLowerCase().includes(lower));
   });
 
   // Agrupamos los permisos por módulo para la UI
@@ -169,8 +183,8 @@ export default function RolesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roles y Permisos</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configura el nivel de acceso de tu personal (RBAC).</p>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roles</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Qué puede ver y hacer cada persona del equipo según su rol.</p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -198,7 +212,7 @@ export default function RolesPage() {
           <GlobalFormModal
             open={isSheetOpen}
             onOpenChange={setIsSheetOpen}
-            title={editingRol ? 'Editar Rol' : 'Nuevo Rol'}
+            title={editingRol ? `Editar ${nombreRol(editingRol.nombre)}` : 'Nuevo Rol'}
             description={
               editingRol && !editingRol.organizacionId
                 ? 'Rol del sistema: el cambio se aplica a todas las organizaciones que lo usan. Los permisos de plataforma (organizaciones) no se muestran y se conservan tal cual.'
@@ -216,8 +230,8 @@ export default function RolesPage() {
                 ]
               },
               {
-                title: 'Permisos del Sistema',
-                description: 'Selecciona los módulos a los que este rol tendrá acceso.',
+                title: 'Permisos',
+                description: 'Marca lo que puede hacer este rol en cada parte del sistema.',
                 fields: [
                   {
                     name: 'permisosIds',
@@ -257,7 +271,7 @@ export default function RolesPage() {
                                   {permisosAgrupados && Object.keys(permisosAgrupados).map((modulo) => (
                                   <div key={modulo} className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm transition-all hover:border-indigo-100 dark:hover:border-indigo-900/50">
                                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                                      <h4 className="font-semibold text-zinc-900 dark:text-white capitalize">{modulo}</h4>
+                                      <h4 className="font-semibold text-zinc-900 dark:text-white">{nombreModulo(modulo)}</h4>
                                       <button
                                         type="button"
                                         className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors"
@@ -290,8 +304,8 @@ export default function RolesPage() {
                                             }}
                                             className="mt-0.5 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
                                           />
-                                          <span className="text-sm text-zinc-700 dark:text-zinc-300 capitalize font-medium group-hover:text-indigo-900 dark:group-hover:text-indigo-100 transition-colors">
-                                            {permiso.accion}
+                                          <span className="text-sm text-zinc-700 dark:text-zinc-300 font-medium group-hover:text-indigo-900 dark:group-hover:text-indigo-100 transition-colors">
+                                            {nombreAccion(permiso.accion)}
                                           </span>
                                         </label>
                                       ))}
@@ -332,9 +346,9 @@ export default function RolesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre del Rol</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Permisos Asignados</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Qué hace</TableHead>
+                <TableHead>Permisos</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -347,15 +361,17 @@ export default function RolesPage() {
                         <ShieldCheck className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{rol.nombre}</p>
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{nombreRol(rol.nombre)}</p>
                         {!rol.organizacionId && (
-                          <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Global · todas las organizaciones</p>
+                          <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">
+                            {isSuperAdmin ? 'Global · todas las organizaciones' : 'Rol base del sistema'}
+                          </p>
                         )}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{rol.descripcion || '-'}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-normal">{descripcionRol(rol.nombre) ?? (rol.descripcion || '-')}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="default">{rol.rolPermisos?.length || 0} permisos</Badge>
@@ -398,6 +414,13 @@ export default function RolesPage() {
                               );
                             })()}
                           </Protect>
+                          {!isSuperAdmin && (
+                            <Protect permission="roles:crear" fallbackType="hide">
+                              <Button variant="ghost" size="icon" onClick={() => handleDuplicar(rol)} title="Duplicar: crear un rol nuevo con estos mismos permisos" aria-label={`Duplicar ${nombreRol(rol.nombre)}`} className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </Protect>
+                          )}
                           {!rol.esSistema && (
                             <Protect permission="roles:eliminar" fallbackType="hide">
                               <Button variant="ghost" size="icon" onClick={() => handleDelete(rol.id)} className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">

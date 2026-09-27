@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Briefcase, Plus, Edit, Trash2, Clock, CalendarDays, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
+import { EmptyState } from '@/components/ui/empty-state';
 
 export default function PlanesPage() {
   const queryClient = useQueryClient();
@@ -190,17 +191,16 @@ export default function PlanesPage() {
             </div>
           </div>
         ) : filteredPlanes.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Briefcase className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ningún plan coincide con la búsqueda' : 'No hay planes registrados'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primer plan para comenzar a vender membresías.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Briefcase}
+            title={searchTerm ? 'Ningún plan coincide con la búsqueda' : 'No hay planes registrados'}
+            description={searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primer plan para comenzar a vender membresías.'}
+            actionLabel="Nuevo Plan"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={handleAddNew}
+            permission="planes:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>

@@ -10,6 +10,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
+import { fechaISO } from '@/lib/formato';
 import { useListaPaginada } from '@/hooks/use-lista-paginada';
 import { Paginacion } from '@/components/ui/paginacion';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const CATEGORIAS_EGRESO = [
   { label: 'Alquiler', value: 'ALQUILER' },
@@ -256,7 +258,7 @@ export default function GastosPage() {
       metodoPago: 'TRANSFERENCIA',
       cuentaBancariaId: '',
       diaDelMes: 1,
-      vigenciaDesde: new Date().toISOString().split('T')[0],
+      vigenciaDesde: fechaISO(new Date()),
       vigenciaHasta: '',
       activa: true,
     },
@@ -336,7 +338,7 @@ export default function GastosPage() {
       metodoPago: 'TRANSFERENCIA',
       cuentaBancariaId: '',
       diaDelMes: 1,
-      vigenciaDesde: new Date().toISOString().split('T')[0],
+      vigenciaDesde: fechaISO(new Date()),
       vigenciaHasta: '',
       activa: true,
     });
@@ -442,17 +444,16 @@ export default function GastosPage() {
                 </div>
               </div>
             ) : gastosList.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-                  <Receipt className="w-6 h-6" />
-                </div>
-                <p className="text-base font-semibold text-slate-900 dark:text-white">
-                  {lista.buscando ? 'Ningún gasto coincide con la búsqueda' : 'No hay gastos registrados'}
-                </p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {lista.buscando ? 'Prueba con otro nombre.' : 'Registra el primer gasto del negocio.'}
-                </p>
-              </div>
+              <EmptyState
+                icon={Receipt}
+                title={lista.buscando ? 'Ningún gasto coincide con la búsqueda' : 'No hay gastos registrados'}
+                description={lista.buscando ? 'Prueba con otro nombre.' : 'Registra el primer gasto del negocio.'}
+                actionLabel="Nuevo Gasto"
+                actionIcon={<Plus className="w-4 h-4" />}
+                onAction={handleAddNew}
+                permission="transacciones:crear"
+                isSearch={lista.buscando}
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -558,15 +559,15 @@ export default function GastosPage() {
                 </div>
               </div>
             ) : plantillaList.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-                  <Repeat className="w-6 h-6" />
-                </div>
-                <p className="text-base font-semibold text-slate-900 dark:text-white">No hay gastos recurrentes registrados</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Ej. &quot;Alquiler, día 5 de cada mes&quot; o &quot;Internet, día 10 de cada mes&quot;.
-                </p>
-              </div>
+              <EmptyState
+                icon={Repeat}
+                title="No hay gastos recurrentes registrados"
+                description="Ej. 'Alquiler, día 5 de cada mes' o 'Internet, día 10 de cada mes'."
+                actionLabel="Nuevo Gasto Recurrente"
+                actionIcon={<Plus className="w-4 h-4" />}
+                onAction={handleAddNewPlantilla}
+                permission="transacciones:crear"
+              />
             ) : (
               <Table>
                 <TableHeader>

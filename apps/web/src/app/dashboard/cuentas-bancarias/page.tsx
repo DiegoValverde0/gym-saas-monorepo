@@ -5,7 +5,7 @@ import { Protect } from '@/components/ui/protect';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { Button } from '@/components/ui/button';
-import { Edit, Landmark, Trash2, Search } from 'lucide-react';
+import { Edit, Landmark, Trash2, Search, Plus } from 'lucide-react';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { apiGet, apiPost, apiPatch, apiDelete, unwrapList } from '@/lib/api-client';
@@ -16,6 +16,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const cuentaSchema = z.object({
   banco: z.string().min(2, "Obligatorio"),
@@ -157,17 +158,16 @@ export default function CuentasBancariasPage() {
             </div>
           </div>
         ) : dataList.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Landmark className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas bancarias registradas'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro banco o número.' : 'Agrega tu primera cuenta para recibir transferencias.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Landmark}
+            title={searchTerm ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas bancarias registradas'}
+            description={searchTerm ? 'Prueba con otro banco o número.' : 'Agrega tu primera cuenta para recibir transferencias.'}
+            actionLabel="Nueva Cuenta"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={() => handleOpenModal()}
+            permission="cuentas_bancarias:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>

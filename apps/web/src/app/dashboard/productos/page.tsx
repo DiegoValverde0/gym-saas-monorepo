@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PapeleraToggle } from '@/components/ui/papelera-toggle';
 import { VentaProductoModal } from '@/components/ui/venta-producto-modal';
 import { useModoUso } from '@/hooks/use-modo-uso';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const productoSchema = z.object({
   nombre: z.string({ message: 'El nombre es obligatorio' }).min(2, 'Mínimo 2 caracteres'),
@@ -334,17 +335,16 @@ export default function ProductosPage() {
                   </div>
                 </div>
               ) : filteredProductos.length === 0 ? (
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-                  <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-                    <Package className="w-6 h-6" />
-                  </div>
-                  <p className="text-base font-semibold text-slate-900 dark:text-white">
-                    {listaProductos.buscando ? 'Ningún producto coincide con la búsqueda' : 'No hay productos registrados'}
-                  </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    {listaProductos.buscando ? 'Prueba con otro nombre o SKU.' : 'Crea tu primer producto para empezar a llevar inventario.'}
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Package}
+                  title={listaProductos.buscando ? 'Ningún producto coincide con la búsqueda' : 'No hay productos registrados'}
+                  description={listaProductos.buscando ? 'Prueba con otro nombre o SKU.' : 'Crea tu primer producto para empezar a llevar inventario.'}
+                  actionLabel="Nuevo Producto"
+                  actionIcon={<Plus className="w-4 h-4" />}
+                  onAction={handleAddProducto}
+                  permission="productos:crear"
+                  isSearch={listaProductos.buscando}
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -449,17 +449,16 @@ export default function ProductosPage() {
                   </div>
                 </div>
               ) : filteredInventarios.length === 0 ? (
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-                  <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-                    <Warehouse className="w-6 h-6" />
-                  </div>
-                  <p className="text-base font-semibold text-slate-900 dark:text-white">
-                    {listaInventario.buscando ? 'Ningún registro coincide con la búsqueda' : 'No hay inventario registrado'}
-                  </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    {listaInventario.buscando ? 'Prueba con otro producto o sucursal.' : 'Registra el stock inicial de un producto en una sucursal.'}
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Warehouse}
+                  title={listaInventario.buscando ? 'Ningún registro coincide con la búsqueda' : 'No hay inventario registrado'}
+                  description={listaInventario.buscando ? 'Prueba con otro producto o sucursal.' : 'Registra el stock inicial de un producto en una sucursal.'}
+                  actionLabel="Registrar Stock"
+                  actionIcon={<Plus className="w-4 h-4" />}
+                  onAction={handleAddInventario}
+                  permission="inventarios:crear"
+                  isSearch={listaInventario.buscando}
+                />
               ) : (
                 <Table>
                   <TableHeader>

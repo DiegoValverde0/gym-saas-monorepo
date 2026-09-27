@@ -27,6 +27,46 @@ export function descripcionRol(nombre?: string | null): string | undefined {
   return nombre ? ROLES_BASE[nombre]?.descripcion : undefined;
 }
 
+// Nombres de los módulos y acciones de permisos (tabla `permisos`) para el
+// editor de roles. Lo que no está aquí se muestra tal cual.
+const NOMBRE_MODULO: Record<string, string> = {
+  sucursales: 'Sucursales',
+  cajas_registradoras: 'Cajas',
+  usuarios: 'Accesos avanzados',
+  roles: 'Roles',
+  disciplinas: 'Disciplinas',
+  staff: 'Equipo',
+  turnos: 'Jornadas y horarios',
+  clases: 'Clases',
+  reservas: 'Reservas de clases',
+  clientes: 'Clientes',
+  promociones: 'Promociones',
+  planes: 'Planes',
+  membresias: 'Membresías',
+  asistencias: 'Control de acceso',
+  cuentas_bancarias: 'Cuentas',
+  aperturas_caja: 'Turnos de caja',
+  transacciones: 'Cobros y gastos',
+  pagos: 'Pagos',
+  productos: 'Productos',
+  inventarios: 'Stock',
+  dashboard: 'Inicio y reportes',
+  sistema: 'Papelera',
+};
+
+const NOMBRE_ACCION: Record<string, string> = {
+  leer: 'Ver',
+  crear: 'Crear',
+  actualizar: 'Editar',
+  eliminar: 'Eliminar',
+  restaurar: 'Restaurar lo eliminado',
+  multiple_por_dia: 'Más de un ingreso por día',
+  forzar: 'Dejar pasar aunque no cumpla',
+};
+
+export const nombreModulo = (modulo: string) => NOMBRE_MODULO[modulo] ?? modulo;
+export const nombreAccion = (accion: string) => NOMBRE_ACCION[accion] ?? accion;
+
 // Orden en que se ofrecen los roles al dar de alta a alguien: primero los base
 // más comunes, después los propios de la organización.
 export function ordenRol(nombre: string): number {

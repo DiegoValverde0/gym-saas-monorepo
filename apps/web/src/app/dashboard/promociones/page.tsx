@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tag, Plus, Edit, Trash2, Calendar, Search, ArchiveRestore } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const promocionSchema = z.object({
   nombre: z.string({ message: "El nombre es obligatorio" }).min(3, "Mínimo 3 caracteres"),
@@ -293,17 +294,16 @@ export default function PromocionesPage() {
             </div>
           </div>
         ) : filteredPromociones.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-12 text-center flex flex-col items-center">
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4">
-              <Tag className="w-6 h-6" />
-            </div>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ninguna promoción coincide con la búsqueda' : 'No hay promociones registradas'}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primera promoción para atraer clientes.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Tag}
+            title={searchTerm ? 'Ninguna promoción coincide con la búsqueda' : 'No hay promociones registradas'}
+            description={searchTerm ? 'Prueba con otro nombre.' : 'Crea tu primera promoción para atraer clientes.'}
+            actionLabel="Nueva Promoción"
+            actionIcon={<Plus className="w-4 h-4" />}
+            onAction={handleAddNew}
+            permission="promociones:crear"
+            isSearch={!!searchTerm}
+          />
         ) : (
           <Table>
             <TableHeader>

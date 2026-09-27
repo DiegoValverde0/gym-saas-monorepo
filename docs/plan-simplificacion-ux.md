@@ -609,6 +609,7 @@ Para cada módulo: qué molesta hoy y qué cambia por modo. Ninguno necesita cam
 ### 11.9 Usuarios y Roles
 - Ver 6.2: **Usuarios** pasa a "Accesos avanzados" (solo experto) y **Roles** se muestra con nombres y explicaciones humanas.
 - El superadmin edita los roles globales (ya corregido). En experto, cada organización puede crear roles propios a partir de uno base ("Duplicar rol Recepción y ajustar").
+- **2026-09-27: hecho.** Roles y Accesos avanzados muestran "Administrador", "Recepción", "Instructor" con su explicación; el rol de la plataforma no aparece dentro de un gimnasio; el editor de permisos usa nombres legibles ("Control de acceso · Dejar pasar aunque no cumpla"). Cada rol tiene "Duplicar" (en todos los modos donde se pueden crear roles, no solo en experto: "Nuevo rol" ya estaba desde intermedio).
 
 ### 11.10 Sucursales
 - Marcar la sede principal = sucursal predeterminada (5.1).
