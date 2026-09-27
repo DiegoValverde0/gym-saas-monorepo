@@ -143,9 +143,8 @@ export class OrganizacionService {
         });
 
         // 5. Asignar Accesos: el dueño nace con acceso a TODAS las sucursales
-        // (sucursalId null). Antes quedaba limitado a la sede inicial y no
-        // veía las sucursales que creara después (ver plan de simplificación,
-        // 13.12, y el script db:corregir-acceso-administradores).
+        // (sucursalId null), así ve también las sucursales que cree después
+        // (ver plan de simplificación, 13.12).
         await tx.asignacionAcceso.create({
           data: {
             usuarioId: usuario.id,

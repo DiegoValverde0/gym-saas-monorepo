@@ -8,6 +8,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "db:generate": "turbo run db:generate",
     "db:push": "turbo run db:push",
+    "db:seed": "pnpm --filter @repo/database db:seed",
+    "db:reset": "pnpm --filter @repo/database db:reset",
     "docker:dev": "docker-compose down && docker-compose up --build -d"
   },
   "devDependencies": {

@@ -5,10 +5,11 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
-    "db:push": "dotenv -e ../../.env -- prisma db push && dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
-    "lint": "eslint \"src/**/*.ts\" --fix",
-    "db:corregir-horas-clases": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-horas-clases.ts",
-    "db:corregir-acceso-administradores": "dotenv -e ../../.env -- tsx prisma/scripts/corregir-acceso-administradores.ts"
+    "db:push": "dotenv -e ../../.env -- prisma db push && pnpm db:constraints",
+    "db:constraints": "dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:reset": "dotenv -e ../../.env -- prisma db push --force-reset && pnpm db:constraints && pnpm db:seed",
+    "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
