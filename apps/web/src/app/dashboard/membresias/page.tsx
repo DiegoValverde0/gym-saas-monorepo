@@ -7,6 +7,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
+import { useListaPaginada } from '@/hooks/use-lista-paginada';
+import { Paginacion } from '@/components/ui/paginacion';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
@@ -66,10 +68,11 @@ export default function MembresiasPage() {
   const [showDeleted, setShowDeleted] = useState(false);
 
   // Consultas
-  const { data: membresias, isLoading } = useQuery({
-    queryKey: ['membresias', activeTenantId, showDeleted],
-    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/membresias?deleted=true' : '/membresias')),
-    enabled: !!token,
+  const lista = useListaPaginada<any>({
+    entidad: 'membresias',
+    ruta: '/membresias',
+    busqueda: directorySearch,
+    filtros: { deleted: showDeleted ? 'true' : undefined },
   });
 
   const { data: clientes } = useQuery({
@@ -169,12 +172,7 @@ export default function MembresiasPage() {
   const clientesList = clientes || [];
   const planesList = planes || [];
   const promocionesList = promociones || [];
-  const membresiasList = membresias || [];
-  const filteredMembresias = membresiasList.filter((m: any) => {
-    if (!directorySearch) return true;
-    const lower = directorySearch.toLowerCase();
-    return m.cliente?.nombre?.toLowerCase().includes(lower) || m.plan?.nombre?.toLowerCase().includes(lower);
-  });
+  const filteredMembresias = lista.items;
 
   if (!token) return null;
 
@@ -245,18 +243,18 @@ export default function MembresiasPage() {
           editingMembresia={editingMembresia}
         />
 
-        {isLoading ? (
+        {lista.cargando ? (
           <TableSkeleton columns={5} showAvatar={true} />
         ) : filteredMembresias.length === 0 ? (
           <EmptyState
             icon={IdCard}
-            title={directorySearch ? 'Ninguna membresía coincide con la búsqueda' : 'No hay membresías vendidas'}
-            description={directorySearch ? 'Prueba con otro cliente o plan.' : 'Registra la primera venta para comenzar.'}
+            title={lista.buscando ? 'Ninguna membresía coincide con la búsqueda' : 'No hay membresías vendidas'}
+            description={lista.buscando ? 'Prueba con otro cliente o plan.' : 'Registra la primera venta para comenzar.'}
             actionLabel="Nueva Venta"
             actionIcon={<Plus className="w-4 h-4" />}
             onAction={handleAddNew}
             permission="membresias:crear"
-            isSearch={!!directorySearch}
+            isSearch={lista.buscando}
           />
         ) : (
           <Table>
@@ -351,6 +349,16 @@ export default function MembresiasPage() {
             </TableBody>
           </Table>
         )}
+
+        <Paginacion
+          pagina={lista.pagina}
+          totalPaginas={lista.totalPaginas}
+          total={lista.total}
+          porPagina={lista.porPagina}
+          onCambiar={lista.setPagina}
+          nombre={['membresía', 'membresías']}
+          actualizando={lista.actualizando}
+        />
         
         <GlobalConfirmDialog
           open={confirmOpen}

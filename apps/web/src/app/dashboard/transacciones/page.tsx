@@ -1,9 +1,7 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
-import { useTenantStore } from '@/store/use-tenant-store';
-import { useAuth } from '@/hooks/use-auth';
-import { apiGet, unwrapList } from '@/lib/api-client';
+import { useListaPaginada } from '@/hooks/use-lista-paginada';
+import { Paginacion } from '@/components/ui/paginacion';
 import { Protect } from '@/components/ui/protect';
 import { Banknote, FileText, ArrowDownLeft, ArrowUpRight, Eye, Search } from 'lucide-react';
 import { useState } from 'react';
@@ -41,25 +39,11 @@ interface Transaccion {
 }
 
 export default function TransaccionesPage() {
-  const { activeTenantId } = useTenantStore();
-  const { token } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [detalle, setDetalle] = useState<Transaccion | null>(null);
 
-  const { data: transacciones, isLoading } = useQuery({
-    queryKey: ['transacciones', activeTenantId],
-    queryFn: async () => unwrapList<Transaccion>(await apiGet('/transacciones')),
-    enabled: !!token,
-  });
-
-  const list = Array.isArray(transacciones) ? transacciones : [];
-
-  const filteredList = list.filter((t: Transaccion) => {
-    if (!searchTerm) return true;
-    const lower = searchTerm.toLowerCase();
-    const cliName = t.cliente?.nombre?.toLowerCase() || '';
-    return cliName.includes(lower);
-  });
+  const lista = useListaPaginada<Transaccion>({ entidad: 'transacciones', ruta: '/transacciones', busqueda: searchTerm });
+  const filteredList = lista.items;
 
   return (
     <Protect permission="transacciones:leer" fallbackType="redirect">
@@ -74,7 +58,7 @@ export default function TransaccionesPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
-              placeholder="Buscar por cliente..."
+              placeholder="Buscar cliente o proveedor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900 shadow-xs"
@@ -82,7 +66,7 @@ export default function TransaccionesPage() {
           </div>
         </div>
 
-        {isLoading ? (
+        {lista.cargando ? (
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
             <div className="animate-pulse flex flex-col items-center gap-4">
               <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
@@ -95,10 +79,10 @@ export default function TransaccionesPage() {
               <Banknote className="w-6 h-6" />
             </div>
             <p className="text-base font-semibold text-slate-900 dark:text-white">
-              {searchTerm ? 'Ninguna transacción coincide con la búsqueda' : 'No hay transacciones registradas'}
+              {lista.buscando ? 'Ninguna transacción coincide con la búsqueda' : 'No hay transacciones registradas'}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {searchTerm ? 'Prueba con otro cliente.' : 'Las ventas y cobros aparecerán aquí.'}
+              {lista.buscando ? 'Prueba con otro cliente o proveedor.' : 'Las ventas y cobros aparecerán aquí.'}
             </p>
           </div>
         ) : (
@@ -148,6 +132,16 @@ export default function TransaccionesPage() {
             </TableBody>
           </Table>
         )}
+
+        <Paginacion
+          pagina={lista.pagina}
+          totalPaginas={lista.totalPaginas}
+          total={lista.total}
+          porPagina={lista.porPagina}
+          onCambiar={lista.setPagina}
+          nombre={['transacción', 'transacciones']}
+          actualizando={lista.actualizando}
+        />
 
         <Dialog open={!!detalle} onOpenChange={(open) => !open && setDetalle(null)}>
           <DialogContent className="sm:max-w-[600px]">

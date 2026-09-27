@@ -44,15 +44,16 @@ export function VentaProductoModal({ open, onOpenChange }: { open: boolean; onOp
   const [cuentaId, setCuentaId] = useState('');
 
   const { data: productos } = useQuery({
-    queryKey: ['productos', activeTenantId],
-    queryFn: async () => unwrapList<Producto>(await apiGet('/productos')),
+    queryKey: ['productos', activeTenantId, 'activos'],
+    queryFn: async () => unwrapList<Producto>(await apiGet('/productos?limit=100')),
     enabled: !!token && open,
   });
+  // Solo el stock de la sucursal donde se vende (antes: los primeros 50 de todas).
   const { data: inventarios } = useQuery({
-    queryKey: ['inventarios', activeTenantId],
-    queryFn: async () => unwrapList<Inventario>(await apiGet('/inventarios')),
+    queryKey: ['inventarios', activeTenantId, 'sucursal', sucursalId],
+    queryFn: async () => unwrapList<Inventario>(await apiGet(`/inventarios?limit=100&sucursalId=${sucursalId}`)),
     // Sin 'inventarios:leer' (p. ej. recepción) se vende igual, sin mostrar stock.
-    enabled: !!token && open && !esSimple && hasPermission('inventarios:leer'),
+    enabled: !!token && open && !esSimple && !!sucursalId && hasPermission('inventarios:leer'),
   });
   const { data: caja } = useQuery({
     queryKey: ['apertura-caja-me'],

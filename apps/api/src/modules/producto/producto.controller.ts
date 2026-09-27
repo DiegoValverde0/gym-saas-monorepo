@@ -7,7 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { BusquedaQueryDto } from '../../common/dto/busqueda-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
 @RequiereModulo('puntoVenta')
@@ -23,8 +23,8 @@ export class ProductoController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'productos' })
-  findAll(@Query() pagination: PaginationQueryDto) {
-    return this.productoService.findAll(pagination);
+  findAll(@Query() query: BusquedaQueryDto) {
+    return this.productoService.findAll(query);
   }
 
   @Get(':id')

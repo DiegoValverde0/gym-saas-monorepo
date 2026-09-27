@@ -9,6 +9,8 @@ import { useModoUso } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
+import { useListaPaginada } from '@/hooks/use-lista-paginada';
+import { Paginacion } from '@/components/ui/paginacion';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -79,10 +81,14 @@ export default function ClientesPage() {
     },
   });
 
-  const { data: clientes, isLoading: isLoadingClientes } = useQuery({
-    queryKey: ['clientes', activeTenantId, showDeleted],
-    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/clientes?deleted=true' : '/clientes')),
-    enabled: !!token,
+  const lista = useListaPaginada<any>({
+    entidad: 'clientes',
+    ruta: '/clientes',
+    busqueda: searchTerm,
+    filtros: {
+      deleted: showDeleted ? 'true' : undefined,
+      estado: activeTab === 'todos' ? undefined : activeTab,
+    },
   });
 
   const { data: sucursales } = useQuery({
@@ -220,17 +226,7 @@ export default function ClientesPage() {
 
   if (!token) return null;
 
-  const filteredClientes = (clientes || []).filter((cliente: any) => {
-    if (activeTab === 'activos' && cliente.estado !== 'ACTIVO') return false;
-    if (activeTab === 'inactivos' && cliente.estado === 'ACTIVO') return false;
-    if (!searchTerm) return true;
-    const lower = searchTerm.toLowerCase();
-    return (
-      cliente.nombre?.toLowerCase().includes(lower) ||
-      cliente.correo?.toLowerCase().includes(lower) ||
-      cliente.numeroDocumento?.toLowerCase().includes(lower)
-    );
-  });
+  const filteredClientes = lista.items;
 
   // Campos según el modo de uso (plan de simplificación, 4.4): nombre,
   // teléfono y documento siempre a la vista; el resto, en simple e
@@ -313,18 +309,18 @@ export default function ClientesPage() {
           submitLabel="Guardar Cliente"
         />
 
-        {isLoadingClientes ? (
+        {lista.cargando ? (
           <TableSkeleton columns={5} showAvatar={true} />
         ) : filteredClientes.length === 0 ? (
           <EmptyState
             icon={Users}
-            title={searchTerm ? 'Ningún cliente encontrado' : 'No hay clientes registrados'}
-            description={searchTerm ? 'Prueba con otro nombre, correo o documento.' : 'Comienza agregando tu primer cliente al sistema. Ellos podrán acceder a las instalaciones e inscribirse en clases.'}
+            title={lista.buscando ? 'Ningún cliente encontrado' : activeTab !== 'todos' ? `No hay clientes ${activeTab}` : 'No hay clientes registrados'}
+            description={lista.buscando ? 'Prueba con otro nombre, teléfono, correo o documento.' : activeTab !== 'todos' ? 'Elige "Todos" para ver al resto.' : 'Comienza agregando tu primer cliente al sistema. Ellos podrán acceder a las instalaciones e inscribirse en clases.'}
             actionLabel="Nuevo Cliente"
             actionIcon={<Plus className="w-4 h-4" />}
             onAction={handleAddNew}
             permission="clientes:crear"
-            isSearch={!!searchTerm}
+            isSearch={lista.buscando || activeTab !== 'todos'}
           />
         ) : (
           <Table>
@@ -416,6 +412,16 @@ export default function ClientesPage() {
             </TableBody>
           </Table>
         )}
+
+        <Paginacion
+          pagina={lista.pagina}
+          totalPaginas={lista.totalPaginas}
+          total={lista.total}
+          porPagina={lista.porPagina}
+          onCambiar={lista.setPagina}
+          nombre={['cliente', 'clientes']}
+          actualizando={lista.actualizando}
+        />
         
         <FichaCliente clienteId={fichaId} onClose={() => setFichaId(null)} />
 

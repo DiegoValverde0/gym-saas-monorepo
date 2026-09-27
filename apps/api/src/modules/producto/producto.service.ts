@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductoDto } from './dto/create-producto.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { BusquedaQueryDto } from '../../common/dto/busqueda-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
@@ -17,15 +17,25 @@ export class ProductoService {
     });
   }
 
-  async findAll(query?: PaginationQueryDto) {
+  async findAll(query?: BusquedaQueryDto) {
     const { page, limit, skip, take } = resolverPaginacion(query);
+    const termino = query?.search?.trim();
+    const where: Prisma.ProductoWhereInput = termino
+      ? {
+          OR: [
+            { nombre: { contains: termino, mode: 'insensitive' } },
+            { sku: { contains: termino, mode: 'insensitive' } },
+          ],
+        }
+      : {};
     const [data, total] = await Promise.all([
       this.prisma.extendedClient.producto.findMany({
+        where,
         orderBy: { nombre: 'asc' },
         skip,
         take,
       }),
-      this.prisma.extendedClient.producto.count(),
+      this.prisma.extendedClient.producto.count({ where }),
     ]);
     return paginar(data, total, page, limit);
   }

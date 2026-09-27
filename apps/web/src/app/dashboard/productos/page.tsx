@@ -9,6 +9,8 @@ import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete, unwrapList } from '@/lib/api-client';
 import { useForm } from 'react-hook-form';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
+import { useListaPaginada } from '@/hooks/use-lista-paginada';
+import { Paginacion } from '@/components/ui/paginacion';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -108,9 +110,18 @@ export default function ProductosPage() {
     defaultValues: { nombre: '', sku: '', descripcion: '', precioVenta: 0, estado: 'ACTIVO' },
   });
 
-  const { data: productos, isLoading: loadingProductos } = useQuery({
-    queryKey: ['productos', activeTenantId, showDeleted],
-    queryFn: async () => unwrapList(await apiGet(showDeleted ? '/productos?deleted=true' : '/productos')),
+  const listaProductos = useListaPaginada<Producto>({
+    entidad: 'productos',
+    ruta: '/productos',
+    busqueda: searchProducto,
+    filtros: { deleted: showDeleted ? 'true' : undefined },
+  });
+  const loadingProductos = listaProductos.cargando;
+
+  // Para elegir producto al cargar stock: todos los activos, sin la papelera.
+  const { data: productos } = useQuery({
+    queryKey: ['productos', activeTenantId, 'activos'],
+    queryFn: async () => unwrapList(await apiGet('/productos?limit=100')),
     enabled: !!token,
   });
 
@@ -172,11 +183,7 @@ export default function ProductosPage() {
     setConfirmOpen(true);
   };
 
-  const filteredProductos = (productos as Producto[] || []).filter((p: Producto) => {
-    if (!searchProducto) return true;
-    const lower = searchProducto.toLowerCase();
-    return p.nombre?.toLowerCase().includes(lower) || p.sku?.toLowerCase().includes(lower);
-  });
+  const filteredProductos = listaProductos.items;
 
   const productosActivos = (productos as Producto[] || []).filter((p: Producto) => p.estado === 'ACTIVO');
 
@@ -194,11 +201,13 @@ export default function ProductosPage() {
     defaultValues: { productoId: '', sucursalId: '', cantidadActual: 0, puntoReorden: 5, ubicacionBodega: '' },
   });
 
-  const { data: inventarios, isLoading: loadingInventarios } = useQuery({
-    queryKey: ['inventarios', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/inventarios')),
-    enabled: !!token && hasPermission('inventarios:leer'),
+  const listaInventario = useListaPaginada<Inventario>({
+    entidad: 'inventarios',
+    ruta: '/inventarios',
+    busqueda: searchInventario,
+    enabled: hasPermission('inventarios:leer'),
   });
+  const loadingInventarios = listaInventario.cargando;
 
   const { data: sucursales } = useQuery({
     queryKey: ['sucursales', activeTenantId],
@@ -263,13 +272,9 @@ export default function ProductosPage() {
     setConfirmInventarioOpen(true);
   };
 
-  const filteredInventarios = (inventarios as Inventario[] || []).filter((inv: Inventario) => {
-    if (!searchInventario) return true;
-    const lower = searchInventario.toLowerCase();
-    return inv.producto?.nombre?.toLowerCase().includes(lower) || inv.sucursal?.nombre?.toLowerCase().includes(lower);
-  });
-
-  const bajoStockCount = (inventarios as Inventario[] || []).filter((inv: Inventario) => inv.cantidadActual <= inv.puntoReorden).length;
+  const filteredInventarios = listaInventario.items;
+  // Contado en el servidor sobre todo el stock, no solo esta página.
+  const bajoStockCount = Number(listaInventario.respuesta?.bajoStock ?? 0);
 
   if (!token) return null;
 
@@ -334,10 +339,10 @@ export default function ProductosPage() {
                     <Package className="w-6 h-6" />
                   </div>
                   <p className="text-base font-semibold text-slate-900 dark:text-white">
-                    {searchProducto ? 'Ningún producto coincide con la búsqueda' : 'No hay productos registrados'}
+                    {listaProductos.buscando ? 'Ningún producto coincide con la búsqueda' : 'No hay productos registrados'}
                   </p>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    {searchProducto ? 'Prueba con otro nombre o SKU.' : 'Crea tu primer producto para empezar a llevar inventario.'}
+                    {listaProductos.buscando ? 'Prueba con otro nombre o SKU.' : 'Crea tu primer producto para empezar a llevar inventario.'}
                   </p>
                 </div>
               ) : (
@@ -405,6 +410,15 @@ export default function ProductosPage() {
                   </TableBody>
                 </Table>
               )}
+              <Paginacion
+                pagina={listaProductos.pagina}
+                totalPaginas={listaProductos.totalPaginas}
+                total={listaProductos.total}
+                porPagina={listaProductos.porPagina}
+                onCambiar={listaProductos.setPagina}
+                nombre={['producto', 'productos']}
+                actualizando={listaProductos.actualizando}
+              />
             </div>
           </TabsContent>
 
@@ -440,10 +454,10 @@ export default function ProductosPage() {
                     <Warehouse className="w-6 h-6" />
                   </div>
                   <p className="text-base font-semibold text-slate-900 dark:text-white">
-                    {searchInventario ? 'Ningún registro coincide con la búsqueda' : 'No hay inventario registrado'}
+                    {listaInventario.buscando ? 'Ningún registro coincide con la búsqueda' : 'No hay inventario registrado'}
                   </p>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    {searchInventario ? 'Prueba con otro producto o sucursal.' : 'Registra el stock inicial de un producto en una sucursal.'}
+                    {listaInventario.buscando ? 'Prueba con otro producto o sucursal.' : 'Registra el stock inicial de un producto en una sucursal.'}
                   </p>
                 </div>
               ) : (
@@ -507,6 +521,15 @@ export default function ProductosPage() {
                   </TableBody>
                 </Table>
               )}
+              <Paginacion
+                pagina={listaInventario.pagina}
+                totalPaginas={listaInventario.totalPaginas}
+                total={listaInventario.total}
+                porPagina={listaInventario.porPagina}
+                onCambiar={listaInventario.setPagina}
+                nombre={['registro de stock', 'registros de stock']}
+                actualizando={listaInventario.actualizando}
+              />
             </div>
           </TabsContent>
         </Tabs>

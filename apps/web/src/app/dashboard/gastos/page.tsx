@@ -10,6 +10,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
+import { useListaPaginada } from '@/hooks/use-lista-paginada';
+import { Paginacion } from '@/components/ui/paginacion';
 import { Button } from '@/components/ui/button';
 import { TenantRequiredButton } from '@/components/ui/tenant-required-button';
 import { GlobalFormModal } from '@/components/ui/global-form-modal';
@@ -163,10 +165,11 @@ export default function GastosPage() {
     },
   });
 
-  const { data: gastos, isLoading } = useQuery({
-    queryKey: ['gastos', activeTenantId],
-    queryFn: async () => unwrapList(await apiGet('/transacciones?tipo=EGRESO')),
-    enabled: !!token,
+  const lista = useListaPaginada<Gasto>({
+    entidad: 'gastos',
+    ruta: '/transacciones',
+    busqueda: searchTerm,
+    filtros: { tipo: 'EGRESO' },
   });
 
   const { data: proveedores } = useQuery({
@@ -380,11 +383,7 @@ export default function GastosPage() {
 
   const proveedoresList = unwrapList(proveedores) as Proveedor[];
   const cuentasList = unwrapList(cuentas) as CuentaBancaria[];
-  const gastosList = (unwrapList(gastos) as Gasto[]).filter((g) => {
-    if (!searchTerm) return true;
-    const lower = searchTerm.toLowerCase();
-    return (g.beneficiario || g.proveedor?.nombre || '').toLowerCase().includes(lower);
-  });
+  const gastosList = lista.items;
   const plantillaList = unwrapList(plantillas) as GastoPlantilla[];
 
   const labelCategoria = (value: string) => CATEGORIAS_EGRESO.find((c) => c.value === value)?.label || value;
@@ -435,7 +434,7 @@ export default function GastosPage() {
               </div>
             </div>
 
-            {isLoading ? (
+            {lista.cargando ? (
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-8 flex justify-center">
                 <div className="animate-pulse flex flex-col items-center gap-4">
                   <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
@@ -448,10 +447,10 @@ export default function GastosPage() {
                   <Receipt className="w-6 h-6" />
                 </div>
                 <p className="text-base font-semibold text-slate-900 dark:text-white">
-                  {searchTerm ? 'Ningún gasto coincide con la búsqueda' : 'No hay gastos registrados'}
+                  {lista.buscando ? 'Ningún gasto coincide con la búsqueda' : 'No hay gastos registrados'}
                 </p>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {searchTerm ? 'Prueba con otro nombre.' : 'Registra el primer gasto del negocio.'}
+                  {lista.buscando ? 'Prueba con otro nombre.' : 'Registra el primer gasto del negocio.'}
                 </p>
               </div>
             ) : (
@@ -496,6 +495,16 @@ export default function GastosPage() {
                 </TableBody>
               </Table>
             )}
+
+            <Paginacion
+              pagina={lista.pagina}
+              totalPaginas={lista.totalPaginas}
+              total={lista.total}
+              porPagina={lista.porPagina}
+              onCambiar={lista.setPagina}
+              nombre={['gasto', 'gastos']}
+              actualizando={lista.actualizando}
+            />
           </TabsContent>
 
           <TabsContent value="plantillas" className="space-y-6 mt-4 animate-in fade-in slide-in-from-bottom-2">

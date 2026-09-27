@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { CreateMembresiaDto } from './dto/create-membresia.dto';
 import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { BusquedaQueryDto } from '../../common/dto/busqueda-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 // Transiciones de estado permitidas para Membresia.estado vía update() manual
@@ -134,10 +134,21 @@ export class MembresiaService {
     });
   }
 
-  async findAll(query?: PaginationQueryDto) {
+  async findAll(query?: BusquedaQueryDto) {
     const { page, limit, skip, take } = resolverPaginacion(query);
+    const termino = query?.search?.trim();
+    const where: Prisma.MembresiaWhereInput = termino
+      ? {
+          OR: [
+            { cliente: { nombre: { contains: termino, mode: 'insensitive' } } },
+            { cliente: { numeroDocumento: { contains: termino } } },
+            { plan: { nombre: { contains: termino, mode: 'insensitive' } } },
+          ],
+        }
+      : {};
     const [data, total] = await Promise.all([
       this.prisma.extendedClient.membresia.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         include: {
           cliente: { select: { nombre: true, numeroDocumento: true } },
@@ -146,7 +157,7 @@ export class MembresiaService {
         skip,
         take,
       }),
-      this.prisma.extendedClient.membresia.count(),
+      this.prisma.extendedClient.membresia.count({ where }),
     ]);
     return paginar(data, total, page, limit);
   }

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { useDebounce } from '@/hooks/use-debounce';
 import { SoloEnModo } from '@/hooks/use-modo-uso';
 import { apiGet, apiPost, apiPatch, unwrapList } from '@/lib/api-client';
 import { Protect } from '@/components/ui/protect';
@@ -59,15 +60,6 @@ const TIPO_ASISTENCIA_LABEL: Record<string, string> = {
   PRUEBA_GRATIS: 'Prueba gratis',
 };
 
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-}
 
 const hora = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 

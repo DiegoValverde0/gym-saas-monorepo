@@ -59,15 +59,18 @@ export class ClientesService {
     // Paginado para no traer de golpe toda la tabla de un tenant con miles de clientes.
     const { page, limit, skip, take } = resolverPaginacion(query);
     const termino = query?.search?.trim();
-    const where: Prisma.ClienteWhereInput = termino
-      ? {
-          OR: [
-            { nombre: { contains: termino, mode: 'insensitive' } },
-            { numeroDocumento: { contains: termino } },
-            { correo: { contains: termino, mode: 'insensitive' } },
-          ],
-        }
-      : {};
+    const where: Prisma.ClienteWhereInput = {
+      ...(termino && {
+        OR: [
+          { nombre: { contains: termino, mode: 'insensitive' } },
+          { numeroDocumento: { contains: termino } },
+          { correo: { contains: termino, mode: 'insensitive' } },
+          { telefono: { contains: termino } },
+        ],
+      }),
+      ...(query?.estado === 'activos' && { estado: 'ACTIVO' }),
+      ...(query?.estado === 'inactivos' && { estado: { not: 'ACTIVO' } }),
+    };
     const [data, total] = await Promise.all([
       this.prisma.extendedClient.cliente.findMany({
         where,

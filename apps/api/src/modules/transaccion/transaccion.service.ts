@@ -258,7 +258,17 @@ export class TransaccionService {
   }
 
   async findAll(query?: QueryTransaccionDto) {
-    const whereClause: Prisma.TransaccionWhereInput = query?.tipo ? { tipo: query.tipo } : {};
+    const termino = query?.search?.trim();
+    const whereClause: Prisma.TransaccionWhereInput = {
+      ...(query?.tipo && { tipo: query.tipo }),
+      ...(termino && {
+        OR: [
+          { cliente: { nombre: { contains: termino, mode: 'insensitive' } } },
+          { proveedor: { nombre: { contains: termino, mode: 'insensitive' } } },
+          { beneficiario: { contains: termino, mode: 'insensitive' } },
+        ],
+      }),
+    };
 
     const { page, limit, skip, take } = resolverPaginacion(query);
     const [transacciones, total] = await Promise.all([

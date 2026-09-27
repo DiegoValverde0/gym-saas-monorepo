@@ -6,7 +6,7 @@ import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { BusquedaQueryDto } from '../../common/dto/busqueda-query.dto';
 
 interface RequestWithUser extends ExpressRequest {
   user: { sub: string };
@@ -26,8 +26,8 @@ export class MembresiaController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'membresias' })
-  findAll(@Query() pagination: PaginationQueryDto) {
-    return this.membresiaService.findAll(pagination);
+  findAll(@Query() query: BusquedaQueryDto) {
+    return this.membresiaService.findAll(query);
   }
 
   @Get('cliente/:clienteId')

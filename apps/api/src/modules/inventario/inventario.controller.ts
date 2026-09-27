@@ -7,7 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { ModuloActivoGuard } from '../../common/guards/modulo-activo.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { RequiereModulo } from '../../common/decorators/requiere-modulo.decorator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { InventarioQueryDto } from './dto/inventario-query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard, ModuloActivoGuard)
 @RequiereModulo('puntoVenta')
@@ -23,8 +23,8 @@ export class InventarioController {
 
   @Get()
   @RequirePermissions({ accion: 'leer', modulo: 'inventarios' })
-  findAll(@Query() pagination: PaginationQueryDto) {
-    return this.inventarioService.findAll(pagination);
+  findAll(@Query() query: InventarioQueryDto) {
+    return this.inventarioService.findAll(query);
   }
 
   @Get(':id')

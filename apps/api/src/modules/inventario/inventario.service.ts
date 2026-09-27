@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInventarioDto } from './dto/create-inventario.dto';
 import { UpdateInventarioDto } from './dto/update-inventario.dto';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { InventarioQueryDto } from './dto/inventario-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 
 @Injectable()
@@ -18,10 +18,21 @@ export class InventarioService {
     });
   }
 
-  async findAll(query?: PaginationQueryDto) {
+  async findAll(query?: InventarioQueryDto) {
     const { page, limit, skip, take } = resolverPaginacion(query);
-    const [data, total] = await Promise.all([
+    const termino = query?.search?.trim();
+    const where: Prisma.InventarioWhereInput = {
+      ...(termino && {
+        OR: [
+          { producto: { nombre: { contains: termino, mode: 'insensitive' } } },
+          { sucursal: { nombre: { contains: termino, mode: 'insensitive' } } },
+        ],
+      }),
+      ...(query?.sucursalId && { sucursalId: query.sucursalId }),
+    };
+    const [data, total, bajoStock] = await Promise.all([
       this.prisma.extendedClient.inventario.findMany({
+        where,
         include: {
           producto: true,
           sucursal: true,
@@ -30,9 +41,13 @@ export class InventarioService {
         skip,
         take,
       }),
-      this.prisma.extendedClient.inventario.count(),
+      this.prisma.extendedClient.inventario.count({ where }),
+      // Aviso de stock bajo de toda la organización, no solo de esta página.
+      this.prisma.extendedClient.inventario.count({
+        where: { cantidadActual: { lte: this.prisma.extendedClient.inventario.fields.puntoReorden } },
+      }),
     ]);
-    return paginar(data, total, page, limit);
+    return { ...paginar(data, total, page, limit), bajoStock };
   }
 
   async findOne(id: string) {
