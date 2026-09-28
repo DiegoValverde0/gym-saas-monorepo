@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { CalendarDays, History, Home, UserRound } from 'lucide-react';
+import { Bell, CalendarDays, History, Home, UserRound } from 'lucide-react';
 import { useYo } from './datos';
 
 /**
@@ -40,7 +40,21 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex h-14 max-w-xl items-center justify-between px-4">
           <p className="truncate font-semibold">{yo?.gimnasio ?? user?.organizacionNombre ?? 'Mi gimnasio'}</p>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <Link
+              href="/portal/avisos"
+              aria-label={yo?.avisosSinLeer ? `Avisos (${yo.avisosSinLeer} sin leer)` : 'Avisos'}
+              className="relative rounded-full p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <Bell className="h-5 w-5" />
+              {!!yo?.avisosSinLeer && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                  {yo.avisosSinLeer > 9 ? '9+' : yo.avisosSinLeer}
+                </span>
+              )}
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

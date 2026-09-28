@@ -5,6 +5,7 @@ import { PermitirCliente } from '../../common/decorators/permitir-cliente.decora
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { PortalClienteGuard } from './portal-cliente.guard';
 import { PortalService } from './portal.service';
+import { AvisosService } from '../avisos/avisos.service';
 import { CambiarContrasenaPortalDto, ReservarClasePortalDto } from './dto/portal.dto';
 
 interface RequestWithUser extends ExpressRequest {
@@ -17,11 +18,27 @@ interface RequestWithUser extends ExpressRequest {
 @PermitirCliente()
 @Controller('portal')
 export class PortalController {
-  constructor(private readonly portalService: PortalService) {}
+  constructor(
+    private readonly portalService: PortalService,
+    private readonly avisosService: AvisosService,
+  ) {}
 
   @Get('yo')
-  yo() {
-    return this.portalService.yo();
+  async yo(@Req() req: RequestWithUser) {
+    const [yo, avisosSinLeer] = await Promise.all([this.portalService.yo(), this.avisosService.sinLeer(req.user.sub)]);
+    return { ...yo, avisosSinLeer };
+  }
+
+  // Avisos automáticos (docs/plan-avisos-automaticos.md).
+  @Get('avisos')
+  avisos(@Req() req: RequestWithUser) {
+    return this.avisosService.avisosDe(req.user.sub);
+  }
+
+  @Post('avisos/leidos')
+  @HttpCode(HttpStatus.OK)
+  marcarLeidos(@Req() req: RequestWithUser) {
+    return this.avisosService.marcarLeidos(req.user.sub);
   }
 
   @Get('membresias')

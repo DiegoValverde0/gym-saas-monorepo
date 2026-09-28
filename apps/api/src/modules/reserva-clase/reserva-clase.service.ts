@@ -9,6 +9,7 @@ import { paginar, resolverPaginacion } from '../../common/utils/pagination.util'
 import { descontarSesionEnClase, evaluarReserva } from '../../common/utils/acceso-clases.util';
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 import { promoverListaEspera } from '../../common/utils/lista-espera.util';
+import { AvisosService } from '../avisos/avisos.service';
 
 const INCLUDE_RESERVA = {
   clase: { select: { nombreClase: true, fechaHora: true } },
@@ -26,7 +27,11 @@ interface ClaseLockRow {
 
 @Injectable()
 export class ReservaClaseService {
-  constructor(private readonly prisma: PrismaService, private readonly cls: ClsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cls: ClsService,
+    private readonly avisos: AvisosService,
+  ) {}
 
   private async datosOrganizacion() {
     const org = await this.prisma.extendedClient.organizacion.findUnique({
@@ -218,12 +223,15 @@ export class ReservaClaseService {
 
   // Al cancelar una reserva confirmada se libera un cupo: sube el primero de
   // la lista de espera (fase 6, DB-3).
+  // Quienes suben reciben el aviso "¡Ya tienes lugar!" (avisos automáticos).
   async cancelar(id: string) {
     const actual = await this.findOne(id);
-    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+    const { reserva, promovidos } = await this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
       const reserva = await tx.reservaClase.update({ where: { id }, data: { estado: 'CANCELADA' } });
       const promovidos = actual.estado === 'CONFIRMADA' ? await promoverListaEspera(tx, actual.claseId) : [];
-      return { ...reserva, promovidos };
+      return { reserva, promovidos };
     });
+    await this.avisos.avisarLugar(actual.claseId, promovidos);
+    return { ...reserva, promovidos: promovidos.map((p) => p.nombre) };
   }
 }

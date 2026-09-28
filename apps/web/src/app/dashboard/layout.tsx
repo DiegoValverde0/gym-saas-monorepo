@@ -42,6 +42,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { AvisosParaEnviar } from '@/components/ui/avisos-para-enviar';
 import { CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
 import { Recorrido, reiniciarRecorridos } from '@/components/ui/recorrido';
@@ -401,6 +402,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
             {/* Marcaje del equipo (plan 7.4): visible también en el celular. */}
             <MarcajeTurno />
+
+            {/* Avisos automáticos por WhatsApp (dueño y recepción). */}
+            <AvisosParaEnviar />
 
             <ThemeToggle />
 
