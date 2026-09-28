@@ -71,7 +71,8 @@ export class PortalService {
     const hoy = aHoraLocal(new Date(), org.zonaHoraria).fechaSolo;
 
     const [cliente, membresias, reservas, clasesActivas] = await Promise.all([
-      db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, correo: true } }),
+      // El correo que se muestra es el de la cuenta (con el que entra), no el de la ficha.
+      db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, usuario: { select: { correo: true } } } }),
       db.membresia.findMany({
         where: { clienteId, estado: { not: 'CANCELADA' } },
         include: { plan: { select: { nombre: true, tipoPlan: true } } },
@@ -103,7 +104,7 @@ export class PortalService {
 
     return {
       nombre: cliente?.nombre ?? '',
-      correo: cliente?.correo ?? null,
+      correo: cliente?.usuario?.correo ?? null,
       gimnasio: org.nombre,
       clasesActivas,
       membresia: actual

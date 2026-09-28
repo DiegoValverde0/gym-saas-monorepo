@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { apiPost } from '@/lib/api-client';
+import { apiGet, apiPost } from '@/lib/api-client';
 import { useTenantStore } from '@/store/use-tenant-store';
+import { nombreRol } from '@/lib/roles';
+import type { AuthUser } from '@/hooks/use-auth';
 
 interface Tenant {
   organizacionId: string;
@@ -61,7 +63,9 @@ export default function LoginPage() {
       // Si pasamos aquí, el login fue 100% exitoso. El backend ya dejó la
       // sesión en una cookie HttpOnly -- no hay nada que guardar acá.
       setActiveTenantId(step === 2 ? selectedTenant : null);
-      router.push('/dashboard');
+      // Los clientes van a su portal; el equipo, al panel.
+      const yo = await apiGet<AuthUser>('/auth/me');
+      router.push(yo.esCliente ? '/portal' : '/dashboard');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || 'Credenciales inválidas o acceso denegado');
@@ -172,7 +176,7 @@ export default function LoginPage() {
                             <span className="text-zinc-100 font-semibold text-base">{tenant.nombre}</span>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-medium border border-zinc-700/50">
-                                {tenant.rolNombre || 'Miembro'}
+                                {tenant.rolNombre ? nombreRol(tenant.rolNombre) : 'Miembro'}
                               </span>
                               <span className="text-xs text-zinc-500 flex items-center">
                                 <span className="w-1 h-1 rounded-full bg-zinc-600 mx-1.5 inline-block"></span>
