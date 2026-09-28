@@ -19,6 +19,13 @@ interface Tenant {
   rolNombre?: string;
 }
 
+const CUENTAS_DE_PRUEBA = [
+  { quien: 'Dueño', correo: 'dueno@gymtitan.com', clave: 'admin123' },
+  { quien: 'Recepción', correo: 'ana@gymtitan.com', clave: 'ana123' },
+  { quien: 'Cliente', correo: 'juan.titan@ejemplo.com', clave: 'juan123' },
+  { quien: 'Plataforma', correo: 'admin@gymmanager.com', clave: 'admin123' },
+];
+
 interface LoginResponse {
   requireTenantSelection?: boolean;
   tenants?: Tenant[];
@@ -208,14 +215,18 @@ export default function LoginPage() {
             </form>
           </CardContent>
 
-          {step === 1 && (
+          {/* Solo en desarrollo: las cuentas del seed (packages/database/prisma/seed.ts).
+              En producción no existen y no se muestran. */}
+          {step === 1 && process.env.NODE_ENV === 'development' && (
             <CardFooter className="flex flex-col border-t border-zinc-800/50 mt-6 pt-6">
-              <div className="w-full text-xs text-zinc-500 space-y-3">
-                <p className="font-semibold uppercase tracking-wider text-center text-zinc-400">Cuentas de Demostración</p>
-                <div className="flex justify-between items-center p-2.5 rounded-md bg-zinc-950/50 border border-zinc-800/50">
-                  <span className="text-indigo-400 font-medium">Gym Titan</span>
-                  <code className="text-zinc-300">admin@gymmanager.com / admin123</code>
-                </div>
+              <div className="w-full text-xs text-zinc-500 space-y-2">
+                <p className="font-semibold uppercase tracking-wider text-center text-zinc-400">Cuentas de prueba (desarrollo)</p>
+                {CUENTAS_DE_PRUEBA.map((c) => (
+                  <div key={c.correo} className="flex justify-between items-center gap-2 p-2.5 rounded-md bg-zinc-950/50 border border-zinc-800/50">
+                    <span className="text-indigo-400 font-medium">{c.quien}</span>
+                    <code className="text-zinc-300 truncate">{c.correo} / {c.clave}</code>
+                  </div>
+                ))}
               </div>
             </CardFooter>
           )}
