@@ -1,0 +1,58 @@
+import { Prisma } from '@prisma/client';
+import { enHoraLocal, NOMBRES, TipoReporte } from './tipos';
+
+// Ventas: una fila por cada línea vendida (una venta con una membresía y un
+// producto son dos filas). Solo ingresos; los gastos son otro tipo.
+export const VENTAS: TipoReporte = {
+  clave: 'ventas',
+  nombre: 'Ventas',
+  descripcion: 'Lo que se vendió: membresías, productos y otros cobros, con quién compró, dónde y quién cobró.',
+  fila: 'Una fila por cada cosa vendida (línea de la venta)',
+  permiso: 'transacciones:leer',
+  moduloGimnasio: 'puntoVenta',
+  tabla: { nombre: 'detalles_transaccion', alias: 'd', tieneDeletedAt: false },
+  obligatorias: ['t'],
+  condiciones: ["t.tipo = 'INGRESO'"],
+  relaciones: [
+    { alias: 't', sql: 'JOIN transacciones t ON t.id = d.transaccion_id AND t.deleted_at IS NULL' },
+    { alias: 'c', sql: 'LEFT JOIN clientes c ON c.id = t.cliente_id', requiere: ['t'] },
+    { alias: 's', sql: 'LEFT JOIN sucursales s ON s.id = t.sucursal_id', requiere: ['t'] },
+    { alias: 'u', sql: 'LEFT JOIN usuarios u ON u.id = t.creado_por_id', requiere: ['t'] },
+    { alias: 'ap', sql: 'LEFT JOIN aperturas_caja ap ON ap.id = t.apertura_caja_id', requiere: ['t'] },
+    { alias: 'cj', sql: 'LEFT JOIN cajas_registradoras cj ON cj.id = ap.caja_id', requiere: ['ap'] },
+    { alias: 'm', sql: 'LEFT JOIN membresias m ON m.id = d.membresia_id' },
+    { alias: 'pl', sql: 'LEFT JOIN planes pl ON pl.id = m.plan_id', requiere: ['m'] },
+    { alias: 'pr', sql: 'LEFT JOIN productos pr ON pr.id = d.producto_id' },
+  ],
+  sucursal: { sql: 't.sucursal_id', usa: ['t'], opcional: false },
+  creadoPor: { sql: 't.creado_por_id', usa: ['t'] },
+  fechaPorDefecto: 'fecha',
+  columnas: [
+    { clave: 'fecha', nombre: 'Fecha y hora', grupo: 'Venta', tipo: 'fechaHora', sql: 't.fecha_hora', usa: ['t'] },
+    { clave: 'dia', nombre: 'Día', grupo: 'Venta', tipo: 'fecha', sql: (ctx) => Prisma.sql`${enHoraLocal('t.fecha_hora')(ctx)}::date`, usa: ['t'], ayuda: 'La fecha de la venta, sin la hora (sirve para agrupar por día, semana o mes).' },
+    { clave: 'concepto', nombre: 'Qué se vendió', grupo: 'Venta', tipo: 'lista', sql: 'd.tipo_concepto::text', opciones: NOMBRES.concepto },
+    {
+      clave: 'detalle',
+      nombre: 'Detalle',
+      grupo: 'Venta',
+      tipo: 'texto',
+      sql: "COALESCE(d.descripcion_libre, pr.nombre, 'Membresía ' || pl.nombre)",
+      usa: ['pr', 'pl'],
+      ayuda: 'El plan, el producto o la descripción del cobro.',
+    },
+    { clave: 'cantidad', nombre: 'Cantidad', grupo: 'Venta', tipo: 'numero', sql: 'd.cantidad' },
+    { clave: 'precio', nombre: 'Precio unitario', grupo: 'Venta', tipo: 'moneda', sql: 'd.precio_unitario' },
+    { clave: 'monto', nombre: 'Monto', grupo: 'Venta', tipo: 'moneda', sql: 'd.subtotal', ayuda: 'Cantidad × precio de esta línea.' },
+    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: "COALESCE(c.nombre, 'Sin cliente')", usa: ['c'] },
+    { clave: 'clienteDocumento', nombre: 'Documento del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.numero_documento', usa: ['c'] },
+    { clave: 'clienteTelefono', nombre: 'Teléfono del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.telefono', usa: ['c'] },
+    { clave: 'plan', nombre: 'Plan', grupo: 'Plan', tipo: 'texto', sql: 'pl.nombre', usa: ['pl'] },
+    { clave: 'tipoPlan', nombre: 'Tipo de plan', grupo: 'Plan', tipo: 'lista', sql: 'pl.tipo_plan::text', usa: ['pl'], opciones: NOMBRES.tipoPlan },
+    { clave: 'producto', nombre: 'Producto', grupo: 'Producto', tipo: 'texto', sql: 'pr.nombre', usa: ['pr'] },
+    { clave: 'productoSku', nombre: 'Código del producto', grupo: 'Producto', tipo: 'texto', sql: 'pr.sku', usa: ['pr'] },
+    { clave: 'sucursal', nombre: 'Sucursal', grupo: 'Dónde y quién', tipo: 'texto', sql: 's.nombre', usa: ['s'] },
+    { clave: 'cobradoPor', nombre: 'Cobrado por', grupo: 'Dónde y quién', tipo: 'texto', sql: 'u.nombre_completo', usa: ['u'] },
+    { clave: 'caja', nombre: 'Caja', grupo: 'Dónde y quién', tipo: 'texto', sql: 'cj.nombre', usa: ['cj'] },
+  ],
+  columnasIniciales: ['fecha', 'cliente', 'detalle', 'cantidad', 'monto'],
+};

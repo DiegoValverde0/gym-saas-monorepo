@@ -68,6 +68,10 @@ module.exports = {
         // TODAS las organizaciones, mismo motivo que los crons de arriba; filtra
         // organizacionId y deletedAt a mano en cada consulta.
         'apps/api/src/modules/avisos/avisos-programados.service.ts',
+        // Reportería: corre el SQL que genera motor/compilador.ts, que agrega
+        // él mismo organizacion_id, deleted_at y la sucursal (el SQL crudo no
+        // pasa por la extensión RLS). compilador.spec.ts exige ese filtro.
+        'apps/api/src/modules/reporteria/reporteria.service.ts',
         // signIn() lee el Usuario y sus AsignacionAcceso (tenant-scoped) ANTES
         // de que exista un organizacionId en el contexto (CLS) -- login es la
         // operación que determina a qué tenant(s) pertenece el usuario, así

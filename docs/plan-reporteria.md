@@ -163,7 +163,7 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
 - Permiso `reportes` en `base.ts` y en los roles base según la decisión R2.
 - **Listo cuando:** `pnpm db:reset` crea todo; los roles tienen el permiso esperado.
 
-### Fase 2: motor de consultas (núcleo)
+### Fase 2: motor de consultas (núcleo) (HECHA)
 - Estructura del catálogo y los **3 primeros tipos**: Ventas (detalle), Membresías y Asistencias.
 - Compilador de la definición a SQL: formato **Lista** y **Agrupado** (hasta 3 niveles con subtotales), totales (cantidad, suma, promedio, mínimo, máximo), orden y límite.
 - Filtros: rápidos (fecha con rangos relativos en la hora del gimnasio, sucursal, solo míos) y por columna con operadores por tipo de dato.
