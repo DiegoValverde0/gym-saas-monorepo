@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { apiGet } from '@/lib/api-client';
 import { FichaCliente } from '@/components/ui/ficha-cliente';
+import { enlaceWhatsapp } from '@/lib/whatsapp';
 import { MessageCircle } from 'lucide-react';
 
 interface PorVencer {
@@ -15,18 +16,6 @@ interface PorVencer {
   plan: string;
   fechaFin: string | null;
   diasRestantes: number | null;
-}
-
-// Código de país para WhatsApp cuando el teléfono se guardó sin él. Solo se
-// deduce de la moneda de la organización (hoy los gimnasios son de Bolivia).
-const CODIGO_PAIS_POR_MONEDA: Record<string, string> = { BOB: '591' };
-
-function enlaceWhatsapp(telefono: string, mensaje: string, moneda?: string | null) {
-  let numero = telefono.replace(/\D/g, '');
-  if (!telefono.trim().startsWith('+') && numero.length <= 8 && moneda && CODIGO_PAIS_POR_MONEDA[moneda]) {
-    numero = `${CODIGO_PAIS_POR_MONEDA[moneda]}${numero}`;
-  }
-  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
 }
 
 const cuando = (d: number | null) => (d == null ? '' : d === 0 ? 'vence hoy' : d === 1 ? 'vence mañana' : `vence en ${d} días`);
