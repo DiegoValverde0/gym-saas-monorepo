@@ -20,6 +20,13 @@ export function assertRolAsignableEnOrganizacion(rol: { nombre: string; organiza
 // Rol del dueño/administrador de un gimnasio (rol base global).
 export const ROL_ADMINISTRADOR = 'ADMIN_GYM';
 
+// Rol de las cuentas del portal del cliente (rol base global, sin permisos:
+// esas cuentas solo usan las rutas /portal, ver JwtAuthGuard). Un gimnasio
+// puede crear un rol propio llamado igual, por eso se mira también que sea global.
+export const ROL_CLIENTE = 'CLIENTE';
+export const esRolCliente = (rol: { nombre: string; organizacionId: string | null }) =>
+  rol.organizacionId === null && rol.nombre === ROL_CLIENTE;
+
 type AsignacionConRol = { id: string; sucursalId: string | null; rol: { nombre: string; organizacionId: string | null } };
 
 // ¿Esta asignación es la de un administrador con acceso a todas las sucursales?

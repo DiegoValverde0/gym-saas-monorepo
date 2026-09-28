@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -149,6 +149,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { hasPermission } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
   useAvisoCambioAcceso(userData);
+  // Las cuentas de clientes usan su portal, no el panel.
+  const esCliente = !!userData?.esCliente;
+  useEffect(() => {
+    if (esCliente) router.replace('/portal');
+  }, [esCliente, router]);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -302,6 +307,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+
+  if (esCliente) return <div className="h-screen w-full bg-slate-50 dark:bg-slate-900" />;
 
   return (
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900">

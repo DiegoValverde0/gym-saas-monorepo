@@ -56,8 +56,8 @@ export class ReservaClaseController {
   }
 
   // Endpoint separado (no el PATCH genérico de arriba) porque usa el permiso
-  // reservas:eliminar, que es el que ya tiene sembrado el rol CLIENTE para
-  // poder cancelar su propia reserva -- nunca un borrado físico.
+  // reservas:eliminar -- nunca un borrado físico. El cliente cancela las
+  // suyas desde el portal (POST /portal/reservas/:id/cancelar).
   @Patch(':id/cancelar')
   @RequirePermissions({ accion: 'eliminar', modulo: 'reservas' })
   cancelar(@Param('id') id: string) {

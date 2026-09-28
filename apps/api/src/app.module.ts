@@ -39,6 +39,7 @@ import { AgendaModule } from './modules/agenda/agenda.module';
 import { ReportesModule } from './modules/reportes/reportes.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { SalaModule } from './modules/sala/sala.module';
+import { PortalModule } from './modules/portal/portal.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -88,6 +89,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReportesModule,
     AuditoriaModule,
     SalaModule,
+    PortalModule,
     ScheduleModule.forRoot()
   ],
   controllers: [],

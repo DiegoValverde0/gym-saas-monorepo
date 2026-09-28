@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SucursalPreferidaDto } from './dto/sucursal-preferida.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermitirCliente } from '../../common/decorators/permitir-cliente.decorator';
 
 interface RequestWithUser extends ExpressRequest {
   user: {
@@ -15,6 +16,7 @@ interface RequestWithUser extends ExpressRequest {
     sucursalNombre?: string;
     rolNombre?: string;
     is_superadmin?: boolean;
+    esCliente?: boolean;
   };
 }
 
@@ -50,6 +52,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @PermitirCliente()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Request() req: RequestWithUser, @Res({ passthrough: true }) res: Response) {
@@ -69,6 +72,7 @@ export class AuthController {
   // HttpOnly (ilegible desde JS), así que el frontend pide sus propios datos
   // acá en vez de decodificar un token que ya no tiene en localStorage.
   @UseGuards(JwtAuthGuard)
+  @PermitirCliente()
   @Get('me')
   async me(@Request() req: RequestWithUser) {
     return this.authService.getMe(req.user);
@@ -83,6 +87,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @PermitirCliente()
   @Get('permisos')
   getPermisos(@Request() req: RequestWithUser) {
     const user = req.user;

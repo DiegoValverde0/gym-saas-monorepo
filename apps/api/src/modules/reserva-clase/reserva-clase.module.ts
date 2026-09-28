@@ -5,5 +5,7 @@ import { ReservaClaseController } from './reserva-clase.controller';
 @Module({
   controllers: [ReservaClaseController],
   providers: [ReservaClaseService],
+  // El portal del cliente reserva y cancela con las mismas reglas.
+  exports: [ReservaClaseService],
 })
 export class ReservaClaseModule {}

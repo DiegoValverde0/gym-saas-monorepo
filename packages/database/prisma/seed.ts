@@ -151,6 +151,19 @@ async function main() {
     data: { estado: EstadoAperturaCaja.CERRADA, fechaCierre: new Date(), montoCierreEsperado: 400.00, montoCierreReal: 400.00 }
   });
 
+  // =======================================================
+  // 6. PORTAL DEL CLIENTE (docs/plan-portal-cliente.md)
+  // =======================================================
+  // Juan entra a su portal con el correo de su ficha (juan123), como si
+  // recepción le hubiera dado acceso desde la ficha.
+  const juanUser = await prisma.usuario.create({
+    data: { nombreCompleto: clienteTitan.nombre, correo: 'juan.titan@ejemplo.com', telefono: '70000001', contrasenaHash: hashPassword('juan123') }
+  });
+  await prisma.asignacionAcceso.create({
+    data: { usuarioId: juanUser.id, organizacionId: orgTitan.id, rolId: roles.CLIENTE, sucursalId: null }
+  });
+  await prisma.cliente.update({ where: { id: clienteTitan.id }, data: { usuarioId: juanUser.id } });
+
   console.log('✅ Base de datos sembrada correctamente con Permisos y 5 Roles base.');
 }
 

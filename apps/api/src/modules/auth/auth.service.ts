@@ -140,6 +140,7 @@ export class AuthService {
     sucursalNombre?: string;
     rolNombre?: string;
     is_superadmin?: boolean;
+    esCliente?: boolean;
   }) {
     const usuario = await this.prisma.extendedClient.usuario.findUnique({
       where: { id: payload.sub },
@@ -160,6 +161,8 @@ export class AuthService {
       sucursalNombre: payload.sucursalNombre ?? null,
       rolNombre: payload.rolNombre ?? null,
       is_superadmin: !!payload.is_superadmin,
+      // Portal del cliente: el frontend lo manda a /portal en vez de /dashboard.
+      esCliente: !!payload.esCliente,
       sucursalPreferidaId,
     };
   }
