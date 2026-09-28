@@ -26,6 +26,10 @@ playwright-report/
 .env
 .env.*.local
 .env.local
+.env.produccion
+
+# respaldos de la base en el servidor (docker-compose.prod.yml)
+respaldos/
 
 # logs y debug
 npm-debug.log*

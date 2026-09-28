@@ -1,0 +1,106 @@
+# Producción en un servidor con Docker (ver docs/despliegue.md):
+#   docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --build
+#
+# Solo Caddy queda expuesto (80 y 443). La base de datos y Redis no tienen
+# puertos publicados.
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET}
+  FRONTEND_URL: https://${DOMINIO}
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Falta POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Falta POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+  # Aplica las migraciones pendientes y la carga inicial (permisos, roles y el
+  # superadmin si no existe). Corre en cada despliegue y termina.
+  migrar:
+    build: { context: ., target: api }
+    image: gym-manager-api
+    environment:
+      <<: *app-env
+      SUPERADMIN_CORREO: ${SUPERADMIN_CORREO:-}
+      SUPERADMIN_CONTRASENA: ${SUPERADMIN_CONTRASENA:-}
+      SUPERADMIN_NOMBRE: ${SUPERADMIN_NOMBRE:-}
+    working_dir: /usr/src/app/packages/database
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/inicial.ts"]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: gym-manager-api
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      migrar: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+
+  web:
+    build: { context: ., target: web }
+    image: gym-manager-web
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO:?Falta DOMINIO}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+  respaldos:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DIAS_RESPALDO: ${DIAS_RESPALDO:-14}
+    entrypoint: ["sh", "/respaldo.sh"]
+    volumes:
+      - ./deploy/respaldo.sh:/respaldo.sh:ro
+      - ./respaldos:/respaldos
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

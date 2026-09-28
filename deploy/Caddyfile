@@ -1,0 +1,15 @@
+# Un solo dominio para la web y la API: la cookie de sesión es del mismo
+# sitio y la web la puede validar (apps/web/src/middleware.ts). Caddy obtiene
+# y renueva solo el certificado HTTPS de Let's Encrypt para {$DOMINIO}.
+{$DOMINIO} {
+	encode zstd gzip
+
+	# /api/clientes -> API /clientes
+	handle_path /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
