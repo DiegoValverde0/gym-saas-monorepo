@@ -82,20 +82,6 @@ export class JornadasConfigDto {
   toleranciaAtrasoMinutos?: number;
 }
 
-export class PreferenciasOperativasConfigDto {
-  @IsOptional()
-  @IsBoolean()
-  renovacionAutomaticaPlanes?: boolean;
-
-  @IsOptional()
-  @IsString()
-  impresionTickets?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  notificacionesWhatsapp?: boolean;
-}
-
 export const TIPOS_GIMNASIO = ['musculacion', 'box', 'estudio', 'artes_marciales', 'otro'] as const;
 export const TAMANOS_EQUIPO = ['solo', 'pequeno', 'grande'] as const;
 
@@ -150,10 +136,6 @@ export class ConfiguracionTenantDto {
   @Type(() => RequerimientosClaseConfigDto)
   requerimientosClase?: RequerimientosClaseConfigDto;
 
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => PreferenciasOperativasConfigDto)
-  preferenciasOperativas?: PreferenciasOperativasConfigDto;
 
   @IsOptional()
   @ValidateNested()

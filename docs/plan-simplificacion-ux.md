@@ -169,7 +169,7 @@ Leyenda: ✅ visible · ➖ oculto · 🔧 visible bajo "Más opciones".
 | Clientes: sucursal base | ➖ (usa la predeterminada) | ✅ si hay >1 sucursal | ✅ |
 | **Planes**: tipo (mensual / por sesiones), precio, duración | ✅ | ✅ | ✅ |
 | Planes: días permitidos, límite de días por semana, franja horaria | ➖ | 🔧 | ✅ |
-| Planes: renovación automática | ➖ | 🔧 | ✅ |
+| Planes: renovación automática (quitada el 2026-09-27: no había lógica y el sistema no cobra solo) | ➖ | ➖ | ➖ |
 | Planes: qué clases incluye | "Incluye todas las clases" sí/no | Por disciplina | Por disciplina + reglas por clase (fase 6) |
 | **Venta de membresía**: cliente → plan → pago | 1 pantalla | 3 pasos | 3 pasos + promociones + pagos mixtos |
 | **Promociones** | ➖ (descuento manual en la venta) | ✅ | ✅ |

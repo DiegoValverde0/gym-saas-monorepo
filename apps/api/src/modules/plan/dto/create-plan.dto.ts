@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, IsBoolean, IsEnum, IsNumber, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, IsEnum, IsNumber, Min } from 'class-validator';
 import { TipoPlan, EstadoGeneral } from '@prisma/client';
 
 export class CreatePlanDto {
@@ -35,9 +35,6 @@ export class CreatePlanDto {
   @IsOptional()
   horaFinAcceso?: string;
 
-  @IsBoolean()
-  @IsOptional()
-  esRenovableAutomaticamente?: boolean;
 
   @IsNumber()
   @IsNotEmpty()

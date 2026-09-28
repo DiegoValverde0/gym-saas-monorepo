@@ -52,11 +52,6 @@ const organizacionSchema = z.object({
     jornadas: z.object({
       toleranciaAtrasoMinutos: z.number({ message: 'Ingresa un número de minutos' }).int().min(0, 'Mínimo 0').max(120, 'Máximo 120'),
     }),
-    preferenciasOperativas: z.object({
-      renovacionAutomaticaPlanes: z.boolean(),
-      impresionTickets: z.string(),
-      notificacionesWhatsapp: z.boolean(),
-    })
   })
 });
 
@@ -107,11 +102,6 @@ export default function ConfiguracionPage() {
         },
         jornadas: {
           toleranciaAtrasoMinutos: (organizacion as any).configuracion?.jornadas?.toleranciaAtrasoMinutos ?? 10,
-        },
-        preferenciasOperativas: {
-          renovacionAutomaticaPlanes: (organizacion as any).configuracion?.preferenciasOperativas?.renovacionAutomaticaPlanes ?? true,
-          impresionTickets: (organizacion as any).configuracion?.preferenciasOperativas?.impresionTickets ?? 'NINGUNA',
-          notificacionesWhatsapp: (organizacion as any).configuracion?.preferenciasOperativas?.notificacionesWhatsapp ?? false,
         }
       }
     } : undefined,
@@ -147,11 +137,6 @@ export default function ConfiguracionPage() {
         },
         jornadas: {
           toleranciaAtrasoMinutos: 10,
-        },
-        preferenciasOperativas: {
-          renovacionAutomaticaPlanes: true,
-          impresionTickets: 'NINGUNA',
-          notificacionesWhatsapp: false,
         }
       }
     },

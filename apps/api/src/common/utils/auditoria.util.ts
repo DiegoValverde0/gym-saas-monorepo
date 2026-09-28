@@ -91,7 +91,6 @@ const SECCION_LEGIBLE: Record<string, string> = {
   requerimientosClase: 'reglas de clases',
   clases: 'reglas de clases',
   jornadas: 'tolerancia de atrasos',
-  preferenciasOperativas: 'preferencias',
   onboarding: 'asistente de inicio',
   nombre: 'nombre',
   razonSocial: 'razón social',

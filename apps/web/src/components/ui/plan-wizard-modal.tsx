@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { ArrowRight, ArrowLeft, Save, CalendarClock, ChevronDown } from 'lucide-react';
 import { useModoUso } from '@/hooks/use-modo-uso';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
@@ -24,7 +23,6 @@ const planSchema = z.object({
   cantidadSesiones: z.coerce.number().optional().or(z.literal('')),
   horaInicioAcceso: z.string().optional(),
   horaFinAcceso: z.string().optional(),
-  esRenovableAutomaticamente: z.boolean().default(false),
   precio: z.coerce.number().min(0, "El precio no puede ser negativo"),
   estado: z.string().default('ACTIVO'),
 });
@@ -112,7 +110,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
       diasPermitidos: [],
       horaInicioAcceso: '',
       horaFinAcceso: '',
-      esRenovableAutomaticamente: false,
       precio: 0,
       estado: 'ACTIVO',
     }
@@ -140,7 +137,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
           diasPermitidos: initialData.diasPermitidos || [],
           horaInicioAcceso: parseTime(initialData.horaInicioAcceso),
           horaFinAcceso: parseTime(initialData.horaFinAcceso),
-          esRenovableAutomaticamente: initialData.esRenovableAutomaticamente || false,
           precio: Number(initialData.precio),
           estado: initialData.estado || 'ACTIVO',
         });
@@ -154,7 +150,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
           diasPermitidos: [],
           horaInicioAcceso: '',
           horaFinAcceso: '',
-          esRenovableAutomaticamente: false,
           precio: 0,
           estado: 'ACTIVO',
         });
@@ -185,25 +180,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
     onSubmit(values, incluidasTocadas ? incluidas : null);
   });
 
-  // Renovación automática y restricciones de acceso: en experto, a la vista
-  // (paso 1 y paso 3); en intermedio, bajo "Más opciones" del paso 2; en
-  // simple no se muestran (plan de simplificación, 4.4). Ocultarlas no borra
-  // lo que un plan ya tenga configurado.
-  const bloqueRenovacion = (
-                <div className="space-y-2 flex flex-col justify-center mt-2 p-4 bg-white border border-slate-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <Label className="cursor-pointer font-semibold text-slate-700">Renovación Automática</Label>
-                    <Controller
-                      control={form.control}
-                      name="esRenovableAutomaticamente"
-                      render={({ field }) => (
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      )}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-500">El plan se renovará automáticamente al vencer.</p>
-                </div>
-  );
   const bloqueRestricciones = (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
@@ -310,7 +286,7 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                           const precio = form.getValues('precio');
                           form.reset({
                             nombre: '', tipoPlan: 'TIEMPO', duracionDias: 30, cantidadSesiones: '', limiteDiasSemana: '', diasPermitidos: [],
-                            horaInicioAcceso: '', horaFinAcceso: '', esRenovableAutomaticamente: false, precio, estado: 'ACTIVO',
+                            horaInicioAcceso: '', horaFinAcceso: '', precio, estado: 'ACTIVO',
                             ...pl.valores,
                           });
                         }}
@@ -382,7 +358,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                 </div>
 
                 )}
-                {esExperto && bloqueRenovacion}
               </div>
             </div>
 
@@ -441,10 +416,10 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
                       className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700"
                       aria-expanded={masOpciones}
                     >
-                      <span>Más opciones: renovación y restricciones de acceso</span>
+                      <span>Más opciones: restricciones de acceso</span>
                       <ChevronDown className={`h-4 w-4 transition-transform ${masOpciones ? 'rotate-180' : ''}`} />
                     </button>
-                    {masOpciones && <div className="space-y-4 px-4 pb-4">{bloqueRenovacion}{bloqueRestricciones}</div>}
+                    {masOpciones && <div className="space-y-4 px-4 pb-4">{bloqueRestricciones}</div>}
                   </div>
                 )}
 
