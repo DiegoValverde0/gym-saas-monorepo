@@ -181,7 +181,7 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
 - Un reporte compartido solo se abre si la persona también tiene el permiso del tipo.
 - **Listo cuando:** el dueño guarda un reporte en una carpeta compartida con Recepción, Ana lo ve y lo corre, y un instructor no.
 
-### Fase 4: constructor en la interfaz
+### Fase 4: constructor en la interfaz (CÓDIGO HECHO, FALTA PROBAR EN EL NAVEGADOR)
 - Inicio de Reportería, paso "¿Qué quieres ver?", constructor con panel de columnas, pestañas, vista previa en vivo, filtros y guardar.
 - Formatos Lista y Agrupado.
 - **Listo cuando:** se arma "Ventas de este mes por plan, con total" en menos de un minuto, sin escribir nada técnico. Se prueba en el navegador.

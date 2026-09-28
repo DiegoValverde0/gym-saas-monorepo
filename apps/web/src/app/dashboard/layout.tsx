@@ -37,7 +37,8 @@ import {
   CalendarRange,
   Receipt,
   Truck,
-  Lightbulb
+  Lightbulb,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -122,6 +123,8 @@ const navigationGroups: NavGroup[] = [
       { name: 'Accesos avanzados', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
       { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
+      // Reportería (docs/plan-reporteria.md): separada del tablero de Reportes.
+      { name: 'Reportería', href: '/dashboard/reporteria', icon: BarChart3, permission: 'reportes:leer' },
       // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
       { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
     ]

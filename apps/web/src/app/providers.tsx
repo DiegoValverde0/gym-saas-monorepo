@@ -12,12 +12,15 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   
   const [queryClient] = useState(() => new QueryClient({
     queryCache: new QueryCache({
-      onError: (error) => {
+      onError: (error, query) => {
         const status = error instanceof ApiError ? error.status : undefined
         // Sin permiso para leer algo: la página ya avisa "Acceso Denegado"
         // (Protect) o simplemente no muestra esa parte. Antes salía además
         // "Error de conexión", que no lo era.
         if (status === 403) return
+        // La pantalla ya muestra el error donde corresponde (por ejemplo, la
+        // vista previa de la reportería mientras se escribe un filtro).
+        if (query.meta?.silencioso) return
         toast({
           title: status === 0 ? 'Error de conexión' : 'No se pudo cargar',
           description: error.message,
