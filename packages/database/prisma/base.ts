@@ -37,6 +37,9 @@ const MODULOS = [
   'productos',
   'inventarios',
   'dashboard',
+  // Reportería (docs/plan-reporteria.md): ver/correr y exportar (leer),
+  // armar y guardar (crear), editar y borrar reportes y carpetas.
+  'reportes',
 ];
 const ACCIONES = ['crear', 'leer', 'actualizar', 'eliminar'];
 
@@ -110,7 +113,9 @@ const ROLES_BASE: { nombre: string; descripcion: string; permisos: Filtro }[] = 
       (p.modulo === 'reservas' && ['crear', 'leer', 'actualizar'].includes(p.accion)) ||
       (p.modulo === 'turnos' && p.accion === 'leer') ||
       (p.modulo === 'sucursales' && p.accion === 'leer') ||
-      (p.modulo === 'dashboard' && p.accion === 'leer'),
+      (p.modulo === 'dashboard' && p.accion === 'leer') ||
+      // Reportería: ve y exporta los reportes compartidos, no los arma.
+      (p.modulo === 'reportes' && p.accion === 'leer'),
   },
   {
     // Sin permisos a propósito: con reservas:leer o membresias:leer vería

@@ -50,7 +50,8 @@ const NOMBRE_MODULO: Record<string, string> = {
   pagos: 'Pagos',
   productos: 'Productos',
   inventarios: 'Stock',
-  dashboard: 'Inicio y reportes',
+  dashboard: 'Inicio y tablero',
+  reportes: 'Reportería',
   sistema: 'Papelera',
 };
 
