@@ -176,7 +176,7 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
   - los subtotales cuadran con el total;
   - quien está limitado a una sucursal no ve otra.
 
-### Fase 3: reportes guardados y carpetas
+### Fase 3: reportes guardados y carpetas (HECHA)
 - CRUD de reportes y carpetas, duplicar, papelera, compartir por rol, `ultima_ejecucion` y `veces_ejecutado`.
 - Un reporte compartido solo se abre si la persona también tiene el permiso del tipo.
 - **Listo cuando:** el dueño guarda un reporte en una carpeta compartida con Recepción, Ana lo ve y lo corre, y un instructor no.

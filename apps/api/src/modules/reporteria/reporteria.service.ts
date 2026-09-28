@@ -16,8 +16,10 @@ import { compilarReporte, ContextoEjecucion, MAX_FILAS_EN_PANTALLA, MAX_GRUPOS, 
 const TIEMPO_MAXIMO_MS = 15_000;
 const POR_PAGINA_MAXIMO = 200;
 
-interface Contexto {
+export interface Contexto {
   ejecucion: ContextoEjecucion;
+  /** Rol en esta organización (para las carpetas compartidas por rol). */
+  rolId: string | null;
   permisos: string[];
   modulos: Record<ModuloTenant, boolean>;
   modo: ModoUso;
@@ -59,13 +61,19 @@ export class ReporteriaService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
-  private async contexto(): Promise<Contexto> {
+  async contexto(): Promise<Contexto> {
     const organizacionId: string | undefined = this.cls.get('organizacionId');
     const usuarioId: string | undefined = this.cls.get('usuarioId');
     if (!organizacionId || !usuarioId) throw new ForbiddenException('Selecciona una organización para usar la reportería.');
-    const [org, acceso] = await Promise.all([
+    const [org, acceso, asignacion] = await Promise.all([
       this.prisma.organizacion.findUnique({ where: { id: organizacionId }, select: { configuracion: true, zonaHoraria: true } }),
       obtenerAccesoVigente(this.prisma, this.redis, usuarioId, organizacionId),
+      // Misma asignación que usa obtenerAccesoVigente (la más antigua).
+      this.prisma.asignacionAcceso.findFirst({
+        where: { usuarioId, organizacionId },
+        orderBy: { createdAt: 'asc' },
+        select: { rolId: true },
+      }),
     ]);
     const zonaHoraria = org?.zonaHoraria ?? ZONA_HORARIA_DEFAULT;
     const guardados = (org?.configuracion as { modulos?: Partial<Record<ModuloTenant, boolean>> } | null)?.modulos ?? {};
@@ -78,13 +86,14 @@ export class ReporteriaService {
         hoy: aHoraLocal(new Date(), zonaHoraria).fechaSolo,
         inicioDelDia: (fecha: string) => desdeHoraLocal(new Date(`${fecha}T00:00:00Z`), 0, zonaHoraria),
       },
+      rolId: asignacion?.rolId ?? null,
       permisos: acceso?.permisos ?? [],
       modulos: { ...MODULOS_POR_DEFECTO, ...guardados },
       modo: modoDeConfiguracion(org?.configuracion),
     };
   }
 
-  private disponible(tipo: TipoReporte, ctx: Contexto) {
+  disponible(tipo: TipoReporte, ctx: Contexto) {
     return ctx.permisos.includes(tipo.permiso) && (!tipo.moduloGimnasio || ctx.modulos[tipo.moduloGimnasio]);
   }
 
@@ -137,7 +146,7 @@ export class ReporteriaService {
     return this.ejecutar(tipo, definicion, ctx, pagina, porPagina);
   }
 
-  private async ejecutar(tipo: TipoReporte, definicion: Definicion, ctx: Contexto, pagina: number, porPagina: number): Promise<ResultadoReporte> {
+  async ejecutar(tipo: TipoReporte, definicion: Definicion, ctx: Contexto, pagina: number, porPagina: number): Promise<ResultadoReporte> {
     if (definicion.filtros.sucursalId && ctx.ejecucion.sucursalAlcance && definicion.filtros.sucursalId !== ctx.ejecucion.sucursalAlcance) {
       throw new ForbiddenException('Tu acceso está limitado a otra sucursal.');
     }
@@ -202,6 +211,16 @@ export class ReporteriaService {
       recortado: totalFilas > MAX_FILAS_EN_PANTALLA,
       gruposRecortados: resumenCrudo.length > MAX_GRUPOS,
     };
+  }
+
+  /**
+   * Cuenta una ejecución de un reporte guardado sin tocar updated_at (que es
+   * "modificado el"). SQL crudo con la organización explícita.
+   */
+  async registrarEjecucion(reporteId: string, organizacionId: string) {
+    await this.prisma.$executeRaw`
+      UPDATE reportes SET ultima_ejecucion = now(), veces_ejecutado = veces_ejecutado + 1
+      WHERE id = ${reporteId}::uuid AND organizacion_id = ${organizacionId}::uuid`;
   }
 
   // Solo lectura y con tiempo máximo: un reporte nunca puede escribir ni
