@@ -26,6 +26,14 @@ Queda fuera por ahora: pagar en línea, que el cliente edite sus datos, avisos a
 - Revisar las rutas que solo piden sesión (sin `@RequirePermissions`) para que un cliente no obtenga datos del gimnasio por ahí.
 - El panel `/dashboard` manda al cliente a `/portal`, y `/portal` manda al equipo a `/dashboard`.
 
+## Estado (2026-09-28)
+
+Las 4 fases están hechas y probadas: fase 1 `c42875d`, fase 2 `4208229`, fase 3 `2bd3c7b`, fase 4 en el commit que agrega este estado. Cuenta de prueba del seed: `juan.titan@ejemplo.com` / `juan123` (Gym Titan).
+
+Probado en el navegador a 390 px: recepción (limitada a una sucursal) da acceso a un cliente nuevo desde su ficha; el cliente entra con el formulario real y llega a `/portal`; sin membresía ve el motivo en cada clase; con membresía reserva, se anota en la lista de espera y sube sola cuando otro cancela; al quitarle el acceso, su sesión se cierra.
+
+Pendiente para más adelante: avisarle al cliente (correo o WhatsApp automático) cuando sube de la lista de espera, que llega con el tema de avisos automáticos.
+
 ## Fases (un commit por fase)
 
 ### Fase 1 — Base de datos y API del portal
