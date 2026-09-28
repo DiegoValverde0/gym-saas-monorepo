@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Protect } from '@/components/ui/protect';
 import { VentaRapidaModal } from '@/components/ui/venta-rapida-modal';
+import { AccesoPortal, EstadoAccesoPortal } from '@/components/ui/acceso-portal';
 import { apiGet } from '@/lib/api-client';
 import { CalendarDays, LogIn, Phone, RefreshCw } from 'lucide-react';
 
@@ -25,7 +26,7 @@ export const ESTADO_SEGMENTO: Record<Segmento, { texto: string; variante: 'succe
 };
 
 interface Ficha {
-  cliente: { id: string; nombre: string; telefono?: string | null; numeroDocumento?: string | null; segmento: Segmento; estado: string };
+  cliente: { id: string; nombre: string; correo?: string | null; telefono?: string | null; numeroDocumento?: string | null; segmento: Segmento; estado: string };
   membresiaActual: {
     estado: string;
     planNombre: string;
@@ -39,6 +40,7 @@ interface Ficha {
   asistencias: { fechaHora: string; sucursal: string }[];
   reservas: { id: string; clase: string; fechaHora: string; sucursal: string }[];
   pagos: { fechaHora: string; monto: number; formaPago: string; concepto: string }[];
+  accesoPortal: EstadoAccesoPortal | null;
 }
 
 const fecha = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', ...(iso.length === 10 ? { timeZone: 'UTC' } : {}) });
@@ -136,6 +138,15 @@ export function FichaCliente({ clienteId, onClose }: { clienteId: string | null;
               {ficha.reservas.length > 0 &&
                 seccion('Próximas clases', '', ficha.reservas.map((r) => ({ clave: r.id, izquierda: r.clase, derecha: fechaHora(r.fechaHora) })))}
               {seccion('Últimos pagos', 'Sin pagos registrados.', ficha.pagos.map((p, i) => ({ clave: `${p.fechaHora}-${i}`, izquierda: `${p.concepto} · ${p.formaPago}`, derecha: `${fecha(p.fechaHora)} · Bs. ${p.monto.toFixed(2)}` })))}
+              <Protect permission="clientes:actualizar">
+                <AccesoPortal
+                  key={ficha.cliente.id}
+                  clienteId={ficha.cliente.id}
+                  nombre={ficha.cliente.nombre}
+                  correoFicha={ficha.cliente.correo ?? null}
+                  acceso={ficha.accesoPortal}
+                />
+              </Protect>
             </div>
           )}
         </DialogContent>

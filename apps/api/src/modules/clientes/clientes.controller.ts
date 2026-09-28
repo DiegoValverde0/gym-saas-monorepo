@@ -1,5 +1,7 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ClientesService } from './clientes.service';
+import { AccesoPortalService } from './acceso-portal.service';
+import { DarAccesoPortalDto } from './dto/acceso-portal.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -10,7 +12,10 @@ import { ClientesQueryDto } from './dto/clientes-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('clientes')
 export class ClientesController {
-  constructor(private readonly clientesService: ClientesService) {}
+  constructor(
+    private readonly clientesService: ClientesService,
+    private readonly accesoPortalService: AccesoPortalService,
+  ) {}
 
   @Post()
   @RequirePermissions({ accion: 'crear', modulo: 'clientes' })
@@ -29,7 +34,27 @@ export class ClientesController {
   @Get(':id/ficha')
   @RequirePermissions({ accion: 'leer', modulo: 'clientes' })
   async ficha(@Param('id') id: string) {
-    return this.clientesService.ficha(id);
+    const ficha = await this.clientesService.ficha(id);
+    return { ...ficha, accesoPortal: await this.accesoPortalService.estado(id) };
+  }
+
+  // Portal del cliente (docs/plan-portal-cliente.md, fase 2).
+  @Post(':id/portal')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'clientes' })
+  async darAccesoPortal(@Param('id', ParseUUIDPipe) id: string, @Body() dto: DarAccesoPortalDto) {
+    return this.accesoPortalService.darAcceso(id, dto.correo);
+  }
+
+  @Post(':id/portal/contrasena')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'clientes' })
+  async nuevaContrasenaPortal(@Param('id', ParseUUIDPipe) id: string) {
+    return this.accesoPortalService.nuevaContrasena(id);
+  }
+
+  @Delete(':id/portal')
+  @RequirePermissions({ accion: 'actualizar', modulo: 'clientes' })
+  async quitarAccesoPortal(@Param('id', ParseUUIDPipe) id: string) {
+    return this.accesoPortalService.quitarAcceso(id);
   }
 
   @Get(':id')
