@@ -60,11 +60,12 @@ export default function DashboardPage() {
 
       <PrimerosPasos />
 
-      <AccionesRapidas />
+      {/* data-recorrido: lo que resalta la guía del modo simple (components/ui/recorrido.tsx). */}
+      <div data-recorrido="acciones"><AccionesRapidas /></div>
 
-      {esSimple && <ResumenHoy />}
+      {esSimple && <div data-recorrido="resumen"><ResumenHoy /></div>}
 
-      <PorVencer />
+      <div data-recorrido="por-vencer"><PorVencer /></div>
 
       {!esSimple && (<>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">

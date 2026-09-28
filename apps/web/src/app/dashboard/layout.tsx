@@ -36,13 +36,15 @@ import {
   CalendarDays,
   CalendarRange,
   Receipt,
-  Truck
+  Truck,
+  Lightbulb
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
+import { Recorrido, reiniciarRecorridos } from '@/components/ui/recorrido';
 import { AsistenteInicio } from '@/components/ui/asistente-inicio';
 import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
@@ -157,7 +159,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
-  const { alMenos } = useModoUso();
+  const { alMenos, esSimple } = useModoUso();
 
   // Filter groups based on tenant configuration
   const filteredNavigationGroups = useMemo(() => {
@@ -424,6 +426,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{userData?.email}</p>
                     </div>
                     <div className="py-1">
+                      {esSimple && userData?.sub && (
+                        <button
+                          onClick={() => { setProfileMenuOpen(false); reiniciarRecorridos(userData.sub); }}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-colors"
+                        >
+                          <Lightbulb className="w-4 h-4" />
+                          Volver a ver las guías
+                        </button>
+                      )}
                       <button
                         onClick={logout}
                         className="w-full text-left px-4 py-2 text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 flex items-center gap-2 transition-colors font-medium"
@@ -446,6 +457,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
           <CommandPalette />
           <AsistenteInicio />
+          <Recorrido />
         </main>
       </div>
     </div>

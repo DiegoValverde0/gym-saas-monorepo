@@ -664,6 +664,7 @@ Se reorganiza en cuatro pestañas, en este orden:
 ### 12.3 Ayuda contextual
 - Un ícono "?" junto a cada concepto nuevo (horario de trabajo, sesión, quién puede reservar) con una explicación de dos líneas.
 - En modo simple, al entrar por primera vez a cada pantalla, un recorrido de 3 pasos que se puede saltar.
+- **2026-09-27: hecho el recorrido** (`components/ui/recorrido.tsx`, montado en el layout): Inicio, Clientes, Control de acceso, Membresías, Planes, Productos, Clases y Reportes. Tarjeta abajo a la derecha (abajo a lo ancho en celular) con Saltar / Atrás / Siguiente, que resalta el botón o la zona de cada paso. Se recuerda por persona y pantalla en el navegador (sin cambio de base de datos); "Volver a ver las guías" en el menú del usuario (solo modo simple) las reinicia.
 
 ---
 
