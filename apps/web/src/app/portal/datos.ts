@@ -35,6 +35,7 @@ export interface Yo {
   membresia: MembresiaPortal | null;
   siguiente: { planNombre: string; fechaInicio: string } | null;
   proximasClases: ProximaClase[];
+  avisosSinLeer: number;
 }
 
 export interface ClasePortal {
@@ -60,6 +61,17 @@ export interface Historial {
   pagos: { id: string; fechaHora: string; monto: number; formasPago: string[]; concepto: string }[];
 }
 
+export type TipoAviso = 'POR_VENCER' | 'VENCE_HOY' | 'VENCIDA' | 'LUGAR' | 'CANCELADA' | 'RECORDATORIO';
+
+export interface Aviso {
+  id: string;
+  tipo: TipoAviso | null;
+  titulo: string;
+  mensaje: string;
+  fecha: string;
+  leido: boolean;
+}
+
 export interface Asistencia {
   id: string;
   ingreso: string;
@@ -67,7 +79,9 @@ export interface Asistencia {
   sucursal: string;
 }
 
-export const useYo = (enabled = true) => useQuery({ queryKey: ['portal-yo'], queryFn: () => apiGet<Yo>('/portal/yo'), enabled });
+// Cada 5 minutos, para que la campana muestre los avisos nuevos sin recargar.
+export const useYo = (enabled = true) =>
+  useQuery({ queryKey: ['portal-yo'], queryFn: () => apiGet<Yo>('/portal/yo'), enabled, refetchInterval: 5 * 60_000 });
 
 export const CLAVE_CLASES = ['portal-clases'];
 
