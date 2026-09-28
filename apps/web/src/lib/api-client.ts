@@ -116,31 +116,3 @@ export function unwrapList<T = unknown>(payload: unknown): T[] {
   }
   return [];
 }
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-// Devuelve el objeto paginado completo, garantizando una estructura segura.
-export function unwrapPaginatedList<T = unknown>(payload: unknown): PaginatedResponse<T> {
-  if (payload && typeof payload === 'object' && 'data' in payload) {
-    const p = payload as Record<string, unknown>;
-    return {
-      data: Array.isArray(p.data) ? p.data as T[] : [],
-      total: typeof p.total === 'number' ? p.total : 0,
-      page: typeof p.page === 'number' ? p.page : 1,
-      limit: typeof p.limit === 'number' ? p.limit : 10,
-    };
-  }
-  // Si no es un objeto paginado, asumimos que todo es la primera página
-  const data = Array.isArray(payload) ? payload as T[] : [];
-  return {
-    data,
-    total: data.length,
-    page: 1,
-    limit: data.length || 10,
-  };
-}
