@@ -5,10 +5,11 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
-    "db:push": "dotenv -e ../../.env -- prisma db push && pnpm db:constraints",
-    "db:constraints": "dotenv -e ../../.env -- prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
-    "db:reset": "dotenv -e ../../.env -- prisma db push --force-reset && pnpm db:constraints && pnpm db:seed",
+    "db:inicial": "dotenv -e ../../.env -- tsx prisma/inicial.ts",
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {

@@ -47,7 +47,7 @@ export class AperturaCajaService {
     // Nota: los chequeos 2 y 3 son "optimistas" (SELECT antes de escribir) y no
     // bastan solos contra dos requests concurrentes -- el respaldo real son los
     // índices únicos parciales `uq_caja_una_apertura_abierta` y
-    // `uq_usuario_un_turno_abierto` (ver prisma/constraints.sql), que Postgres
+    // `uq_usuario_un_turno_abierto` (ver la migración 0_inicial), que Postgres
     // aplica de forma atómica y cuya violación se traduce abajo a un 409 claro.
     try {
       return await this.prisma.extendedClient.$transaction(async (tx) => {

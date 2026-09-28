@@ -12,14 +12,25 @@ pnpm db:reset                 # crea todas las tablas y carga los datos iniciale
 pnpm dev                      # API en :3001 y web en :3000
 ```
 
-`pnpm db:reset` **BORRA TODA LA BASE** y la deja como nueva: estructura, restricciones (`prisma/constraints.sql`) y datos iniciales (`prisma/seed.ts`: permisos, los 5 roles base, el superadmin y el gimnasio de ejemplo Gym Titan, con su dueño, una recepcionista, una caja, la cuenta "Efectivo del gimnasio", un plan y un cliente con su membresía activa ya cobrada). Las cuentas y claves de prueba están en `seed.ts`.
+`pnpm db:reset` **BORRA TODA LA BASE** y la deja como nueva: aplica las migraciones (`prisma/migrations`) y carga los datos de prueba (`prisma/seed.ts`: permisos, los 5 roles base, el superadmin y el gimnasio de ejemplo Gym Titan, con su dueño, una recepcionista, una caja, la cuenta "Efectivo del gimnasio", un plan y un cliente con su membresía activa ya cobrada). Las cuentas y claves de prueba están en `seed.ts`.
 
 ## Cambios en el esquema
 
-El proyecto no usa migraciones. Después de cambiar `packages/database/prisma/schema.prisma`:
+La base se maneja con migraciones de Prisma (`packages/database/prisma/migrations`). Después de cambiar `schema.prisma`:
 
-- `pnpm db:push`: aplica el esquema sin borrar datos.
-- `pnpm db:reset`: si prefieres empezar de cero.
+```bash
+pnpm db:migrate --name descripcion-corta   # crea la migración y la aplica en tu base local
+```
+
+Sube la carpeta nueva de `migrations/` junto con el cambio: en producción se aplica sola al desplegar.
+
+- `pnpm db:deploy`: aplica las migraciones pendientes sin borrar datos (lo que corre en producción).
+- `pnpm db:inicial`: carga permisos y roles base y crea el superadmin si no existe (no toca datos de gimnasios).
+- `pnpm db:reset`: empezar de cero en local.
+
+## Producción
+
+Un servidor con Docker: `docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --build` levanta la base, Redis, la API, la web, HTTPS automático y respaldos diarios. Los pasos completos están en [docs/despliegue.md](docs/despliegue.md).
 
 ## Pruebas
 
