@@ -350,6 +350,7 @@ model Usuario {
   aperturasCaja           AperturaCaja[]
   auditorias              Auditoria[]
   notificacionesRecibidas Notificacion[]
+  fichasCliente           Cliente[]          @relation("CuentaPortal")
 
   // Firmas de auditoria operativa (trazabilidad de "quien hizo que")
   clientesCreados        Cliente[]            @relation("ClientesCreados")
@@ -740,11 +741,16 @@ model Cliente {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   creadoPorId String?   @map("creado_por_id") @db.Uuid
+  // DB-6 (portal del cliente): cuenta con la que el cliente entra al portal.
+  // Única por organización, no global: una persona puede ser cliente de dos
+  // gimnasios con la misma cuenta.
+  usuarioId   String?   @map("usuario_id") @db.Uuid
 
   organizacion        Organizacion         @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
   // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
   sucursalBase        Sucursal?            @relation(fields: [sucursalBaseId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
   creadoPor           Usuario?             @relation("ClientesCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  usuario             Usuario?             @relation("CuentaPortal", fields: [usuarioId], references: [id], onDelete: SetNull)
   reservasClase       ReservaClase[]
   membresias          Membresia[]
   registrosAsistencia RegistroAsistencia[]
@@ -752,6 +758,7 @@ model Cliente {
 
   @@unique([id, organizacionId])
   @@unique([organizacionId, numeroDocumento])
+  @@unique([organizacionId, usuarioId])
   @@index([organizacionId])
   @@index([organizacionId, correo])
   @@map("clientes")

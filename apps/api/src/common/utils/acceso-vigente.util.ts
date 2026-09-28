@@ -4,6 +4,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
 import { formatPermiso } from './permiso.util';
+import { esRolCliente } from './rol.util';
 
 // Acceso vigente de un usuario en una organización: rol, sucursal y permisos
 // leídos de su AsignacionAcceso actual. El token de sesión solo identifica a
@@ -17,6 +18,8 @@ export interface AccesoVigente {
   sucursalNombre: string | null;
   organizacionNombre: string | null;
   permisos: string[];
+  // Cuenta del portal del cliente: solo entra a las rutas /portal.
+  esCliente: boolean;
 }
 
 // Misma clave que usaban antes solo los permisos: todo el código que ya la
@@ -27,8 +30,15 @@ export const claveAccesoVigente = (usuarioId: string, organizacionId: string | n
 const TTL_SEGUNDOS = 900;
 
 function esAccesoVigente(valor: unknown): valor is AccesoVigente {
-  // Antes la clave guardaba solo el array de permisos: se trata como caché vacía.
-  return !!valor && typeof valor === 'object' && !Array.isArray(valor) && Array.isArray((valor as AccesoVigente).permisos);
+  // Antes la clave guardaba solo el array de permisos (y después, sin
+  // esCliente): se trata como caché vacía.
+  return (
+    !!valor &&
+    typeof valor === 'object' &&
+    !Array.isArray(valor) &&
+    Array.isArray((valor as AccesoVigente).permisos) &&
+    typeof (valor as AccesoVigente).esCliente === 'boolean'
+  );
 }
 
 /**
@@ -82,6 +92,7 @@ export async function obtenerAccesoVigente(
     sucursalNombre: asignacion.sucursal?.nombre ?? null,
     organizacionNombre: asignacion.organizacion?.nombre ?? null,
     permisos: asignacion.rol.rolPermisos.map((rp) => formatPermiso(rp.permiso.modulo, rp.permiso.accion)),
+    esCliente: esRolCliente(asignacion.rol),
   };
 
   try {

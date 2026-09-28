@@ -113,11 +113,12 @@ const ROLES_BASE: { nombre: string; descripcion: string; permisos: Filtro }[] = 
       (p.modulo === 'dashboard' && p.accion === 'leer'),
   },
   {
+    // Sin permisos a propósito: con reservas:leer o membresias:leer vería
+    // las de todos los clientes. El portal (/portal) solo muestra lo suyo y
+    // JwtAuthGuard le cierra el resto de la API.
     nombre: 'CLIENTE',
-    descripcion: 'App Móvil - Ver reservas y membresías',
-    permisos: (p) =>
-      (p.modulo === 'reservas' && ['crear', 'leer', 'eliminar'].includes(p.accion)) ||
-      (p.modulo === 'membresias' && p.accion === 'leer'),
+    descripcion: 'Portal del cliente: su membresía, sus asistencias y reservas de clases',
+    permisos: () => false,
   },
 ];
 

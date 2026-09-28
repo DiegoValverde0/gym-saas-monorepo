@@ -1,10 +1,12 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Inject } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, ForbiddenException, Inject } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { obtenerAccesoVigente, registrarActividad, sesionCerrada } from '../utils/acceso-vigente.util';
+import { PERMITIR_CLIENTE_KEY } from '../decorators/permitir-cliente.decorator';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -12,6 +14,7 @@ export class JwtAuthGuard implements CanActivate {
     private jwtService: JwtService, 
     private cls: ClsService,
     private prisma: PrismaService,
+    private reflector: Reflector,
     @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType
   ) {}
 
@@ -76,6 +79,15 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Ya no tienes acceso a esta organización. Si crees que es un error, habla con un administrador.');
     }
 
+    // Portal del cliente: sus cuentas solo entran a las rutas marcadas con
+    // @PermitirCliente() (las de /portal y las de la propia sesión). Cerrado
+    // por defecto: aunque alguien le agregue permisos al rol CLIENTE, o una
+    // ruta nueva solo pida sesión, un cliente no ve datos del gimnasio.
+    const permitirCliente = this.reflector.getAllAndOverride<boolean>(PERMITIR_CLIENTE_KEY, [context.getHandler(), context.getClass()]);
+    if (acceso.esCliente && !permitirCliente) {
+        throw new ForbiddenException('Esta cuenta es del portal del cliente y no puede usar el panel del gimnasio.');
+    }
+
     // "Cerrar sus sesiones" (Equipo) y "Restablecer contraseña" invalidan los
     // tokens emitidos antes de ese momento en esta organización.
     let cerrada = false;
@@ -96,6 +108,7 @@ export class JwtAuthGuard implements CanActivate {
         sucursalId: acceso.sucursalId,
         sucursalNombre: acceso.sucursalNombre,
         rolNombre: acceso.rolNombre,
+        esCliente: acceso.esCliente,
     };
 
     this.cls.set('organizacionId', payload.organizacionId);
