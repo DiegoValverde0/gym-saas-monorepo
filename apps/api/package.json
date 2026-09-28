@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "dotenv -e ../../.env -- nest start --watch",
     "build": "dotenv -e ../../.env -- nest build",
-    "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix"
+    "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix",
+    "test": "vitest run"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -36,6 +37,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.3.1",
     "dotenv-cli": "^11.0.0",
-    "typescript": "^5.1.3"
+    "typescript": "^5.1.3",
+    "vitest": "^5.0.2"
   }
 }

@@ -20,3 +20,11 @@ El proyecto no usa migraciones. Después de cambiar `packages/database/prisma/sc
 
 - `pnpm db:push`: aplica el esquema sin borrar datos.
 - `pnpm db:reset`: si prefieres empezar de cero.
+
+## Pruebas
+
+```bash
+pnpm test        # pruebas de la API y la web (Vitest, sin base de datos)
+```
+
+Las pruebas van junto al código (`*.spec.ts` en la API, `*.test.ts` en la web). En cada cambio a `main` y en cada pull request, GitHub Actions (`.github/workflows/ci.yml`) revisa tipos, lint y pruebas.

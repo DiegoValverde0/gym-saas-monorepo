@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Users, Clock } from 'lucide-react';
 
 interface Cliente {

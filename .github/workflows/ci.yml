@@ -1,0 +1,48 @@
+# Verificación automática en cada cambio: tipos, lint y pruebas de la API y
+# la web. No necesita base de datos (las pruebas la simulan).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Toma la versión de pnpm de "packageManager" en package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Generar el cliente de Prisma
+        run: pnpm --filter @repo/database exec prisma generate
+
+      - name: Tipos (API)
+        run: pnpm --filter api exec tsc --noEmit -p tsconfig.json
+
+      - name: Tipos (web)
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Lint (API)
+        run: pnpm --filter api exec eslint "src/**/*.ts"
+
+      - name: Lint (web)
+        run: pnpm --filter web exec eslint "src/**/*.ts*"
+
+      - name: Pruebas
+        run: pnpm test
