@@ -30,7 +30,7 @@ interface OpcionEntrenador { id: string; nombre: string; imparteDisciplina: bool
  * Al tocar una sesión en el calendario (plan de simplificación, 8.1), como en
  * Google Calendar:
  *  - Reservas: buscar cliente con semáforo (puede / no puede y por qué).
- *  - Solo esta sesión: cambiar la hora, asignar un reemplazo o cancelar esta fecha.
+ *  - Solo esta sesión: cambiar la hora, asignar un reemplazo, cambiar la sala o cancelar esta fecha.
  *  - Toda la clase: editar o eliminar la serie completa.
  */
 export function SesionDialog({
@@ -53,6 +53,7 @@ export function SesionDialog({
   const [candidato, setCandidato] = useState<Cliente | null>(null);
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [reemplazoId, setReemplazoId] = useState('');
+  const [salaSesionId, setSalaSesionId] = useState('');
   const [confirmarCancelar, setConfirmarCancelar] = useState(false);
 
   const { data: clase, isLoading } = useQuery({
@@ -70,6 +71,7 @@ export function SesionDialog({
     if (clase) {
       setNuevaFecha(toDatetimeLocal(clase.fechaHora));
       setReemplazoId(clase.entrenadorId ?? '');
+      setSalaSesionId(clase.salaId ?? '');
     }
   }, [clase]);
 
@@ -140,6 +142,12 @@ export function SesionDialog({
           ...(clase!.disciplinaId ? { disciplinaId: clase!.disciplinaId } : {}),
         })}`,
       ),
+    enabled: !!clase?.sucursalId,
+  });
+  // Salas de la sucursal (fase 6, DB-2): el selector solo aparece si hay.
+  const { data: salas = [] } = useQuery({
+    queryKey: ['salas', clase?.sucursalId],
+    queryFn: async () => apiGet<{ id: string; nombre: string; capacidad: number | null }[]>(`/salas?sucursalId=${clase!.sucursalId}`),
     enabled: !!clase?.sucursalId,
   });
   const guardarSesion = useMutation({
@@ -316,6 +324,20 @@ export function SesionDialog({
                       <Button variant="outline" disabled={guardarSesion.isPending || reemplazoId === (clase.entrenadorId ?? '')} onClick={() => guardarSesion.mutate({ entrenadorId: reemplazoId || null })}>Guardar</Button>
                     </div>
                   </div>
+                  {salas.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium" htmlFor="sesion-sala">Sala de esta fecha</label>
+                      <div className="flex gap-2">
+                        <select id="sesion-sala" value={salaSesionId} onChange={(e) => setSalaSesionId(e.target.value)} className={dateInputClass}>
+                          <option value="">Sin sala</option>
+                          {salas.map((s) => (
+                            <option key={s.id} value={s.id}>{s.nombre}{s.capacidad ? ` · ${s.capacidad} lugares` : ''}</option>
+                          ))}
+                        </select>
+                        <Button variant="outline" disabled={guardarSesion.isPending || salaSesionId === (clase.salaId ?? '')} onClick={() => guardarSesion.mutate({ salaId: salaSesionId || null })}>Guardar</Button>
+                      </div>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-rose-200 dark:border-rose-900/50 p-3 space-y-2">
                     {confirmarCancelar ? (
                       <>

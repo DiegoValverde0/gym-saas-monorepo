@@ -81,6 +81,9 @@ export default function MarcajePage() {
           ))}
         </div>
 
+        {/* Espacio fijo para el aviso: antes aparecía entre el PIN y el
+            teclado y lo empujaba hacia abajo mientras la persona tecleaba. */}
+        <div className="flex min-h-[8.5rem] w-full items-center">
         {mensaje && (
           <div
             role="status"
@@ -98,6 +101,7 @@ export default function MarcajePage() {
             {mensaje.detalle && <p className="mt-1 text-sm opacity-80">{mensaje.detalle}</p>}
           </div>
         )}
+        </div>
 
         <div className="grid w-full grid-cols-3 gap-3">
           {TECLAS.map((t) => (

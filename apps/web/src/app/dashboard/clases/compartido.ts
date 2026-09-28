@@ -17,6 +17,7 @@ export interface Reserva {
 export interface Clase {
   id: string;
   nombreClase: string;
+  salaId?: string | null;
   sala?: { nombre: string } | null;
   descripcion?: string | null;
   capacidadMaxima: number;
