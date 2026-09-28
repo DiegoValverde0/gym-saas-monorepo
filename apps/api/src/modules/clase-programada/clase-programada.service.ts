@@ -11,6 +11,7 @@ import { paginar, resolverPaginacion } from '../../common/utils/pagination.util'
 import { aHoraLocal } from '../../common/utils/zona-horaria.util';
 import { choqueDeSalaSesion, choqueDeSesion } from '../../common/utils/choques-clase.util';
 import { promoverListaEspera } from '../../common/utils/lista-espera.util';
+import { AvisosService } from '../avisos/avisos.service';
 
 const INCLUDE_RESUMEN = {
   disciplina: { select: { nombre: true } },
@@ -42,7 +43,11 @@ interface DatosDisponibilidad {
 
 @Injectable()
 export class ClaseProgramadaService {
-  constructor(private readonly prisma: PrismaService, private readonly cls: ClsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cls: ClsService,
+    private readonly avisos: AvisosService,
+  ) {}
 
   private async zonaHorariaOrganizacion(): Promise<string | null> {
     const organizacionId = this.cls.get('organizacionId');
@@ -286,17 +291,24 @@ export class ClaseProgramadaService {
   }
 
   // "Solo esta sesión → Cancelar" (plan 8.1 y 8.5): la sesión queda cancelada
-  // y sus reservas confirmadas también, en el acto.
+  // y sus reservas confirmadas también, en el acto. Quienes tenían lugar o
+  // estaban en espera reciben el aviso "Se canceló tu clase".
   async cancelarSesion(id: string) {
     await this.findOne(id);
-    return this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
-      const reservas = await tx.reservaClase.updateMany({
+    const afectados = await this.prisma.extendedClient.$transaction(async (tx: Prisma.TransactionClient) => {
+      const reservas = await tx.reservaClase.findMany({
+        where: { claseId: id, estado: { in: ['CONFIRMADA', 'EN_ESPERA'] } },
+        select: { clienteId: true },
+      });
+      await tx.reservaClase.updateMany({
         where: { claseId: id, estado: { in: ['CONFIRMADA', 'EN_ESPERA'] } },
         data: { estado: 'CANCELADA' },
       });
       await tx.claseProgramada.update({ where: { id }, data: { estado: 'INACTIVO' } });
-      return { reservasCanceladas: reservas.count };
+      return reservas.map((r) => r.clienteId);
     });
+    await this.avisos.avisarClaseCancelada(id, afectados);
+    return { reservasCanceladas: afectados.length };
   }
 
   async verificarDisponibilidad(datos: DatosDisponibilidad) {
@@ -384,7 +396,8 @@ export class ClaseProgramadaService {
       updateClaseProgramadaDto.capacidadMaxima && updateClaseProgramadaDto.capacidadMaxima > actual.capacidadMaxima
         ? await this.prisma.extendedClient.$transaction((tx: Prisma.TransactionClient) => promoverListaEspera(tx, id))
         : [];
-    return { ...clase, disponibilidadEntrenador: disponible, promovidos };
+    await this.avisos.avisarLugar(id, promovidos);
+    return { ...clase, disponibilidadEntrenador: disponible, promovidos: promovidos.map((p) => p.nombre) };
   }
 
   async remove(id: string) {
