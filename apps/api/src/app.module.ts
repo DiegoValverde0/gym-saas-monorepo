@@ -37,6 +37,7 @@ import { AccesoClasesModule } from './modules/acceso-clases/acceso-clases.module
 import { SistemaModule } from './modules/sistema/sistema.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { ReportesModule } from './modules/reportes/reportes.module';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { SalaModule } from './modules/sala/sala.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -85,6 +86,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     SistemaModule,
     AgendaModule,
     ReportesModule,
+    AuditoriaModule,
     SalaModule,
     ScheduleModule.forRoot()
   ],

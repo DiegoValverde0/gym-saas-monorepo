@@ -9,6 +9,7 @@ import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
 import { Protect } from '@/components/ui/protect';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VistaAsistencia, VistaClases, VistaEquipo, VistaPlanes, VistaResumen } from './vistas';
+import { VistaActividad, VistaFinanzas } from './finanzas';
 
 /**
  * Reportes por modo (plan de simplificación, 11.8):
@@ -35,6 +36,9 @@ export default function ReportesPage() {
     { valor: 'clases', nombre: 'Clases', visible: avanzados && modulos.clasesGrupales && hasPermission('clases:leer') },
     { valor: 'asistencia', nombre: 'Asistencia', visible: avanzados && modulos.controlAcceso && hasPermission('asistencias:leer') },
     { valor: 'equipo', nombre: 'Equipo', visible: avanzados && esExperto && modulos.controlPersonal && hasPermission('turnos:leer') },
+    // Plan 11.8, experto: estado financiero y auditoría.
+    { valor: 'finanzas', nombre: 'Finanzas', visible: avanzados && esExperto },
+    { valor: 'actividad', nombre: 'Actividad', visible: esExperto && hasPermission('organizaciones:actualizar') },
   ].filter((p) => p.visible);
 
   return (
@@ -69,6 +73,8 @@ export default function ReportesPage() {
             <TabsContent value="clases" className="mt-4"><VistaClases sucursalId={filtro} csv={esExperto} /></TabsContent>
             <TabsContent value="asistencia" className="mt-4"><VistaAsistencia sucursalId={filtro} /></TabsContent>
             <TabsContent value="equipo" className="mt-4"><VistaEquipo sucursalId={filtro} /></TabsContent>
+            <TabsContent value="finanzas" className="mt-4"><VistaFinanzas sucursalId={filtro} /></TabsContent>
+            <TabsContent value="actividad" className="mt-4"><VistaActividad /></TabsContent>
           </Tabs>
         )}
       </div>

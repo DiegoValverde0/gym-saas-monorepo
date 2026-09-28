@@ -16,11 +16,11 @@ interface Totales {
   clientesNuevos: number;
 }
 
-const cargando = <div className="h-32 animate-pulse rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" />;
-const qs = (params: Record<string, string | null | undefined>) =>
+export const cargando = <div className="h-32 animate-pulse rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" />;
+export const qs = (params: Record<string, string | null | undefined>) =>
   Object.entries(params).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`).join('&');
 
-function Tile({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: React.ReactNode }) {
+export function Tile({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{titulo}</p>
@@ -84,7 +84,7 @@ export function VistaResumen({ sucursalId }: { sucursalId: string | null }) {
   );
 }
 
-function useRango() {
+export function useRango() {
   const [preset, setPreset] = useState<RangoPreset>('mes');
   return { preset, setPreset, ...rangoDe(preset) };
 }

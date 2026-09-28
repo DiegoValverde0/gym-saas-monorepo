@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAperturaCajaDto } from './dto/create-apertura-caja.dto';
 import { CloseAperturaCajaDto } from './dto/close-apertura-caja.dto';
+import { registrarAuditoria } from '../../common/utils/auditoria.util';
 
 @Injectable()
 export class AperturaCajaService {
@@ -163,6 +164,16 @@ export class AperturaCajaService {
         }
       });
 
+      return cierre;
+    }).then(async (cierre) => {
+      const diferencia = Number(dto.montoCierreReal) - esperado;
+      if (Math.abs(diferencia) >= 0.01) {
+        await registrarAuditoria(this.prisma.extendedClient, {
+          tabla: 'aperturas_caja', operacion: 'UPDATE', accion: 'cerrar_caja_con_diferencia',
+          descripcion: `Cerró "${apertura.caja.nombre}" con ${diferencia > 0 ? 'sobrante' : 'faltante'} de Bs. ${Math.abs(diferencia).toFixed(2)} (esperado Bs. ${esperado.toFixed(2)}, contado Bs. ${Number(dto.montoCierreReal).toFixed(2)})`,
+          despues: { aperturaId: cierre.id, esperado, contado: Number(dto.montoCierreReal) },
+        });
+      }
       return cierre;
     });
   }

@@ -8,6 +8,7 @@ import { assertFound } from '../../common/utils/assert-found.util';
 import { hashContrasena } from '../../common/utils/contrasena.util';
 import { assertRolAsignableEnOrganizacion, assertQuedaOtroAdministrador } from '../../common/utils/rol.util';
 import { assertSucursalAsignable, invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
+import { nombreRolLegible, registrarAuditoria } from '../../common/utils/auditoria.util';
 
 // El filtro de organización (prisma.service.ts) deja pasar también las
 // asignaciones globales (organizacionId null), que son las del superadmin de
@@ -82,6 +83,14 @@ export class UsuarioService {
         });
 
         return { usuario, asignacion };
+      }).then(async (r) => {
+        const rol = await this.prisma.extendedClient.rol.findUnique({ where: { id: data.rolId }, select: { nombre: true } });
+        await registrarAuditoria(this.prisma.extendedClient, {
+          tabla: 'asignaciones_acceso', operacion: 'INSERT', accion: 'dar_acceso',
+          descripcion: `Dio acceso a ${r.usuario.nombreCompleto} (${r.usuario.correo}) con el rol ${nombreRolLegible(rol?.nombre)}`.trim(),
+          despues: { usuarioId: r.usuario.id, rolId: data.rolId, sucursalId: r.asignacion.sucursalId },
+        });
+        return r;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -119,6 +128,15 @@ export class UsuarioService {
     // Invalidar el acceso vigente cacheado: aplica en su siguiente acción, sin cerrar sesión.
     await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
 
+    const persona = await this.prisma.extendedClient.usuario.findUnique({ where: { id: asignacion.usuarioId }, select: { nombreCompleto: true } });
+    const nuevoRol = await this.prisma.extendedClient.rol.findUnique({ where: { id: nuevoRolId }, select: { nombre: true } });
+    await registrarAuditoria(this.prisma.extendedClient, {
+      tabla: 'asignaciones_acceso', operacion: 'UPDATE', accion: 'cambiar_acceso',
+      descripcion: `Cambió el acceso de ${persona?.nombreCompleto ?? 'una persona'}: rol ${nombreRolLegible(actual.rol.nombre)} → ${nombreRolLegible(nuevoRol?.nombre)}`,
+      antes: { rolId: actual.rolId, sucursalId: actual.sucursalId },
+      despues: { rolId: asignacion.rolId, sucursalId: asignacion.sucursalId },
+    });
+
     return asignacion;
   }
 
@@ -140,6 +158,13 @@ export class UsuarioService {
     // de los otros gimnasios donde trabaja, y 7 días aunque se le volviera a
     // dar acceso.
     await invalidarAccesoVigente(this.redisClient, asignacion.usuarioId, asignacion.organizacionId);
+
+    const persona = await this.prisma.extendedClient.usuario.findUnique({ where: { id: asignacion.usuarioId }, select: { nombreCompleto: true } });
+    await registrarAuditoria(this.prisma.extendedClient, {
+      tabla: 'asignaciones_acceso', operacion: 'DELETE', accion: 'revocar_acceso',
+      descripcion: `Quitó el acceso de ${persona?.nombreCompleto ?? 'una persona'} (rol ${nombreRolLegible(actual.rol.nombre)})`,
+      antes: { usuarioId: asignacion.usuarioId, rolId: actual.rolId, sucursalId: actual.sucursalId },
+    });
 
     return asignacion;
   }

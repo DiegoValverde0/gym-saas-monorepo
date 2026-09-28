@@ -7,6 +7,7 @@ import { CreateRolDto } from './dto/create-rol.dto';
 import { UpdateRolDto } from './dto/update-rol.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { nombreRolLegible, registrarAuditoria } from '../../common/utils/auditoria.util';
 
 @Injectable()
 export class RolService {
@@ -231,6 +232,15 @@ export class RolService {
         const cacheKey = `rbac:${asign.usuarioId}:${asign.organizacionId}`;
         await this.redisClient.del(cacheKey);
       }
+    }
+
+    if (!isGlobalRole) {
+      await registrarAuditoria(this.prisma.extendedClient, {
+        tabla: 'roles', operacion: 'UPDATE', accion: 'editar_rol',
+        descripcion: `Editó el rol "${nombreRolLegible(result.nombre)}"${permisosFinales !== undefined ? `: ${existingRol.rolPermisos?.length ?? 0} → ${permisosFinales.length} permisos` : ''}`,
+        antes: { nombre: existingRol.nombre, permisos: existingRol.rolPermisos?.length },
+        despues: { nombre: result.nombre, permisos: permisosFinales?.length },
+      });
     }
 
     return result;

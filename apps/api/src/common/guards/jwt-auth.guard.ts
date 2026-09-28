@@ -99,6 +99,9 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     this.cls.set('organizacionId', payload.organizacionId);
+    // Para la auditoría (common/utils/auditoria.util.ts).
+    this.cls.set('usuarioId', payload.sub);
+    this.cls.set('ip', request.ip);
     if (acceso.sucursalId) {
         this.cls.set('sucursalId', acceso.sucursalId);
     }

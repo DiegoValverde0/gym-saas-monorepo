@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { obtenerModoUso } from '../../common/utils/modo.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 import { CerrarDiaDto } from './dto/cierre-dia.dto';
+import { registrarAuditoria } from '../../common/utils/auditoria.util';
 
 // Caja que se crea sola en cada sucursal la primera vez que se cierra el día
 // en modo simple (plan 11.6: "una caja por sucursal creada automáticamente").
@@ -154,7 +155,7 @@ export class CierreDiaService {
     const mov = await this.movimientos(ctx.sucursal.id, ctx.inicio, ahora);
     const esperado = redondear(dto.efectivoInicial + mov.efectivoIngresos - mov.efectivoGastos);
 
-    return db.$transaction(async (tx: Prisma.TransactionClient) => {
+    const resultado = await db.$transaction(async (tx: Prisma.TransactionClient) => {
       const caja =
         existente ??
         (await tx.cajaRegistradora.create({
@@ -184,5 +185,16 @@ export class CierreDiaService {
         cantidadCobros: mov.cantidadCobros,
       };
     });
+
+    const diferencia = resultado.diferencia;
+    if (Math.abs(diferencia) >= 0.01) {
+      await registrarAuditoria(db, {
+        tabla: 'aperturas_caja', operacion: 'INSERT', accion: 'cerrar_caja_con_diferencia',
+        descripcion: `Cerró el día en ${ctx.sucursal.nombre} con ${diferencia > 0 ? 'sobrante' : 'faltante'} de Bs. ${Math.abs(diferencia).toFixed(2)} (esperado Bs. ${esperado.toFixed(2)}, contado Bs. ${dto.efectivoContado.toFixed(2)})`,
+        despues: { esperado, contado: dto.efectivoContado },
+      });
+    }
+
+    return resultado;
   }
 }

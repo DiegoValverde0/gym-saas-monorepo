@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
+import { descripcionEliminar, registrarAuditoria } from '../../common/utils/auditoria.util';
 
 @Injectable()
 export class SistemaService {
@@ -51,6 +52,14 @@ export class SistemaService {
       const restored = await (this.prisma as any)[modelo].update({
         where: { id: target.id },
         data: { deletedAt: null }
+      });
+
+      await registrarAuditoria(this.prisma.extendedClient, {
+        tabla: modelo.charAt(0).toUpperCase() + modelo.slice(1),
+        operacion: 'UPDATE',
+        accion: 'restaurar',
+        descripcion: descripcionEliminar(modelo.charAt(0).toUpperCase() + modelo.slice(1), restored, 'Restauró'),
+        despues: { id: target.id },
       });
 
       return restored;

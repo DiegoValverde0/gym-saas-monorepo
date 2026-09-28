@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
+import { descripcionEliminar, registrarAuditoria } from '../common/utils/auditoria.util';
 
 // ==========================================
 // UTILS
@@ -151,10 +152,24 @@ function withSoftDeleteAndRLS(cls: ClsService, extendedClientGetter: () => unkno
                 
                 const extClient = extendedClientGetter() as Record<string, Record<string, (args: unknown) => Promise<unknown>>>;
                 const modelCamel = model.charAt(0).toLowerCase() + model.slice(1);
-                return extClient[modelCamel][newOperation]({
+                const resultado = await extClient[modelCamel][newOperation]({
                     ...deleteArgs,
                     data: { ...data, deletedAt: new Date() }
                 });
+                // Auditoría (plan 11.8): quién mandó qué a la papelera. Solo
+                // las eliminaciones de un registro (las que hace una persona);
+                // los deleteMany son internos (reemplazar un horario, editar
+                // una serie) y llenarían la actividad de ruido.
+                if (newOperation === 'update') {
+                    await registrarAuditoria(extClient, {
+                        tabla: model,
+                        operacion: 'DELETE',
+                        accion: 'eliminar',
+                        descripcion: descripcionEliminar(model, resultado),
+                        despues: { id: (resultado as { id?: string } | null)?.id },
+                    });
+                }
+                return resultado;
             }
 
             // ==========================================

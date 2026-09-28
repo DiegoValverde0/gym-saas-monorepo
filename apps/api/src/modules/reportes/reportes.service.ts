@@ -224,4 +224,84 @@ export class ReportesService {
     }));
     return { desde: fechaISO(desde), hasta: fechaISO(hasta), toleranciaAtrasoMinutos: tolerancia, filas: filas.sort((a, b) => a.persona.localeCompare(b.persona)) };
   }
+
+  // Experto: estado financiero del período. Ingresos por concepto, gastos por
+  // categoría, resultado mes a mes, formas de pago y cuentas. El costo del
+  // equipo no va acá: la pantalla lo pide a /reportes/equipo, que exige el
+  // permiso de jornadas (es un dato del equipo, no de caja).
+  async financiero(q: RangoReporteDto) {
+    const { hoy, zonaHoraria } = await this.contexto();
+    const { desde, hasta } = this.rango(q, hoy);
+    const transacciones: Array<{
+      tipo: 'INGRESO' | 'EGRESO';
+      fechaHora: Date;
+      montoTotal: Prisma.Decimal;
+      detalles: { tipoConcepto: string; subtotal: Prisma.Decimal }[];
+      pagos: { metodoPago: string; monto: Prisma.Decimal; cuentaBancaria: { id: string; banco: string; numeroCuenta: string } | null }[];
+    }> = await this.prisma.extendedClient.transaccion.findMany({
+      where: { ...(q.sucursalId ? { sucursalId: q.sucursalId } : {}), fechaHora: this.instantes(desde, hasta, zonaHoraria) },
+      select: {
+        tipo: true,
+        fechaHora: true,
+        montoTotal: true,
+        detalles: { select: { tipoConcepto: true, subtotal: true } },
+        pagos: { select: { metodoPago: true, monto: true, cuentaBancaria: { select: { id: true, banco: true, numeroCuenta: true } } } },
+      },
+    });
+
+    const sumar = <K>(mapa: Map<K, number>, clave: K, monto: number) => mapa.set(clave, (mapa.get(clave) ?? 0) + monto);
+    const conceptos = new Map<string, number>(); // "INGRESO|MEMBRESIA"
+    const meses = new Map<string, { ingresos: number; egresos: number }>();
+    const formas = new Map<string, { ingresos: number; egresos: number }>();
+    const cuentas = new Map<string, { cuenta: string; ingresos: number; egresos: number }>();
+    let ingresos = 0;
+    let egresos = 0;
+
+    for (const t of transacciones) {
+      const monto = Number(t.montoTotal);
+      const esIngreso = t.tipo === 'INGRESO';
+      if (esIngreso) ingresos += monto; else egresos += monto;
+
+      // Por concepto: con los detalles; lo que no tenga detalle va a "otro".
+      let detallado = 0;
+      for (const d of t.detalles) {
+        sumar(conceptos, `${t.tipo}|${d.tipoConcepto}`, Number(d.subtotal));
+        detallado += Number(d.subtotal);
+      }
+      if (Math.abs(monto - detallado) >= 0.01) sumar(conceptos, `${t.tipo}|${esIngreso ? 'OTRO' : 'OTRO_GASTO'}`, monto - detallado);
+
+      const mes = fechaISO(aHoraLocal(t.fechaHora, zonaHoraria).fechaSolo).slice(0, 7);
+      const fila = meses.get(mes) ?? { ingresos: 0, egresos: 0 };
+      if (esIngreso) fila.ingresos += monto; else fila.egresos += monto;
+      meses.set(mes, fila);
+
+      for (const p of t.pagos) {
+        const forma = formas.get(p.metodoPago) ?? { ingresos: 0, egresos: 0 };
+        if (esIngreso) forma.ingresos += Number(p.monto); else forma.egresos += Number(p.monto);
+        formas.set(p.metodoPago, forma);
+        const id = p.cuentaBancaria?.id ?? 'sin-cuenta';
+        const cuenta = cuentas.get(id) ?? { cuenta: p.cuentaBancaria ? `${p.cuentaBancaria.banco} · ${p.cuentaBancaria.numeroCuenta}` : 'Sin cuenta', ingresos: 0, egresos: 0 };
+        if (esIngreso) cuenta.ingresos += Number(p.monto); else cuenta.egresos += Number(p.monto);
+        cuentas.set(id, cuenta);
+      }
+    }
+
+    return {
+      desde: fechaISO(desde),
+      hasta: fechaISO(hasta),
+      ingresos: redondear(ingresos),
+      egresos: redondear(egresos),
+      resultado: redondear(ingresos - egresos),
+      porConcepto: [...conceptos.entries()]
+        .map(([clave, monto]) => ({ tipo: clave.split('|')[0], concepto: clave.split('|')[1], monto: redondear(monto) }))
+        .sort((a, b) => a.tipo.localeCompare(b.tipo) || b.monto - a.monto),
+      porMes: [...meses.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([mes, f]) => ({ mes, ingresos: redondear(f.ingresos), egresos: redondear(f.egresos), resultado: redondear(f.ingresos - f.egresos) })),
+      porFormaPago: [...formas.entries()].map(([metodo, f]) => ({ metodo, ingresos: redondear(f.ingresos), egresos: redondear(f.egresos) })),
+      porCuenta: [...cuentas.values()]
+        .map((c) => ({ ...c, ingresos: redondear(c.ingresos), egresos: redondear(c.egresos), neto: redondear(c.ingresos - c.egresos) }))
+        .sort((a, b) => b.neto - a.neto),
+    };
+  }
 }

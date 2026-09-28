@@ -5,6 +5,7 @@ import { formatPermiso } from '../../common/utils/permiso.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { MetodoValidacion, Prisma } from '@prisma/client';
 import { aHoraLocal, desdeHoraLocal, inicioDelDiaLocal } from '../../common/utils/zona-horaria.util';
+import { registrarAuditoria } from '../../common/utils/auditoria.util';
 
 // Ventana en la que un ingreso al gimnasio cuenta como asistencia a una clase
 // reservada: desde X minutos antes del inicio hasta que la clase termina.
@@ -279,6 +280,13 @@ export class AsistenciaService {
         return registro;
     });
 
+    if (dto.forzarIngreso && registro.motivoAnulacion) {
+      await registrarAuditoria(this.prisma.extendedClient, {
+        tabla: 'registros_asistencia', operacion: 'INSERT', accion: 'forzar_ingreso',
+        descripcion: `Dejó pasar a ${registro.cliente?.nombre ?? dto.nombreVisitante ?? 'un cliente'} sin cumplir las reglas: ${registro.motivoAnulacion}`,
+        despues: { registroId: registro.id, clienteId: dto.clienteId },
+      });
+    }
     return { ...registro, clasesMarcadas: reservasACubrir.map((r) => r.clase.nombreClase) };
   }
 

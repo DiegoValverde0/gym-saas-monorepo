@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
+import { registrarAuditoria, seccionLegible } from '../../common/utils/auditoria.util';
 
 async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -208,14 +209,30 @@ export class OrganizacionService {
     const id = this.cls.get('organizacionId');
     if (!id) throw new BadRequestException('Contexto de organización no encontrado');
     const { configuracion, ...rest } = data;
-    const actual = configuracion !== undefined ? await this.getMiOrganizacion() : null;
-    return this.prisma.organizacion.update({
+    const actual = await this.getMiOrganizacion();
+    const actualizada = await this.prisma.organizacion.update({
       where: { id },
       data: {
         ...rest,
-        ...(configuracion !== undefined && { configuracion: combinarConfiguracion(actual?.configuracion, configuracion) }),
+        ...(configuracion !== undefined && { configuracion: combinarConfiguracion(actual.configuracion, configuracion) }),
       },
     });
+    // Qué secciones cambiaron (sin los valores: la configuración puede
+    // tener datos internos; ver configuracionPublica).
+    const cambios = [
+      ...Object.keys(rest).filter((k) => JSON.stringify((actual as Record<string, unknown>)[k]) !== JSON.stringify((actualizada as Record<string, unknown>)[k])),
+      ...Object.keys(configuracion ?? {}).filter(
+        (k) => JSON.stringify(((actual.configuracion ?? {}) as Record<string, unknown>)[k]) !== JSON.stringify(((actualizada.configuracion ?? {}) as Record<string, unknown>)[k]),
+      ),
+    ];
+    if (cambios.length > 0) {
+      await registrarAuditoria(this.prisma.extendedClient, {
+        tabla: 'organizaciones', operacion: 'UPDATE', accion: 'cambiar_configuracion',
+        descripcion: `Cambió la configuración: ${[...new Set(cambios.map(seccionLegible))].join(', ')}`,
+        despues: { secciones: cambios },
+      });
+    }
+    return actualizada;
   }
 
   // Lista de primeros pasos del Dashboard (plan 4.5): cada paso se marca solo

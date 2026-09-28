@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { combinarConfiguracion } from '../../common/utils/configuracion.util';
 import { hashContrasena, verificarHash } from '../../common/utils/contrasena.util';
 import { AsistenciaService, TokenPayload } from './asistencia.service';
+import { registrarAuditoria } from '../../common/utils/auditoria.util';
 
 // Intentos fallidos antes de bloquear 5 minutos: documentos que no existen
 // (evita recorrer documentos para ver nombres) y PIN de salida incorrectos.
@@ -123,6 +124,10 @@ export class KioscoService {
     const org = await this.organizacion();
     const configuracion = combinarConfiguracion(org.configuracion, { kiosco: { pinHash: pin ? await hashContrasena(pin) : '' } });
     await this.prisma.extendedClient.organizacion.update({ where: { id: org.id }, data: { configuracion } });
+    await registrarAuditoria(this.prisma.extendedClient, {
+      tabla: 'organizaciones', operacion: 'UPDATE', accion: 'pin_kiosco',
+      descripcion: pin ? 'Cambió el PIN de salida del kiosco' : 'Quitó el PIN de salida del kiosco',
+    });
     return { tienePin: !!pin };
   }
 }

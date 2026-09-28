@@ -5,6 +5,7 @@ import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { registrarAuditoria } from '../../common/utils/auditoria.util';
 
 @Injectable()
 export class PlanService {
@@ -108,10 +109,19 @@ export class PlanService {
       data.horaFinAcceso = new Date(`1970-01-01T${updatePlanDto.horaFinAcceso}:00Z`);
     }
 
-    return this.prisma.extendedClient.plan.update({
+    const plan = await this.prisma.extendedClient.plan.update({
       where: { id },
       data,
     });
+    if (updatePlanDto.precio !== undefined && Number(updatePlanDto.precio) !== Number(planActual.precio)) {
+      await registrarAuditoria(this.prisma.extendedClient, {
+        tabla: 'planes', operacion: 'UPDATE', accion: 'cambiar_precio',
+        descripcion: `Cambió el precio del plan "${plan.nombre}": Bs. ${Number(planActual.precio).toFixed(2)} → Bs. ${Number(plan.precio).toFixed(2)}`,
+        antes: { precio: Number(planActual.precio) },
+        despues: { precio: Number(plan.precio) },
+      });
+    }
+    return plan;
   }
 
   async remove(id: string) {

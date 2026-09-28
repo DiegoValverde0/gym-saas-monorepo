@@ -36,6 +36,12 @@ export class ReportesController {
     return this.reportesService.asistencia(q);
   }
 
+  @Get('financiero')
+  @RequirePermissions({ accion: 'leer', modulo: 'transacciones' })
+  financiero(@Query() q: RangoReporteDto) {
+    return this.reportesService.financiero(q);
+  }
+
   @Get('equipo')
   @RequirePermissions({ accion: 'leer', modulo: 'turnos' })
   equipo(@Query() q: RangoReporteDto) {
