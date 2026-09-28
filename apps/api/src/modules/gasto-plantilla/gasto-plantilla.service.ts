@@ -8,6 +8,7 @@ import { UpdateGastoPlantillaDto } from './dto/update-gasto-plantilla.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { CONCEPTOS_EGRESO } from '../transaccion/tipo-concepto.util';
+import { hoyEnOrganizacion } from '../../common/utils/zona-horaria.util';
 
 const INCLUDE_PLANTILLA = {
   proveedor: { select: { nombre: true } },
@@ -114,8 +115,9 @@ export class GastoPlantillaService {
   // a propósito (cron sin contexto de tenant en el CLS, ver excludedFiles en
   // .eslintrc.js), igual que turno-plantilla.service.ts.
   async generarParaOrganizacion(organizacionId: string) {
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    // Hoy en la hora local de la organización (en un servidor UTC, el gasto
+    // "del día 5" se generaba a las 23:00 del día 4 en La Paz).
+    const hoy = await hoyEnOrganizacion(this.prisma, organizacionId);
 
     const plantillas = await this.prisma.gastoPlantilla.findMany({
       where: {
@@ -247,8 +249,10 @@ export class GastoPlantillaService {
   }
 
   // Mantiene los gastos recurrentes al día para todas las organizaciones
-  // activas, sin que nadie tenga que acordarse de generar el del mes.
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  // activas, sin que nadie tenga que acordarse de generar el del mes. Cada
+  // hora, para que cada organización lo reciba al empezar su día local; es
+  // idempotente (reclamarMes gana una sola vez por mes y plantilla).
+  @Cron(CronExpression.EVERY_HOUR)
   async handleGeneracionDiaria() {
     this.logger.log('Generando gastos recurrentes del día desde plantillas activas...');
     const organizaciones = await this.prisma.organizacion.findMany({

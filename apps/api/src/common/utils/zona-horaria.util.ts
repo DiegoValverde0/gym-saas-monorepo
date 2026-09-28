@@ -58,3 +58,14 @@ export function diaSemanaLocal(instante: Date, zonaHoraria: string | null | unde
 export function inicioDelDiaLocal(instante: Date, zonaHoraria: string | null | undefined): Date {
   return desdeHoraLocal(aHoraLocal(instante, zonaHoraria).fechaSolo, 0, zonaHoraria);
 }
+
+// "Hoy" de una organización como fecha sola (medianoche UTC, igual que las
+// columnas @db.Date). Los servidores suelen correr en UTC: con new Date() y
+// setHours(0) "hoy" cambiaba a las 20:00 de La Paz.
+type DbOrganizacion = { organizacion: { findUnique: (args: { where: { id: string }; select: { zonaHoraria: true } }) => Promise<{ zonaHoraria: string | null } | null> } };
+export async function hoyEnOrganizacion(db: unknown, organizacionId: string | null | undefined, ahora = new Date()): Promise<Date> {
+  const org = organizacionId
+    ? await (db as DbOrganizacion).organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } })
+    : null;
+  return aHoraLocal(ahora, org?.zonaHoraria).fechaSolo;
+}

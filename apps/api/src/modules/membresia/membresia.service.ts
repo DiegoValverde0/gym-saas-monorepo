@@ -6,6 +6,8 @@ import { UpdateMembresiaDto } from './dto/update-membresia.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BusquedaQueryDto } from '../../common/dto/busqueda-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
+import { ClsServiceManager } from 'nestjs-cls';
+import { aHoraLocal, desdeHoraLocal, hoyEnOrganizacion } from '../../common/utils/zona-horaria.util';
 
 // Transiciones de estado permitidas para Membresia.estado vía update() manual
 // (staff). Las transiciones automáticas del sistema (activación al pagar en
@@ -82,9 +84,12 @@ export class MembresiaService {
     let montoFinal = montoBase - descuentoAplicado;
     if (montoFinal < 0) montoFinal = 0;
 
-    let fechaInicioFinal = createMembresiaDto.fechaInicio ? new Date(createMembresiaDto.fechaInicio) : new Date();
-    // Normalizar a 00:00:00 para evitar desfaces horarios en la fecha de inicio
-    fechaInicioFinal.setUTCHours(0,0,0,0);
+    // Sin fecha: hoy en la hora local de la organización (con new Date() en
+    // un servidor UTC, una venta a las 21:00 de La Paz empezaba "mañana").
+    let fechaInicioFinal = createMembresiaDto.fechaInicio
+      ? new Date(createMembresiaDto.fechaInicio)
+      : await hoyEnOrganizacion(this.prisma.extendedClient, ClsServiceManager.getClsService().get('organizacionId'));
+    fechaInicioFinal.setUTCHours(0, 0, 0, 0);
 
     // 4. Encolamiento: si el cliente ya tiene una membresía ACTIVA/EN_ESPERA/CONGELADA
     // cuyo rango cubre la fecha de inicio solicitada, la nueva se corre al día
@@ -103,14 +108,14 @@ export class MembresiaService {
     const ultimaEnCola = membresiasEnCola[0];
     if (ultimaEnCola?.fechaFin && ultimaEnCola.fechaFin >= fechaInicioFinal) {
       fechaInicioFinal = new Date(ultimaEnCola.fechaFin);
-      fechaInicioFinal.setDate(fechaInicioFinal.getDate() + 1);
+      fechaInicioFinal.setUTCDate(fechaInicioFinal.getUTCDate() + 1);
       fechaInicioFinal.setUTCHours(0, 0, 0, 0);
     }
 
     let fechaFinFinal = null;
     if (plan.tipoPlan === 'TIEMPO' && plan.duracionDias) {
       fechaFinFinal = new Date(fechaInicioFinal);
-      fechaFinFinal.setDate(fechaFinFinal.getDate() + plan.duracionDias);
+      fechaFinFinal.setUTCDate(fechaFinFinal.getUTCDate() + plan.duracionDias);
     }
 
     // 5. Creación Transaccional Financiera
@@ -229,13 +234,12 @@ export class MembresiaService {
     });
     if (!siguiente) return;
 
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
+    const hoy = await hoyEnOrganizacion(this.prisma, siguiente.organizacionId);
 
     let fechaFin: Date | null = null;
     if (siguiente.plan.tipoPlan === 'TIEMPO' && siguiente.plan.duracionDias) {
       fechaFin = new Date(hoy);
-      fechaFin.setDate(fechaFin.getDate() + siguiente.plan.duracionDias);
+      fechaFin.setUTCDate(fechaFin.getUTCDate() + siguiente.plan.duracionDias);
     }
 
     await client.membresia.update({
@@ -266,65 +270,59 @@ export class MembresiaService {
   // TAREAS AUTOMATIZADAS (CRON JOBS)
   // =========================================================================
 
-  // Se ejecuta todos los días a las 00:00 del servidor. Recorre TODAS las
-  // organizaciones (no hay un tenant de request al que atarse), así que usa
-  // el cliente crudo de Prisma a propósito -- ver excludedFiles en
-  // .eslintrc.js para el porqué. Nunca se fuerza un organizacionId falso
-  // sobre extendedClient para "simular" un contexto de tenant.
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async handleAnulacionMembresiasPendientes() {
-    this.logger.log('Iniciando proceso de cancelación automática de membresías no pagadas...');
-
-    // Todas las membresías PENDIENTE_PAGO que no se pagaron el día de su creación.
-    // Cancelamos cualquier membresía que tenga más de 24 horas (creada ayer o antes)
-    const ayer = new Date();
-    ayer.setHours(0, 0, 0, 0);
-
-    const resultado = await this.prisma.membresia.updateMany({
-      where: {
-        estado: 'PENDIENTE_PAGO',
-        createdAt: {
-          lt: ayer // estrictamente menor a hoy a las 00:00 (o sea, de ayer o antes)
-        }
-      },
-      data: {
-        estado: 'CANCELADA'
-      }
+  // Cierre del día de las membresías, por organización y en su hora local.
+  // Corre cada hora (antes: a medianoche del servidor, que en UTC son las
+  // 20:00 de La Paz, y cancelaba ventas pendientes del mismo día y vencía
+  // membresías en su último día). Las dos tareas son idempotentes: repetirlas
+  // en la misma jornada no cambia nada, así que cada organización queda
+  // procesada en la primera hora después de su medianoche.
+  //
+  // Recorre todas las organizaciones sin contexto de tenant, así que usa el
+  // cliente crudo de Prisma a propósito (ver excludedFiles en .eslintrc.js).
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleCierreDiarioMembresias() {
+    const organizaciones = await this.prisma.organizacion.findMany({
+      where: { deletedAt: null },
+      select: { id: true, zonaHoraria: true },
     });
-
-    this.logger.log(`Proceso completado. Se anularon ${resultado.count} membresías vencidas sin pago.`);
+    const ahora = new Date();
+    for (const org of organizaciones) {
+      try {
+        const hoy = aHoraLocal(ahora, org.zonaHoraria).fechaSolo;
+        const { anuladas, vencidas } = await this.cerrarDiaMembresias(org.id, hoy, desdeHoraLocal(hoy, 0, org.zonaHoraria));
+        if (anuladas || vencidas) {
+          this.logger.log(`Organización ${org.id}: ${anuladas} ventas pendientes anuladas, ${vencidas} membresías vencidas.`);
+        }
+      } catch (err) {
+        this.logger.error(`Fallo en el cierre diario de membresías de ${org.id}: ${(err as Error).message}`);
+      }
+    }
   }
 
-  // Vence las membresías ACTIVAS cuya fechaFin ya pasó y promueve, para cada
-  // cliente afectado, su siguiente membresía EN_ESPERA (si tiene una comprada).
-  // Cliente crudo por el mismo motivo cross-tenant que el cron de arriba.
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async handleVencimientoMembresiasActivas() {
-    this.logger.log('Iniciando proceso de vencimiento de membresías activas...');
-
-    const hoy = new Date();
-    hoy.setUTCHours(0, 0, 0, 0);
-
-    const vencidas = await this.prisma.membresia.findMany({
-      where: { estado: 'ACTIVA', fechaFin: { lt: hoy } },
-      select: { id: true, clienteId: true },
+  // hoy: fecha local (medianoche UTC, como fechaFin); inicioHoy: instante en
+  // que empezó ese día en la hora local.
+  private async cerrarDiaMembresias(organizacionId: string, hoy: Date, inicioHoy: Date) {
+    // Ventas PENDIENTE_PAGO que no se cobraron el día en que se hicieron.
+    const anuladas = await this.prisma.membresia.updateMany({
+      where: { organizacionId, estado: 'PENDIENTE_PAGO', createdAt: { lt: inicioHoy } },
+      data: { estado: 'CANCELADA' },
     });
 
-    // El cambio de estado en sí es una sola operación bulk (no depende de
-    // ningún otro registro). La promoción de la siguiente EN_ESPERA de cada
-    // cliente sí es inherentemente secuencial: depende de leer y decidir por
-    // cliente, así que se queda en el loop.
+    // Membresías ACTIVAS cuyo último día ya pasó; se promueve la siguiente
+    // EN_ESPERA de cada cliente, si compró una.
+    const vencidas = await this.prisma.membresia.findMany({
+      where: { organizacionId, estado: 'ACTIVA', fechaFin: { lt: hoy } },
+      select: { id: true, clienteId: true },
+    });
     if (vencidas.length > 0) {
       await this.prisma.membresia.updateMany({
         where: { id: { in: vencidas.map((m) => m.id) } },
         data: { estado: 'VENCIDA' },
       });
     }
-
     for (const mem of vencidas) {
       await this.promoverSiguienteEnEspera(mem.clienteId, this.prisma);
     }
-
-    this.logger.log(`Proceso completado. Se vencieron ${vencidas.length} membresías activas.`);
+    return { anuladas: anuladas.count, vencidas: vencidas.length };
   }
 }

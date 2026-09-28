@@ -8,7 +8,7 @@ import { paginar, resolverPaginacion } from '../../common/utils/pagination.util'
 import { CONCEPTOS_INGRESO, CONCEPTOS_EGRESO } from './tipo-concepto.util';
 import { moduloEstaActivo } from '../../common/utils/modulo.util';
 import { obtenerModoUso } from '../../common/utils/modo.util';
-import { desdeHoraLocal } from '../../common/utils/zona-horaria.util';
+import { desdeHoraLocal, hoyEnOrganizacion } from '../../common/utils/zona-horaria.util';
 
 // Cuenta que se usa en modo simple cuando el cobro no indica una: la "caja"
 // del gimnasio. Se crea sola la primera vez (plan de simplificación, 4.4).
@@ -148,12 +148,10 @@ export class TransaccionService {
                 if (!mem) throw new BadRequestException(`La membresía ${det.membresiaId} no existe.`);
                 if (mem.estado !== 'PENDIENTE_PAGO') throw new BadRequestException(`La membresía ya ha sido procesada anteriormente (Estado Actual: ${mem.estado}).`);
 
-                const hoy = new Date();
-                hoy.setHours(0,0,0,0);
-                const fechaInicioMem = new Date(mem.fechaInicio);
-                fechaInicioMem.setHours(0,0,0,0);
-
-                const nuevoEstado = fechaInicioMem > hoy ? 'EN_ESPERA' : 'ACTIVA';
+                // Ambas como fecha sola (medianoche UTC); "hoy" en la hora local
+                // de la organización, no la del servidor.
+                const hoy = await hoyEnOrganizacion(tx, mem.organizacionId);
+                const nuevoEstado = mem.fechaInicio.getTime() > hoy.getTime() ? 'EN_ESPERA' : 'ACTIVA';
 
                 await tx.membresia.update({
                     where: { id: mem.id },

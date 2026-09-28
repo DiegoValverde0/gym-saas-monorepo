@@ -358,27 +358,32 @@ export class AsistenciaService {
   // ClsMiddleware) y recorre TODAS las organizaciones por diseño, así que usa
   // el cliente crudo de Prisma a propósito -- ver excludedFiles en
   // .eslintrc.js. Nunca se fuerza un organizacionId falso sobre extendedClient.
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  // Cada hora y por organización, con su medianoche local: cierra los
+  // ingresos de días anteriores que no marcaron salida. Antes corría a las
+  // 2 AM del servidor con su "hoy": en un servidor UTC eran las 22:00 de La
+  // Paz y cerraba a quien había entrado ese mismo día antes de las 20:00.
+  @Cron(CronExpression.EVERY_HOUR)
   async handleAutoCheckout() {
-    this.logger.log('Iniciando proceso de Auto-Checkout para registros huérfanos...');
-
-    const hoy = new Date();
-    hoy.setHours(0,0,0,0);
-
-    // Buscar a todos los que entraron ANTES de hoy y no salieron
-    const resultado = await this.prisma.registroAsistencia.updateMany({
+    const organizaciones = await this.prisma.organizacion.findMany({
+      where: { deletedAt: null },
+      select: { id: true, zonaHoraria: true },
+    });
+    const ahora = new Date();
+    for (const org of organizaciones) {
+      const resultado = await this.prisma.registroAsistencia.updateMany({
         where: {
-            fechaHoraSalida: null,
-            fechaHoraIngreso: {
-                lt: hoy
-            }
+          organizacionId: org.id,
+          fechaHoraSalida: null,
+          fechaHoraIngreso: { lt: inicioDelDiaLocal(ahora, org.zonaHoraria) },
         },
         data: {
-            fechaHoraSalida: new Date(),
-            motivoAnulacion: 'Cierre automático del sistema (CRON 2AM)'
-        }
-    });
-
-    this.logger.log(`Proceso completado. Se cerraron ${resultado.count} accesos que no marcaron salida.`);
+          fechaHoraSalida: ahora,
+          motivoAnulacion: 'Cierre automático del sistema (no marcó salida)',
+        },
+      });
+      if (resultado.count > 0) {
+        this.logger.log(`Organización ${org.id}: se cerraron ${resultado.count} ingresos de días anteriores sin salida.`);
+      }
+    }
   }
 }
