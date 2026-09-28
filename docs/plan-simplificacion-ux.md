@@ -529,6 +529,7 @@ Hoy se generan 8 semanas fijas. Se hace configurable en `configuracion.clases.se
 - **Panel "Huecos de cobertura"** con acción directa: "Asignar instructor" abre un selector solo con los disponibles a esa hora.
 - **Modo simple**: la Agenda no aparece. El calendario de Clases cubre ese caso.
 - **Vista "Día"** en celular: la grilla semanal no entra en una pantalla chica. En celular se muestra una lista del día con los turnos y las clases en orden.
+- **2026-09-27: hechos la vista Día y "Asignar instructor".** Selector Día / Semana (en celular abre en Día): los 7 días de la semana arriba y la lista del día con jornadas y clases por hora, "Asignar instructor" en las clases sin cobertura y "Programar una clase este día". En el panel de huecos, cada clase tiene "Asignar instructor": muestra solo a quien trabaja a esa hora en la sucursal y no da otra clase al mismo tiempo (`GET /clases/entrenadores` ahora devuelve `ocupadoCon`), y cambia el instructor de esa fecha, no de toda la serie.
 
 ---
 

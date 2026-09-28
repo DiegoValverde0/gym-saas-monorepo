@@ -161,6 +161,28 @@ export class ClaseProgramadaService {
     }
     const inicioRecurrente = q.horaInicio ? Number(q.horaInicio.slice(0, 2)) * 60 + Number(q.horaInicio.slice(3, 5)) : 0;
 
+    // Clase puntual: quién ya da otra clase que se superpone (en cualquier
+    // sucursal). Así "Asignar instructor" en la Agenda solo ofrece a quien
+    // de verdad puede; el choque se valida igual al guardar.
+    const ocupadoCon = new Map<string, string>();
+    if (q.fechaHora) {
+      const inicio = new Date(q.fechaHora);
+      const fin = new Date(inicio.getTime() + duracion * 60_000);
+      const otras: Array<{ entrenadorId: string | null; fechaHora: Date; duracionMinutos: number; nombreClase: string }> =
+        await db.claseProgramada.findMany({
+          where: {
+            entrenadorId: { not: null },
+            estado: 'ACTIVO',
+            fechaHora: { gte: new Date(inicio.getTime() - 24 * 3600_000), lt: fin },
+            ...(q.excluirClaseId ? { id: { not: q.excluirClaseId } } : {}),
+          },
+          select: { entrenadorId: true, fechaHora: true, duracionMinutos: true, nombreClase: true },
+        });
+      for (const c of otras) {
+        if (c.entrenadorId && c.fechaHora.getTime() + c.duracionMinutos * 60_000 > inicio.getTime()) ocupadoCon.set(c.entrenadorId, c.nombreClase);
+      }
+    }
+
     const resultado = staff.map((s) => {
       let disponible: boolean | null = null;
       let diasSinTurno: number[] = [];
@@ -176,6 +198,7 @@ export class ClaseProgramadaService {
         imparteDisciplina: q.disciplinaId ? s.staffDisciplinas.some((sd) => sd.disciplinaId === q.disciplinaId) : null,
         disponible,
         diasSinTurno,
+        ocupadoCon: ocupadoCon.get(s.id) ?? null,
       };
     });
 

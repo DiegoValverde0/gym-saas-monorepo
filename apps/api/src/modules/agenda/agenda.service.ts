@@ -93,6 +93,7 @@ export class AgendaService {
         duracionMinutos: number;
         capacidadMaxima: number;
         entrenadorId: string | null;
+        disciplinaId: string | null;
         clasePlantillaId: string | null;
         entrenador: { deletedAt: Date | null; usuario: { nombreCompleto: string } | null } | null;
         disciplina: { nombre: string } | null;
@@ -131,6 +132,10 @@ export class AgendaService {
         return {
           id: c.id,
           nombreClase: c.nombreClase,
+          // Instante exacto y disciplina: los usa "Asignar instructor" para
+          // pedir quién está disponible (GET /clases/entrenadores).
+          fechaHora: c.fechaHora.toISOString(),
+          disciplinaId: c.disciplinaId,
           fecha,
           inicio,
           duracionMinutos: c.duracionMinutos,

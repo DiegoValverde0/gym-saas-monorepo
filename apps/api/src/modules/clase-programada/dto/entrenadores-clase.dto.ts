@@ -17,6 +17,11 @@ export class EntrenadoresClaseDto {
   @IsDateString()
   fechaHora?: string;
 
+  // La sesión que se está editando: no cuenta como choque consigo misma.
+  @IsOptional()
+  @IsUUID()
+  excluirClaseId?: string;
+
   // "1,3,5" (0 = domingo ... 6 = sábado)
   @IsOptional()
   @Matches(/^[0-6](,[0-6])*$/)

@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { useSucursalActiva } from '@/hooks/use-sucursal-activa';
+import { usePermissions } from '@/hooks/use-permissions';
 import { apiGet } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, MapPin, UserX, Users } from 'lucide-react';
+import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, Clock, MapPin, Plus, UserCheck, UserX, Users } from 'lucide-react';
+import { AsignarInstructorDialog, ClaseSinCobertura } from './AsignarInstructorDialog';
 
 interface TurnoAgenda {
   id: string;
@@ -24,6 +26,8 @@ type Cobertura = 'cubierta' | 'sin_turno' | 'sin_entrenador';
 interface ClaseAgenda {
   id: string;
   nombreClase: string;
+  fechaHora: string;
+  disciplinaId: string | null;
   fecha: string;
   inicio: number;
   duracionMinutos: number;
@@ -106,6 +110,16 @@ const ESTILO_COBERTURA: Record<Cobertura, string> = {
 export default function AgendaPage() {
   const router = useRouter();
   const { token } = useAuth();
+  const { hasPermission } = usePermissions();
+  const puedeAsignar = hasPermission('clases:actualizar');
+  const [asignando, setAsignando] = useState<ClaseSinCobertura | null>(null);
+
+  // Vista "Día" (plan 9): en celular la grilla de 7 días no entra; se abre así.
+  const [vista, setVista] = useState<'semana' | 'dia'>('semana');
+  const [diaElegido, setDiaElegido] = useState<string | null>(null);
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 767px)').matches) setVista('dia');
+  }, []);
 
   // ---------------- Sucursal: la activa de la barra superior (se elige ahí, no acá).
   const { sucursalId, sucursal, variasSucursales } = useSucursalActiva();
@@ -155,6 +169,7 @@ export default function AgendaPage() {
   if (!token) return null;
 
   const puede = data?.puede;
+  const diaActivo = data ? (diaElegido && data.dias.includes(diaElegido) ? diaElegido : data.dias.includes(data.hoy) ? data.hoy : data.dias[0]) : null;
   const irASemana = (desplazamiento: number) => {
     if (!data) return;
     setFechaRef(desplazamiento === 0 ? null : sumarDias(data.dias[0], desplazamiento * 7));
@@ -191,9 +206,17 @@ export default function AgendaPage() {
             </span>
           )}
 
+          <div className="flex gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-xs font-medium" role="group" aria-label="Vista">
+            {(['dia', 'semana'] as const).map((v) => (
+              <button key={v} type="button" aria-pressed={vista === v} onClick={() => setVista(v)} className={`rounded-md px-3 py-1.5 ${vista === v ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                {v === 'dia' ? 'Día' : 'Semana'}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => irASemana(-1)} aria-label="Semana anterior"><ChevronLeft className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="sm" className="h-8" onClick={() => irASemana(0)}>Hoy</Button>
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => { irASemana(0); setDiaElegido(null); }}>Hoy</Button>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => irASemana(1)} aria-label="Semana siguiente"><ChevronRight className="h-4 w-4" /></Button>
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 px-2 whitespace-nowrap">{data ? etiquetaRango(data.dias) : ''}</span>
           </div>
@@ -212,7 +235,23 @@ export default function AgendaPage() {
         <div className="h-[600px] rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 animate-pulse" />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-6">
-          {/* ---------------- Grilla semanal ---------------- */}
+          {vista === 'dia' && diaActivo ? (
+            <VistaDia
+              dias={data.dias}
+              hoy={data.hoy}
+              dia={diaActivo}
+              onElegirDia={setDiaElegido}
+              turnos={turnos.filter((t) => t.fecha === diaActivo)}
+              clases={clases.filter((c) => c.fecha === diaActivo)}
+              colorStaff={colorStaff}
+              puedeCrear={!!puede?.crearClases}
+              puedeAsignar={puedeAsignar}
+              onAbrirClase={(id) => router.push(`/dashboard/clases?clase=${id}`)}
+              onNuevaClase={(minutos) => abrirNuevaClase(diaActivo, minutos)}
+              onAsignar={setAsignando}
+            />
+          ) : (
+          /* ---------------- Grilla semanal ---------------- */
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <div className="min-w-[860px]">
@@ -317,6 +356,7 @@ export default function AgendaPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* ---------------- Panel lateral ---------------- */}
           <aside className="space-y-4">
@@ -338,13 +378,18 @@ export default function AgendaPage() {
                 ) : (
                   <ul className="mt-2 space-y-1.5 max-h-72 overflow-y-auto">
                     {huecos.map((c) => (
-                      <li key={c.id}>
-                        <button type="button" onClick={() => router.push(`/dashboard/clases?clase=${c.id}`)} className="w-full text-left rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
+                      <li key={c.id} className="rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <button type="button" onClick={() => router.push(`/dashboard/clases?clase=${c.id}`)} className="w-full text-left px-2 pt-1.5">
                           <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{etiquetaDia(c.fecha).semana} {etiquetaDia(c.fecha).numero} · {hhmm(c.inicio)} · {c.nombreClase}</p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             {c.cobertura === 'sin_entrenador' ? 'Sin instructor asignado' : `${c.entrenadorNombre} no trabaja a esa hora`}
                           </p>
                         </button>
+                        {puedeAsignar && (
+                          <button type="button" onClick={() => setAsignando(c)} className="flex items-center gap-1 px-2 pb-1.5 pt-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                            <UserCheck className="h-3 w-3" /> Asignar instructor
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -373,6 +418,115 @@ export default function AgendaPage() {
             )}
           </aside>
         </div>
+      )}
+
+      {sucursalId && <AsignarInstructorDialog clase={asignando} sucursalId={sucursalId} onClose={() => setAsignando(null)} />}
+    </div>
+  );
+}
+
+// Lista del día con jornadas y clases en orden de hora (plan 9: en celular la
+// grilla semanal no entra).
+function VistaDia({
+  dias, hoy, dia, onElegirDia, turnos, clases, colorStaff, puedeCrear, puedeAsignar, onAbrirClase, onNuevaClase, onAsignar,
+}: {
+  dias: string[];
+  hoy: string;
+  dia: string;
+  onElegirDia: (fecha: string) => void;
+  turnos: TurnoAgenda[];
+  clases: ClaseAgenda[];
+  colorStaff: Map<string, string>;
+  puedeCrear: boolean;
+  puedeAsignar: boolean;
+  onAbrirClase: (id: string) => void;
+  onNuevaClase: (minutos: number) => void;
+  onAsignar: (c: ClaseAgenda) => void;
+}) {
+  const items = [
+    ...turnos.map((t) => ({ tipo: 'turno' as const, inicio: t.inicio, turno: t })),
+    ...clases.map((c) => ({ tipo: 'clase' as const, inicio: c.inicio, clase: c })),
+  ].sort((a, b) => a.inicio - b.inicio || (a.tipo === 'turno' ? -1 : 1));
+
+  // Para "Programar una clase": la próxima media hora si es hoy; si no, las 8:00.
+  const ahora = new Date();
+  const proxima = Math.ceil((ahora.getHours() * 60 + ahora.getMinutes()) / 30) * 30;
+  const horaSugerida = dia === hoy && proxima < 22 * 60 ? proxima : 8 * 60;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Día">
+        {dias.map((fecha) => {
+          const { semana, numero } = etiquetaDia(fecha);
+          const activo = fecha === dia;
+          return (
+            <button
+              key={fecha}
+              type="button"
+              role="tab"
+              aria-selected={activo}
+              onClick={() => onElegirDia(fecha)}
+              className={`flex min-w-[3.25rem] flex-col items-center rounded-lg border px-2 py-1.5 ${
+                activo
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200'
+                  : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300'
+              }`}
+            >
+              <span className="text-[11px] font-semibold uppercase">{semana}</span>
+              <span className={`text-base font-bold ${fecha === hoy && !activo ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>{numero}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+        {items.length === 0 ? (
+          <p className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">No hay jornadas ni clases este día.</p>
+        ) : (
+          items.map((item) =>
+            item.tipo === 'turno' ? (
+              <div key={`t-${item.turno.id}`} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="h-8 w-1.5 shrink-0 rounded-full" style={{ background: colorStaff.get(item.turno.staffId) }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{item.turno.staffNombre}</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                    <Clock className="h-3 w-3" /> Jornada {hhmm(item.turno.inicio)}–{hhmm(item.turno.fin)}
+                  </p>
+                </div>
+                {(item.turno.estado === 'AUSENTE' || item.turno.estado === 'CANCELADO') && (
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                    {item.turno.estado === 'AUSENTE' ? 'Ausente' : 'Cancelada'}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div key={`c-${item.clase.id}`} className="px-4 py-2.5">
+                <button type="button" onClick={() => onAbrirClase(item.clase.id)} className={`w-full rounded-lg border px-3 py-2 text-left ${ESTILO_COBERTURA[item.clase.cobertura]}`}>
+                  <p className="text-sm font-semibold">{hhmm(item.clase.inicio)}–{hhmm(item.clase.inicio + item.clase.duracionMinutos)} · {item.clase.nombreClase}</p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-80">
+                    <span className="flex items-center gap-1">
+                      {item.clase.cobertura === 'sin_entrenador' ? <><UserX className="h-3 w-3" /> Sin instructor</> : item.clase.entrenadorNombre}
+                      {item.clase.cobertura === 'sin_turno' && <> · no trabaja a esa hora</>}
+                    </span>
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {item.clase.ocupados}/{item.clase.capacidadMaxima}</span>
+                    {item.clase.sala && <span>{item.clase.sala}</span>}
+                  </p>
+                </button>
+                {puedeAsignar && item.clase.cobertura !== 'cubierta' && (
+                  <button type="button" onClick={() => onAsignar(item.clase)} className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                    <UserCheck className="h-3.5 w-3.5" /> Asignar instructor
+                  </button>
+                )}
+              </div>
+            ),
+          )
+        )}
+      </div>
+
+      {puedeCrear && (
+        <Button variant="outline" className="w-full" onClick={() => onNuevaClase(horaSugerida)}>
+          <Plus className="mr-2 h-4 w-4" /> Programar una clase este día
+        </Button>
       )}
     </div>
   );
