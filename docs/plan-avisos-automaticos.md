@@ -20,6 +20,14 @@ Si el cliente ya renovó (tiene otra membresía activa o por empezar), no se le 
 - Los avisos del portal usan la tabla `notificaciones`, que ya existe y no se usaba. Cada aviso se guarda con un `tipo` como `POR_VENCER:<membresía>` o `RECORDATORIO:<reserva>`: así no se repite aunque el proceso corra cada hora.
 - La lista de WhatsApp se arma en el momento a partir de las membresías. "Ya avisé" se guarda en Redis (60 días). "Ya tienes lugar" y "Se canceló tu clase" se anotan en Redis cuando pasan, porque después ya no se pueden deducir de las reservas. En producción Redis guarda en disco (`appendonly yes`); si esos datos se perdieran, solo reaparecería o faltaría un recordatorio para recepción, nunca un aviso del portal.
 
+## Estado (2026-09-28)
+
+Las 4 fases están hechas: API `fa57bff`, portal `e0cd2e0`, panel `14275e2` y este cierre.
+
+Probado contra la API real (22 comprobaciones): "¡Ya tienes lugar!" al cancelar otro cliente, "Se canceló tu clase" al cancelar la sesión, por vencer y recordatorio desde el proceso de cada hora (correrlo dos veces no repite avisos), leídos, "hecho" en la lista de WhatsApp, recepción limitada a una sucursal ve la lista y un cliente no. En el navegador: campana del portal a 390 px y campana del panel en modo claro y oscuro.
+
+Para más adelante: dejar que el dueño cambie los días y horas de aviso (hoy fijos en `avisos.util.ts`), y correo o WhatsApp automático si hace falta.
+
 ## Fases (un commit por fase)
 
 1. **API.** Módulo `avisos`: proceso cada hora por organización (por vencer, vencida y recordatorios), avisos en el acto al subir de la lista de espera y al cancelar una sesión, `GET/POST /portal/avisos` y `GET /avisos/whatsapp` + `POST /avisos/whatsapp/:clave/hecho`. Pruebas Vitest.
