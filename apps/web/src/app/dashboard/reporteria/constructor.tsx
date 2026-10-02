@@ -141,7 +141,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
         </div>
         {reporte?.puedeEditar ? (
           <>
-            <Button variant="outline" onClick={() => setGuardando('nuevo')}>
+            <Button variant="outline" className="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800" onClick={() => setGuardando('nuevo')}>
               Guardar como…
             </Button>
             <Button onClick={() => (nombre.trim() ? guardar.mutate('actualizar') : setGuardando('nuevo'))} disabled={guardar.isPending}>
@@ -274,6 +274,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                         <span className="text-sm text-slate-500">{i === 0 ? 'Agrupar por' : 'y luego por'}</span>
                         <select
                           className={claseCampo}
+                          aria-label={`Agrupar por, nivel ${i + 1}`}
                           value={g.columna}
                           onChange={(e) => {
                             const nueva = col(e.target.value);
@@ -292,6 +293,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                         {esFecha && (
                           <select
                             className={claseCampo}
+                            aria-label={`Periodo del nivel ${i + 1}`}
                             value={g.granularidad ?? 'dia'}
                             onChange={(e) => cambiar({ ...def, agrupaciones: def.agrupaciones.map((x, j) => (j === i ? { ...x, granularidad: e.target.value as Granularidad } : x)) })}
                           >
@@ -349,6 +351,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       <div key={i} className="flex flex-wrap items-center gap-2">
                         <select
                           className={claseCampo}
+                          aria-label={`Cálculo del total ${i + 1}`}
                           value={t.funcion}
                           onChange={(e) => cambiar({ ...def, totales: def.totales.map((x, j) => (j === i ? { ...x, funcion: e.target.value as FuncionTotal } : x)) })}
                         >
@@ -361,6 +364,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                         <span className="text-sm text-slate-500">de</span>
                         <select
                           className={claseCampo}
+                          aria-label={`Columna del total ${i + 1}`}
                           value={t.columna}
                           onChange={(e) => {
                             const nueva = col(e.target.value);
@@ -388,7 +392,13 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                   <button
                     type="button"
                     onClick={() => {
-                      const numerica = tipo.columnas.find((c) => c.tipo === 'moneda') ?? tipo.columnas.find((c) => c.tipo === 'numero');
+                      // Primero una columna de dinero o número que ya esté en el reporte.
+                      const elegidas = def.columnas.map(col);
+                      const numerica =
+                        elegidas.find((c) => c.tipo === 'moneda') ??
+                        elegidas.find((c) => c.tipo === 'numero') ??
+                        tipo.columnas.find((c) => c.tipo === 'moneda') ??
+                        tipo.columnas.find((c) => c.tipo === 'numero');
                       const c = numerica ?? tipo.columnas[0];
                       cambiar({ ...def, totales: [...def.totales, { columna: c.clave, funcion: numerica ? 'suma' : 'distintos' }] });
                     }}
@@ -407,7 +417,12 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Vista previa</h3>
               <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                 {previa.isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {previa.data && `Primeras ${Math.min(previa.data.porPagina, previa.data.totalFilas)} de ${previa.data.totalFilas.toLocaleString('es-ES')} filas`}
+                {previa.data &&
+                  (previa.data.totalFilas === 0
+                    ? 'Sin filas'
+                    : previa.data.totalFilas <= previa.data.porPagina
+                      ? `${previa.data.totalFilas.toLocaleString('es-ES')} ${previa.data.totalFilas === 1 ? 'fila' : 'filas'}`
+                      : `Primeras ${previa.data.porPagina} de ${previa.data.totalFilas.toLocaleString('es-ES')} filas`)}
               </span>
             </div>
             {previa.error ? (

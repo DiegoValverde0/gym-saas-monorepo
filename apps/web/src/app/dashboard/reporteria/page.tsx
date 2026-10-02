@@ -156,7 +156,7 @@ export default function ReporteriaPage() {
     : [
         { valor: 'todos', nombre: 'Todos' },
         { valor: 'recientes', nombre: 'Recientes' },
-        { valor: 'mios', nombre: 'Mis reportes' },
+        ...(puedeCrear ? [{ valor: 'mios' as Vista, nombre: 'Mis reportes' }] : []),
         { valor: 'compartidos', nombre: 'Compartidos conmigo' },
         { valor: 'plantillas', nombre: 'Plantillas' },
         ...(hasPermission('reportes:eliminar') ? [{ valor: 'papelera' as Vista, nombre: 'Papelera' }] : []),

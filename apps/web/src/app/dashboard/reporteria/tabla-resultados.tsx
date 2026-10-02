@@ -1,7 +1,10 @@
 "use client";
 
 import { Fragment, ReactNode } from 'react';
-import { formatearValor, Resultado, Resumen } from './tipos';
+import { formatearValor, Granularidad, Resultado, Resumen } from './tipos';
+
+// Al agrupar una fecha por periodo, el encabezado nombra el periodo.
+const NOMBRE_PERIODO: Record<Granularidad, string> = { dia: 'Día', semana: 'Semana', mes: 'Mes', anio: 'Año' };
 
 const igual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -57,8 +60,12 @@ export function TablaResultados({ resultado, vacio }: { resultado: Resultado; va
               <td colSpan={ancho} className="px-3 py-2" style={{ paddingLeft: `${0.75 + (n - 1) * 1.25}rem` }}>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <span className="font-semibold text-slate-900 dark:text-white">
-                    <span className="font-normal text-slate-500 dark:text-slate-400">{g.nombre}: </span>
-                    {formatearValor(valor, g.tipo, g.opciones, g.granularidad)}
+                    <span className="font-normal text-slate-500 dark:text-slate-400">{g.granularidad ? NOMBRE_PERIODO[g.granularidad] : g.nombre}: </span>
+                    {valor === null || valor === undefined || valor === '' ? (
+                      <span className="font-normal italic text-slate-500 dark:text-slate-400">(sin dato)</span>
+                    ) : (
+                      formatearValor(valor, g.tipo, g.opciones, g.granularidad)
+                    )}
                   </span>
                   <Totales resumen={r} resultado={resultado} />
                 </div>

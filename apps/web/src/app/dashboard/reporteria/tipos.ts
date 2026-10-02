@@ -249,7 +249,8 @@ export function definicionInicial(tipo: TipoCatalogo): Definicion {
     agrupaciones: [],
     totales: [],
     mostrarDetalle: true,
-    filtros: { fecha: { columna: tipo.fechaPorDefecto, rango: 'este_mes' }, soloMios: false, campos: [] },
+    // Últimos 30 días: "este mes" sale vacío a principio de mes.
+    filtros: { fecha: { columna: tipo.fechaPorDefecto, rango: 'ultimos_30' }, soloMios: false, campos: [] },
     orden: [],
   };
 }
