@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -66,6 +81,21 @@ export class ReporteriaController {
   @RequirePermissions({ accion: 'leer', modulo: 'reportes' })
   ejecutarGuardado(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EjecutarGuardadoDto) {
     return this.guardados.ejecutar(id, dto);
+  }
+
+  // Exportar a CSV o Excel (fase 5): con ver el reporte alcanza (recepción exporta).
+  @Post('reportes/:id/exportar')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ accion: 'leer', modulo: 'reportes' })
+  async exportar(@Param('id', ParseUUIDPipe) id: string, @Query('formato') formato: string, @Body() dto: EjecutarGuardadoDto) {
+    if (formato !== 'csv' && formato !== 'xlsx') throw new BadRequestException('Elige CSV o Excel.');
+    const { contenido, nombre, tipoMime } = await this.guardados.exportar(id, formato, dto);
+    return new StreamableFile(contenido, {
+      type: tipoMime,
+      length: contenido.length,
+      // El nombre en ASCII y, aparte, el original con acentos (RFC 5987).
+      disposition: `attachment; filename="${nombre}"; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+    });
   }
 
   @Post('reportes')

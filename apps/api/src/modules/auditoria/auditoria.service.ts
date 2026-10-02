@@ -23,6 +23,7 @@ export const ACCIONES_AUDITORIA = [
   'restablecer_contrasena',
   'plataforma_acceso_total_administrador',
   'compartir_reportes',
+  'exportar_reporte',
 ];
 
 const DIA_MS = 86_400_000;

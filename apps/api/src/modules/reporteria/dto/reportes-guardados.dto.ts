@@ -90,11 +90,12 @@ export class EjecutarGuardadoDto {
   @Min(1)
   pagina?: number;
 
+  // Hasta 2.000: la impresión pide todo lo que se ve en pantalla de una vez.
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(2000)
   porPagina?: number;
 
   // Cambios de un momento en los filtros rápidos (fecha y sucursal), sin

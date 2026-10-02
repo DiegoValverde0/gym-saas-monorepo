@@ -161,6 +161,7 @@ const TIPOS_ACTIVIDAD: { valor: string; nombre: string }[] = [
   { valor: 'pin_kiosco', nombre: 'PIN del kiosco' },
   { valor: 'restablecer_contrasena', nombre: 'Contraseñas restablecidas' },
   { valor: 'compartir_reportes', nombre: 'Reportes compartidos' },
+  { valor: 'exportar_reporte', nombre: 'Reportes exportados' },
 ];
 const NOMBRE_TIPO = Object.fromEntries(TIPOS_ACTIVIDAD.map((t) => [t.valor, t.nombre]));
 

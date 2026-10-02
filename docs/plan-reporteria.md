@@ -186,7 +186,7 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
 - Formatos Lista y Agrupado.
 - **Listo cuando:** se arma "Ventas de este mes por plan, con total" en menos de un minuto, sin escribir nada técnico. Se prueba en el navegador.
 
-### Fase 5: vista del reporte y exportación
+### Fase 5: vista del reporte y exportación (HECHA)
 - Vista con paginación, subtotales, total general y filtros rápidos editables.
 - Exportación **CSV** y **Excel** (`exceljs`: encabezado, formatos de moneda y fecha, subtotales y fila de total); impresión limpia.
 - Auditoría de exportaciones.

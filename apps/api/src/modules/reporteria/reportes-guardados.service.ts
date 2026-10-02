@@ -3,8 +3,9 @@ import { CarpetaReporte, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { nombreRolLegible, registrarAuditoria } from '../../common/utils/auditoria.util';
 import { tipoReporte, TipoReporte } from './catalogo';
-import { validarDefinicion } from './motor/definicion';
-import { Contexto, ReporteriaService, ResultadoReporte } from './reporteria.service';
+import { Definicion, validarDefinicion } from './motor/definicion';
+import { aCsv, aExcel, NOMBRE_RANGO, nombreArchivo } from './motor/exportador';
+import { Contexto, MAX_FILAS_EXPORTACION, ReporteriaService, ResultadoReporte } from './reporteria.service';
 import {
   ActualizarCarpetaDto,
   ActualizarReporteDto,
@@ -284,7 +285,16 @@ export class ReportesGuardadosService {
   async ejecutar(id: string, dto: EjecutarGuardadoDto): Promise<ResultadoReporte & { reporte: ReturnType<ReportesGuardadosService['describir']> }> {
     const ctx = await this.motor.contexto();
     const { reporte, tipo } = await this.reporteVisible(id, ctx);
-    const guardada = reporte.definicion as Record<string, unknown>;
+    const definicion = this.definicionConFiltros(reporte.definicion, tipo, dto);
+    const pagina = dto.pagina ?? 1;
+    const resultado = await this.motor.ejecutar(tipo, definicion, ctx, pagina, dto.porPagina ?? 50);
+    if (pagina === 1) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
+    return { ...resultado, reporte: this.describir(reporte, ctx) };
+  }
+
+  /** La definición guardada con los cambios del momento en la fecha y la sucursal. */
+  private definicionConFiltros(definicionGuardada: unknown, tipo: TipoReporte, dto: EjecutarGuardadoDto): Definicion {
+    const guardada = definicionGuardada as Record<string, unknown>;
     const filtrosGuardados = (guardada.filtros ?? {}) as Record<string, unknown>;
     const entrada = {
       ...guardada,
@@ -294,16 +304,69 @@ export class ReportesGuardadosService {
         ...(dto.filtros && 'sucursalId' in dto.filtros ? { sucursalId: dto.filtros.sucursalId ?? undefined } : {}),
       },
     };
-    let definicion;
     try {
-      definicion = validarDefinicion(entrada, tipo);
+      return validarDefinicion(entrada, tipo);
     } catch (err) {
       throw new BadRequestException(`Este reporte ya no se puede correr: ${(err as Error).message} Edítalo para corregirlo.`);
     }
-    const pagina = dto.pagina ?? 1;
-    const resultado = await this.motor.ejecutar(tipo, definicion, ctx, pagina, dto.porPagina ?? 50);
-    if (pagina === 1) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
-    return { ...resultado, reporte: this.describir(reporte, ctx) };
+  }
+
+  /**
+   * Exporta un reporte guardado a CSV o Excel con todas sus filas (hasta
+   * 50.000) y los mismos filtros del momento que se ven en pantalla. Queda
+   * en la auditoría.
+   */
+  async exportar(id: string, formato: 'csv' | 'xlsx', dto: EjecutarGuardadoDto) {
+    const ctx = await this.motor.contexto();
+    const { reporte, tipo } = await this.reporteVisible(id, ctx);
+    const definicion = this.definicionConFiltros(reporte.definicion, tipo, dto);
+    const r = await this.motor.ejecutar(tipo, definicion, ctx, 1, MAX_FILAS_EXPORTACION, MAX_FILAS_EXPORTACION);
+    if (r.filas && r.totalFilas > MAX_FILAS_EXPORTACION) {
+      throw new BadRequestException(
+        `El reporte tiene ${r.totalFilas.toLocaleString('es-ES')} filas y se exportan hasta ${MAX_FILAS_EXPORTACION.toLocaleString('es-ES')}. Achica el rango de fechas, filtra o agrupa sin mostrar el detalle.`,
+      );
+    }
+
+    // Qué se exportó, para el encabezado del archivo.
+    const f = definicion.filtros;
+    const partes = [
+      f.fecha.rango === 'personalizado'
+        ? `Del ${f.fecha.desde?.split('-').reverse().join('/') ?? '…'} al ${f.fecha.hasta?.split('-').reverse().join('/') ?? '…'}`
+        : NOMBRE_RANGO[f.fecha.rango],
+    ];
+    const sucursalId = f.sucursalId ?? ctx.ejecucion.sucursalAlcance;
+    if (sucursalId) {
+      const s = (await this.db.sucursal.findUnique({ where: { id: sucursalId }, select: { nombre: true } })) as { nombre: string } | null;
+      if (s) partes.push(s.nombre);
+    }
+    if (f.soloMios) partes.push('solo los míos');
+    if (f.campos.length) partes.push(`${f.campos.length} filtro${f.campos.length === 1 ? '' : 's'} más`);
+
+    const generado = new Date();
+    const datos = {
+      titulo: reporte.nombre,
+      tipoNombre: tipo.nombre,
+      filtros: partes.join(' · '),
+      zonaHoraria: ctx.ejecucion.zonaHoraria,
+      generado,
+      grupos: r.agrupaciones,
+      columnas: r.columnas,
+      totales: r.totales,
+      filas: r.filas,
+      resumenes: r.resumenes,
+    };
+    const contenido = formato === 'csv' ? aCsv(datos) : await aExcel(datos);
+    await registrarAuditoria(this.db, {
+      tabla: 'Reporte',
+      operacion: 'UPDATE',
+      accion: 'exportar_reporte',
+      descripcion: `Exportó el reporte "${reporte.nombre}" a ${formato === 'csv' ? 'CSV' : 'Excel'} (${r.totalFilas.toLocaleString('es-ES')} registros)`,
+    });
+    return {
+      contenido,
+      nombre: nombreArchivo(reporte.nombre, generado, formato, ctx.ejecucion.zonaHoraria),
+      tipoMime: formato === 'csv' ? 'text/csv; charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 
   // ---------------------------------------------------------------------------

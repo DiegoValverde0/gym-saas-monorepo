@@ -103,6 +103,38 @@ export function apiPut<T = unknown>(path: string, body?: unknown, options?: Requ
   return request<T>(path, { ...options, method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined });
 }
 
+/**
+ * Pide un archivo (exportaciones de la reportería) y lo descarga en el
+ * navegador con el nombre que manda la API. Los errores llegan en JSON.
+ */
+export async function apiDescargar(path: string, body?: unknown): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': getActiveTenantId() || 'all' },
+    body: JSON.stringify(body ?? {}),
+  }).catch(() => {
+    throw new ApiError('No se pudo conectar con el servidor. Verifica tu conexión o que la API esté disponible.', 0);
+  });
+  if (res.status === 401) {
+    clearSessionAndRedirectToLogin();
+    throw new ApiError('Sesión expirada, inicia sesión de nuevo.', 401);
+  }
+  if (!res.ok) {
+    const raw = await res.json().catch(() => null);
+    const message = raw?.message ? (Array.isArray(raw.message) ? raw.message.join(', ') : raw.message) : `Error ${res.status}`;
+    throw new ApiError(message, res.status);
+  }
+  const disposicion = res.headers.get('Content-Disposition') ?? '';
+  const nombre = decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(disposicion)?.[1] ?? /filename="([^"]+)"/.exec(disposicion)?.[1] ?? 'reporte');
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function apiDelete<T = unknown>(path: string, options?: RequestInit) {
   return request<T>(path, { ...options, method: 'DELETE' });
 }

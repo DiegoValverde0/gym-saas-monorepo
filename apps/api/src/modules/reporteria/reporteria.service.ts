@@ -9,12 +9,13 @@ import { modoDeConfiguracion, ModoUso } from '../../common/utils/modo.util';
 import { aHoraLocal, desdeHoraLocal, ZONA_HORARIA_DEFAULT } from '../../common/utils/zona-horaria.util';
 import { ModuloTenant } from '../../common/decorators/requiere-modulo.decorator';
 import { TIPOS_REPORTE, tipoReporte, TipoReporte } from './catalogo';
-import { Definicion, FORMATOS, FUNCIONES_TOTAL, GRANULARIDADES, OPERADORES, RANGOS_FECHA, validarDefinicion } from './motor/definicion';
+import { Definicion, FORMATOS, Granularidad, FUNCIONES_TOTAL, GRANULARIDADES, OPERADORES, RANGOS_FECHA, validarDefinicion } from './motor/definicion';
 import { compilarReporte, ContextoEjecucion, MAX_FILAS_EN_PANTALLA, MAX_GRUPOS, ReporteCompilado } from './motor/compilador';
 
 // Una consulta de reporte no puede tardar más que esto (decisión R4).
 const TIEMPO_MAXIMO_MS = 15_000;
-const POR_PAGINA_MAXIMO = 200;
+// Exportar: hasta 50.000 filas (decisión R4).
+export const MAX_FILAS_EXPORTACION = 50_000;
 
 export interface Contexto {
   ejecucion: ContextoEjecucion;
@@ -28,7 +29,7 @@ export interface Contexto {
 export interface ResultadoReporte {
   definicion: Definicion;
   columnas: { clave: string; nombre: string; tipo: string; opciones?: Record<string, string> }[];
-  agrupaciones: { clave: string; nombre: string; tipo: string; granularidad?: string; opciones?: Record<string, string> }[];
+  agrupaciones: { clave: string; nombre: string; tipo: string; granularidad?: Granularidad; opciones?: Record<string, string> }[];
   totales: { clave: string; funcion: string; nombre: string; tipo: string }[];
   /** Filas de detalle: grupos (g0, g1...) y columnas por su clave. */
   filas: Record<string, unknown>[] | null;
@@ -146,13 +147,24 @@ export class ReporteriaService {
     return this.ejecutar(tipo, definicion, ctx, pagina, porPagina);
   }
 
-  async ejecutar(tipo: TipoReporte, definicion: Definicion, ctx: Contexto, pagina: number, porPagina: number): Promise<ResultadoReporte> {
+  /**
+   * `limite`: cuántas filas de detalle se pueden pedir en total (2.000 en
+   * pantalla e impresión; 50.000 al exportar, en una sola página).
+   */
+  async ejecutar(
+    tipo: TipoReporte,
+    definicion: Definicion,
+    ctx: Contexto,
+    pagina: number,
+    porPagina: number,
+    limite = MAX_FILAS_EN_PANTALLA,
+  ): Promise<ResultadoReporte> {
     if (definicion.filtros.sucursalId && ctx.ejecucion.sucursalAlcance && definicion.filtros.sucursalId !== ctx.ejecucion.sucursalAlcance) {
       throw new ForbiddenException('Tu acceso está limitado a otra sucursal.');
     }
-    porPagina = Math.min(Math.max(1, Math.floor(porPagina) || 50), POR_PAGINA_MAXIMO);
+    porPagina = Math.min(Math.max(1, Math.floor(porPagina) || 50), limite);
     pagina = Math.max(1, Math.floor(pagina) || 1);
-    if (pagina * porPagina > MAX_FILAS_EN_PANTALLA + porPagina - 1) {
+    if (pagina * porPagina > limite + porPagina - 1) {
       throw new BadRequestException(`En pantalla se ven hasta ${MAX_FILAS_EN_PANTALLA} filas. Filtra más o exporta el reporte.`);
     }
 
