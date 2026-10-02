@@ -53,15 +53,18 @@ export function useSucursalActiva() {
   const elegir = useSucursalElegidaStore((s) => s.elegir);
   const queryClient = useQueryClient();
 
+  const sucursalFija = user?.sucursalId ?? null;
   const { data, isLoading } = useQuery({
-    // Misma clave que usan las pantallas para la lista de sucursales.
-    queryKey: ['sucursales', activeTenantId],
-    queryFn: async () => unwrapList<SucursalBasica>(await apiGet('/sucursales')),
+    // /sucursales/basicas y no /sucursales: esa pide poder administrar
+    // sucursales, y el instructor recibía un 403 en cada pantalla. La clave
+    // no es la de la lista completa, pero empieza igual: al crear, editar o
+    // borrar una sucursal se invalida ['sucursales'] y se refresca también.
+    queryKey: ['sucursales', activeTenantId, 'basicas'],
+    queryFn: async () => unwrapList<SucursalBasica>(await apiGet('/sucursales/basicas')),
     enabled: token && !!organizacionId,
   });
 
   const sucursales = useMemo(() => (data || []).filter((s) => !s.estado || s.estado === 'ACTIVO'), [data]);
-  const sucursalFija = user?.sucursalId ?? null;
 
   const sucursalId = useMemo(() => {
     if (sucursalFija) return sucursalFija;

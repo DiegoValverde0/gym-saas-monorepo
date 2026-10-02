@@ -319,7 +319,7 @@ export class ReportesGuardadosService {
     const definicion = this.definicionConFiltros(reporte.definicion, tipo, dto);
     const pagina = dto.pagina ?? 1;
     const resultado = await this.motor.ejecutar(tipo, definicion, ctx, pagina, dto.porPagina ?? 50);
-    if (pagina === 1) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
+    if (pagina === 1 && dto.contar !== false) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
     return { ...resultado, reporte: this.describir(reporte, ctx) };
   }
 

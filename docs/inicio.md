@@ -43,7 +43,7 @@ Lo cambia quien tenga `organizaciones:actualizar`. Cada persona ve, de ese dise�
 
 - Las formas: barras, barras horizontales (agrupado), líneas, área (agrupado), torta, mapa de calor (tabla cruzada) y "destacar" (tabla cruzada en barras o líneas: la última fila en color y las demás en gris).
 - La descripción no nombra el período: se puede cambiar en la tarjeta.
-- Una tarjeta corre su reporte con 6 filas (`POST /reporteria/reportes/:id/ejecutar`). Que su consulta sea rápida con un gimnasio grande.
+- Una tarjeta corre su reporte con 6 filas (`POST /reporteria/reportes/:id/ejecutar`, con `contar: false` para que cada visita al Inicio no cuente como una ejecución ni llene "Recientes"). Que su consulta sea rápida con un gimnasio grande.
 
 **Si no sale de un reporte** (como el estado de los clientes), es una tarjeta propia:
 

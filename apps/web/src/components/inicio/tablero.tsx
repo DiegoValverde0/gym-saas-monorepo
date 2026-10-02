@@ -59,7 +59,8 @@ function TarjetaReporte({ reporteId, nombre, rangoInicial }: { reporteId: string
   const [rango, setRango] = useState<RangoFecha | undefined>(rangoInicial);
   const { data, isLoading, error } = useQuery({
     queryKey: ['inicio-tarjeta', reporteId, rango],
-    queryFn: () => apiPost<Ejecucion>(`/reporteria/reportes/${reporteId}/ejecutar`, { porPagina: 6, ...(rango ? { filtros: { fecha: { rango } } } : {}) }),
+    // contar: false, para no llenar "Recientes" de la reportería con cada visita al Inicio.
+    queryFn: () => apiPost<Ejecucion>(`/reporteria/reportes/${reporteId}/ejecutar`, { porPagina: 6, contar: false, ...(rango ? { filtros: { fecha: { rango } } } : {}) }),
     placeholderData: (anterior) => anterior,
     meta: { silencioso: true },
     retry: false,

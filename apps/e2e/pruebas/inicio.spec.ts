@@ -25,6 +25,19 @@ test.describe('dueño', () => {
     expect(orden).toBe(true);
   });
 
+  test('abrir el Inicio no cuenta como abrir sus reportes', async ({ page }) => {
+    const veces = async () => {
+      const r = await page.request.get(`${URL_API}/reporteria/reportes?vista=plantillas`);
+      const lista: { clavePlantilla: string; vecesEjecutado: number }[] = (await r.json()).data;
+      return lista.find((p) => p.clavePlantilla === 'horas-pico')!.vecesEjecutado;
+    };
+    const antes = await veces();
+    await page.goto('/dashboard');
+    await expect(page.locator('[data-tarjeta="plantilla:horas-pico"]')).toContainText('¿A qué hora viene la gente?');
+    await page.waitForLoadState('networkidle');
+    expect(await veces()).toBe(antes);
+  });
+
   test('muestra las tarjetas del diseño sugerido, con sus gráficos', async ({ page }) => {
     await page.goto('/dashboard');
     const tarjeta = (id: string) => page.locator(`[data-tarjeta="${id}"]`);
@@ -225,6 +238,9 @@ test.describe('instructor', () => {
   test.use({ storageState: sesion('instructor') });
 
   test('no ve los ingresos, ni en la pantalla ni en lo que manda la API', async ({ page }) => {
+    // Ningún pedido rechazado al abrir el Inicio (antes, el selector de sucursal pedía /sucursales y recibía 403).
+    const rechazados: string[] = [];
+    page.on('response', (r) => r.status() >= 400 && rechazados.push(`${r.status()} ${r.url()}`));
     await page.goto('/dashboard');
     await expect(page.getByRole('region', { name: 'Asistencias de hoy' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Clientes activos' })).toBeVisible();
@@ -239,5 +255,11 @@ test.describe('instructor', () => {
     const respuesta = await page.request.get(`${URL_API}/dashboard/kpis`);
     expect(respuesta.ok()).toBeTruthy();
     expect((await respuesta.json()).data.ingresos).toBeNull();
+    await page.waitForLoadState('networkidle');
+    expect(rechazados).toEqual([]);
+    // La lista básica de sucursales sí la puede pedir (la del encabezado).
+    const basicas = await page.request.get(`${URL_API}/sucursales/basicas`);
+    expect(basicas.ok()).toBeTruthy();
+    expect((await basicas.json()).data[0]).toEqual(expect.objectContaining({ id: expect.any(String), nombre: expect.any(String) }));
   });
 });
