@@ -314,7 +314,8 @@ export default function ReporteriaPage() {
                                   <Pencil className="h-4 w-4" />
                                 </Link>
                               )}
-                              {puedeCrear && (
+                              {/* Lo de modo experto se copia (para cambiarlo) solo en modo experto. */}
+                              {puedeCrear && (catalogo?.avanzado || !r.usaModoExperto) && (
                                 <button type="button" onClick={() => duplicar.mutate(r.id)} className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800" aria-label={`Duplicar ${r.nombre}`} title="Duplicar">
                                   <Copy className="h-4 w-4" />
                                 </button>

@@ -43,6 +43,10 @@ export type Granularidad = (typeof GRANULARIDADES)[number];
 export const FUNCIONES_TOTAL = ['suma', 'promedio', 'minimo', 'maximo', 'distintos'] as const;
 export type FuncionTotal = (typeof FUNCIONES_TOTAL)[number];
 
+// Gráfico del reporte (fase 7): sobre un reporte agrupado o una tabla cruzada.
+export const TIPOS_GRAFICO = ['barras', 'lineas', 'torta'] as const;
+export type TipoGrafico = (typeof TIPOS_GRAFICO)[number];
+
 export type Operador =
   | 'igual'
   | 'distinto'
@@ -92,6 +96,12 @@ export interface Total {
   funcion: FuncionTotal;
 }
 
+export interface Grafico {
+  tipo: TipoGrafico;
+  /** "cantidad" o un total del reporte, como "suma:monto". */
+  valor: string;
+}
+
 export interface FiltroCruzado {
   clave: string;
   modo: 'con' | 'sin';
@@ -121,6 +131,7 @@ export interface Definicion {
     cruzados: FiltroCruzado[];
   };
   orden: { columna: string; direccion: 'asc' | 'desc' }[];
+  grafico?: Grafico;
 }
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -239,6 +250,23 @@ export function validarDefinicion(entrada: unknown, tipoBase: TipoReporte, opcio
     return { columna: columna.clave, funcion };
   });
 
+  // Gráfico: solo con grupos. Si su total ya no está en el reporte, muestra
+  // la cantidad (no se rompe un reporte guardado por quitar un total).
+  let grafico: Grafico | undefined;
+  if (esObjeto(d.grafico) && formato !== 'LISTA') {
+    const g = d.grafico as Record<string, unknown>;
+    const tipoGrafico = g.tipo as TipoGrafico;
+    if (!TIPOS_GRAFICO.includes(tipoGrafico)) error(`El gráfico "${String(g.tipo)}" no existe.`);
+    const graficable = totales.filter((t) => t.funcion === 'distintos' || ['numero', 'moneda'].includes(columnaDe(tipo, t.columna, 'gráfico').tipo));
+    // En la tabla cruzada, el mismo número de las casillas.
+    const pedido = formato === 'TABLA_CRUZADA' ? (totales[0] ? `${totales[0].funcion}:${totales[0].columna}` : 'cantidad') : g.valor;
+    const total = graficable.find((t) => `${t.funcion}:${t.columna}` === pedido);
+    if (formato === 'TABLA_CRUZADA' && totales[0] && !total) error('El gráfico necesita un número en las casillas: elige otro total.');
+    // Una torta reparte un todo: cantidades o sumas, no promedios ni máximos.
+    if (tipoGrafico === 'torta' && total && total.funcion !== 'suma') error('El gráfico de torta muestra cantidades o sumas.');
+    grafico = { tipo: tipoGrafico, valor: total ? `${total.funcion}:${total.columna}` : 'cantidad' };
+  }
+
   // Filtros
   const f = fEntrada;
   const fechaEntrada = esObjeto(f.fecha) ? (f.fecha as Record<string, unknown>) : {};
@@ -337,5 +365,6 @@ export function validarDefinicion(entrada: unknown, tipoBase: TipoReporte, opcio
     mostrarDetalle: formato === 'LISTA' ? true : formato === 'TABLA_CRUZADA' ? false : d.mostrarDetalle !== false,
     filtros: { fecha: { columna: columnaFecha.clave, rango, desde, hasta }, sucursalId, soloMios, campos, ...(logica ? { logica } : {}), cruzados },
     orden,
+    ...(grafico ? { grafico } : {}),
   };
 }

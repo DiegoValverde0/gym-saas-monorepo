@@ -12,6 +12,7 @@ import { TIPOS_REPORTE, tipoReporte, TipoReporte } from './catalogo';
 import { Definicion, FORMATOS, Granularidad, FUNCIONES_TOTAL, GRANULARIDADES, OPERADORES, RANGOS_FECHA, validarDefinicion } from './motor/definicion';
 import { compilarReporte, ContextoEjecucion, MAX_FILAS_EN_PANTALLA, MAX_GRUPOS, ReporteCompilado } from './motor/compilador';
 import { tipoConGrupos } from './motor/avanzado';
+import { idDePlantilla, plantillasListas } from './motor/plantillas';
 
 // Tabla cruzada: más columnas que esto no se leen; se pide agrupar por algo más general.
 export const MAX_COLUMNAS_TABLA = 50;
@@ -65,6 +66,8 @@ export interface ResultadoReporte {
 @Injectable()
 export class ReporteriaService {
   private readonly logger = new Logger(ReporteriaService.name);
+  // Gimnasios cuyas plantillas ya se revisaron (ver asegurarPlantillas).
+  private readonly plantillasAlDia = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -273,6 +276,37 @@ export class ReporteriaService {
     await this.prisma.$executeRaw`
       UPDATE reportes SET ultima_ejecucion = now(), veces_ejecutado = veces_ejecutado + 1
       WHERE id = ${reporteId}::uuid AND organizacion_id = ${organizacionId}::uuid`;
+  }
+
+  /**
+   * Copia las plantillas del sistema (catalogo/plantillas.ts) a los reportes
+   * del gimnasio: crea las que faltan, actualiza las que cambiaron y manda a
+   * la papelera las que ya no existen. Una vez por gimnasio mientras la API
+   * esté prendida. SQL crudo: no es una acción de nadie, no va a la auditoría.
+   */
+  async asegurarPlantillas(organizacionId: string) {
+    if (this.plantillasAlDia.has(organizacionId)) return;
+    const plantillas = plantillasListas();
+    const filas = plantillas.map(
+      (p) => Prisma.sql`(${idDePlantilla(organizacionId, p.clave)}::uuid, ${organizacionId}::uuid, ${p.nombre}, ${p.descripcion},
+        ${p.definicion.tipo}, ${p.definicion.formato}::"FormatoReporte", ${JSON.stringify(p.definicion)}::jsonb, true, now(), now())`,
+    );
+    await this.prisma.$transaction([
+      this.prisma.$executeRaw`
+        INSERT INTO reportes (id, organizacion_id, nombre, descripcion, tipo_reporte, formato, definicion, es_plantilla, created_at, updated_at)
+        VALUES ${Prisma.join(filas)}
+        ON CONFLICT (id) DO UPDATE SET
+          nombre = EXCLUDED.nombre, descripcion = EXCLUDED.descripcion, tipo_reporte = EXCLUDED.tipo_reporte,
+          formato = EXCLUDED.formato, definicion = EXCLUDED.definicion, es_plantilla = true, deleted_at = NULL, updated_at = now()
+        WHERE reportes.organizacion_id = EXCLUDED.organizacion_id
+          AND (reportes.nombre, reportes.descripcion, reportes.tipo_reporte, reportes.formato, reportes.definicion, reportes.es_plantilla, reportes.deleted_at)
+            IS DISTINCT FROM (EXCLUDED.nombre, EXCLUDED.descripcion, EXCLUDED.tipo_reporte, EXCLUDED.formato, EXCLUDED.definicion, true, NULL::timestamptz)`,
+      this.prisma.$executeRaw`
+        UPDATE reportes SET deleted_at = now(), updated_at = now()
+        WHERE organizacion_id = ${organizacionId}::uuid AND es_plantilla AND deleted_at IS NULL
+          AND id NOT IN (${Prisma.join(plantillas.map((p) => Prisma.sql`${idDePlantilla(organizacionId, p.clave)}::uuid`))})`,
+    ]);
+    this.plantillasAlDia.add(organizacionId);
   }
 
   // Solo lectura y con tiempo máximo: un reporte nunca puede escribir ni

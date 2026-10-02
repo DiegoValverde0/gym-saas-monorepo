@@ -197,8 +197,10 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
 - **Tabla cruzada**, **filtros con/sin**, **lógica de filtros** ("1 Y (2 O 3)", con un analizador propio, nunca `eval`) y **grupos personalizados** (rangos y agrupaciones de valores).
 - **Listo cuando:** "Clientes sin asistencias en los últimos 30 días con membresía vigente" y "Ingresos por mes × sucursal" dan lo mismo que una consulta hecha a mano.
 
-### Fase 7: gráficos y plantillas
-- Gráfico por reporte (barras, líneas o torta, con `recharts`, que ya está en el proyecto).
+### Fase 7: gráficos y plantillas (HECHA)
+- Gráfico por reporte (barras, líneas o torta, con `recharts`, que ya está en el proyecto). Va en `definicion.grafico` (`{ tipo, valor }`, valor = "cantidad" o un total como "suma:monto") y se dibuja con los subtotales del primer nivel; en la tabla cruzada, sus columnas van en el eje y cada fila es una serie. La torta solo reparte cantidades o sumas.
+- Las plantillas viven en `catalogo/plantillas.ts` y se copian solas a `reportes` de cada gimnasio (la primera vez que se abre Reportería tras prender la API), con un id fijo por gimnasio y plantilla (UUID v5): si cambian en el código, se actualizan; si se quitan, van a la papelera. Sin cambios en la base.
+- Las que usan funciones de modo experto (tabla cruzada, "con / sin") se ven y se corren en cualquier modo, pero solo se duplican en modo experto.
 - **Plantillas del sistema** (`es_plantilla`), de solo lectura; se pueden duplicar para modificarlas:
   - Ventas de este mes por plan
   - Ingresos por mes y sucursal

@@ -23,6 +23,7 @@ export type RangoFecha =
   | 'personalizado';
 export type Granularidad = 'dia' | 'semana' | 'mes' | 'anio';
 export type FuncionTotal = 'suma' | 'promedio' | 'minimo' | 'maximo' | 'distintos';
+export type TipoGrafico = 'barras' | 'lineas' | 'torta';
 export type Operador =
   | 'igual'
   | 'distinto'
@@ -121,6 +122,8 @@ export interface Definicion {
     cruzados?: FiltroCruzado[];
   };
   orden: { columna: string; direccion: 'asc' | 'desc' }[];
+  /** Agrupado o tabla cruzada. valor: "cantidad" o un total, como "suma:monto". */
+  grafico?: { tipo: TipoGrafico; valor: string };
 }
 
 export interface Resumen {
@@ -165,6 +168,8 @@ export interface ReporteGuardado {
   puedeEditar: boolean;
   puedeEliminar: boolean;
   definicion?: Definicion;
+  /** Usa tabla cruzada, filtros con/sin, lógica o grupos personalizados. */
+  usaModoExperto?: boolean;
 }
 
 export interface Carpeta {
@@ -222,6 +227,8 @@ export const NOMBRE_OPERADOR: Record<Operador, string> = {
 };
 
 export const NOMBRE_GRANULARIDAD: Record<Granularidad, string> = { dia: 'Por día', semana: 'Por semana', mes: 'Por mes', anio: 'Por año' };
+
+export const NOMBRE_GRAFICO: Record<TipoGrafico, string> = { barras: 'Barras', lineas: 'Líneas', torta: 'Torta' };
 
 export const NOMBRE_FUNCION: Record<FuncionTotal, string> = {
   suma: 'Suma',

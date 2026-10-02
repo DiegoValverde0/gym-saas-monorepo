@@ -126,6 +126,7 @@ export class ReportesGuardadosService {
 
   /** Un reporte que esta persona puede ver (y cuyo tipo puede usar). */
   private async reporteVisible(id: string, ctx: Contexto, papelera = false) {
+    await this.motor.asegurarPlantillas(ctx.ejecucion.organizacionId);
     const r = await this.db.reporte.findFirst({
       // deletedAt va arriba: la extensión de papelera solo lo respeta ahí.
       where: { id, deletedAt: papelera ? { not: null } : null, AND: [this.reportesVisibles(ctx)] },
@@ -153,6 +154,22 @@ export class ReportesGuardadosService {
     return validarDefinicion(definicion, tipo, { avanzado: ctx.modo === 'experto' });
   }
 
+  /** Si la definición usa tabla cruzada, filtros con/sin, lógica o grupos personalizados. */
+  private usaModoExperto(definicion: unknown, tipo: TipoReporte) {
+    try {
+      validarDefinicion(definicion, tipo, { avanzado: false });
+      return false;
+    } catch {
+      // Inválida por otra razón: lo dirá al correrla.
+      try {
+        validarDefinicion(definicion, tipo, { avanzado: true });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
   private noEnSimple(ctx: Contexto) {
     if (ctx.modo === 'simple') throw new ForbiddenException('En modo simple se usan los reportes listos (plantillas).');
   }
@@ -163,6 +180,7 @@ export class ReportesGuardadosService {
 
   async listar(q: ListarReportesDto) {
     const ctx = await this.motor.contexto();
+    await this.motor.asegurarPlantillas(ctx.ejecucion.organizacionId);
     const filtros: Prisma.ReporteWhereInput[] = [this.reportesVisibles(ctx)];
     const papelera = q.papelera === 'true';
     // Solo lo propio: la papelera no muestra lo que borraron otros.
@@ -177,18 +195,21 @@ export class ReportesGuardadosService {
 
     const reportes = await this.db.reporte.findMany({
       where: { deletedAt: papelera ? { not: null } : null, AND: filtros },
-      select: SELECT_REPORTE,
+      select: { ...SELECT_REPORTE, definicion: true },
       orderBy: vista === 'recientes' ? [{ ultimaEjecucion: 'desc' }] : [{ esPlantilla: 'asc' }, { nombre: 'asc' }],
       take: vista === 'recientes' ? 20 : 500,
     });
     // Los de tipos a los que no tiene acceso no se listan.
-    return (reportes as ReporteFila[]).filter((r) => this.tipoDe(r, ctx)).map((r) => this.describir(r, ctx));
+    return (reportes as (ReporteFila & { definicion: Prisma.JsonValue })[]).flatMap((r) => {
+      const tipo = this.tipoDe(r, ctx);
+      return tipo ? [{ ...this.describir(r, ctx), usaModoExperto: this.usaModoExperto(r.definicion, tipo) }] : [];
+    });
   }
 
   async obtener(id: string) {
     const ctx = await this.motor.contexto();
-    const { reporte } = await this.reporteVisible(id, ctx);
-    return { ...this.describir(reporte, ctx), definicion: reporte.definicion };
+    const { reporte, tipo } = await this.reporteVisible(id, ctx);
+    return { ...this.describir(reporte, ctx), definicion: reporte.definicion, usaModoExperto: this.usaModoExperto(reporte.definicion, tipo) };
   }
 
   async crear(dto: GuardarReporteDto) {
@@ -239,6 +260,10 @@ export class ReportesGuardadosService {
     const carpetaId = dto.carpetaId === undefined ? null : await this.carpetaDestino(dto.carpetaId, ctx);
     // Se valida al copiar: si la original quedó vieja, la copia no nace rota.
     const definicion = validarDefinicion(reporte.definicion, tipo, { avanzado: true });
+    // La copia se edita, y lo de modo experto solo se arma en modo experto.
+    if (ctx.modo !== 'experto' && this.usaModoExperto(definicion, tipo)) {
+      throw new ForbiddenException('Este reporte usa funciones del modo experto (tabla cruzada, filtros "con / sin"...): para copiarlo y cambiarlo, cambia a modo experto.');
+    }
     const copia = await this.db.reporte.create({
       data: {
         nombre: dto.nombre ?? `${reporte.nombre} (copia)`.slice(0, 150),

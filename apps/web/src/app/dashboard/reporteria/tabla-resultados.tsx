@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, ReactNode } from 'react';
+import { GraficoReporte } from './grafico-reporte';
 import { formatearValor, Granularidad, Resultado, Resumen } from './tipos';
 
 // Al agrupar una fecha por periodo, el encabezado nombra el periodo.
@@ -153,6 +154,7 @@ export function TablaResultados({ resultado, vacio }: { resultado: Resultado; va
       <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 dark:border-indigo-500/20 dark:bg-indigo-500/10">
         <Totales resumen={general} resultado={resultado} grande />
       </div>
+      <GraficoReporte resultado={resultado} />
       {resultado.columnaCruzada && <TablaCruzada resultado={resultado} />}
       {!resultado.columnaCruzada && (filas || niveles > 0) && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">

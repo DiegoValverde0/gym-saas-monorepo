@@ -103,7 +103,8 @@ export default function VerReportePage({ params }: { params: { id: string } }) {
     setPagina(1);
   };
   const totalPaginas = resultado?.filas ? Math.max(1, Math.ceil(Math.min(resultado.totalFilas, 2000) / resultado.porPagina)) : 1;
-  const puedeDuplicar = hasPermission('reportes:crear') && catalogo?.modo !== 'simple';
+  // Lo de modo experto solo se arma (y se copia para cambiarlo) en modo experto.
+  const puedeDuplicar = hasPermission('reportes:crear') && catalogo?.modo !== 'simple' && (catalogo?.avanzado || !reporte?.usaModoExperto);
   const mostrado = imprimiendo && paraImprimir.data ? paraImprimir.data : resultado;
   const sucursalNombre = sucursales.find((s) => s.id === (sucursalId || null))?.nombre;
 

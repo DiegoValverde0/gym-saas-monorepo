@@ -20,15 +20,17 @@ import {
   FuncionTotal,
   Granularidad,
   NOMBRE_FUNCION,
+  NOMBRE_GRAFICO,
   NOMBRE_GRANULARIDAD,
   ReporteGuardado,
   Resultado,
   TipoCatalogo,
+  TipoGrafico,
   conGruposPersonalizados,
   GrupoPersonalizado,
 } from './tipos';
 
-type Pestana = 'columnas' | 'filtros' | 'agrupar' | 'totales';
+type Pestana = 'columnas' | 'filtros' | 'agrupar' | 'totales' | 'grafico';
 
 interface Props {
   catalogo: Catalogo;
@@ -164,7 +166,24 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
     { valor: 'filtros', nombre: 'Filtros', cuenta: def.filtros.campos.length },
     { valor: 'agrupar', nombre: 'Agrupar', cuenta: def.agrupaciones.length },
     { valor: 'totales', nombre: 'Totales', cuenta: def.totales.length },
+    { valor: 'grafico', nombre: 'Gráfico', cuenta: def.grafico && def.formato !== 'LISTA' ? 1 : undefined },
   ];
+
+  // ---- Gráfico (fase 7): qué número muestra, la cantidad o un total con números.
+  const valoresGrafico = [
+    { valor: 'cantidad', nombre: 'Cantidad de registros', suma: true },
+    ...def.totales
+      .filter((t) => t.funcion === 'distintos' || ['numero', 'moneda'].includes(col(t.columna).tipo))
+      .map((t) => ({ valor: `${t.funcion}:${t.columna}`, nombre: `${NOMBRE_FUNCION[t.funcion]} de ${col(t.columna).nombre}`, suma: t.funcion === 'suma' })),
+  ];
+  const tortaPosible = !esTabla || !def.totales[0] || def.totales[0].funcion === 'suma';
+  const elegirGrafico = (tipoGrafico: TipoGrafico | null) => {
+    if (!tipoGrafico) return cambiar({ ...def, grafico: undefined });
+    const posibles = valoresGrafico.filter((v) => tipoGrafico !== 'torta' || v.suma);
+    const actual = posibles.find((v) => v.valor === def.grafico?.valor);
+    // Al elegirlo por primera vez, el primer total (suele ser el dinero).
+    cambiar({ ...def, grafico: { tipo: tipoGrafico, valor: (actual ?? posibles[1] ?? posibles[0]).valor } });
+  };
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -472,6 +491,62 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       Mostrar las filas de cada grupo (si no, solo los subtotales)
                     </label>
                   )}
+                </div>
+              )}
+
+              {pestana === 'grafico' && def.formato === 'LISTA' && (
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  El gráfico muestra cada grupo: para usarlo, agrupa el reporte en la pestaña <strong>Agrupar</strong>.
+                </p>
+              )}
+              {pestana === 'grafico' && def.formato !== 'LISTA' && (
+                <div className="space-y-3">
+                  <div className="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800" role="group" aria-label="Tipo de gráfico">
+                    {([null, 'barras', 'lineas', 'torta'] as (TipoGrafico | null)[]).map((t) => {
+                      const elegido = (def.grafico?.tipo ?? null) === t;
+                      const deshabilitado = t === 'torta' && !tortaPosible;
+                      return (
+                        <button
+                          key={t ?? 'ninguno'}
+                          type="button"
+                          aria-pressed={elegido}
+                          disabled={deshabilitado}
+                          title={deshabilitado ? 'La torta reparte cantidades o sumas: cambia el total de las casillas.' : undefined}
+                          onClick={() => elegirGrafico(t)}
+                          className={`rounded-md px-3 py-1 font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                            elegido ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          {t ? NOMBRE_GRAFICO[t] : 'Sin gráfico'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {def.grafico && !esTabla && (
+                    <label className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      Qué muestra
+                      <select
+                        className={claseCampo}
+                        value={valoresGrafico.some((v) => v.valor === def.grafico!.valor) ? def.grafico.valor : 'cantidad'}
+                        onChange={(e) => cambiar({ ...def, grafico: { ...def.grafico!, valor: e.target.value } })}
+                      >
+                        {valoresGrafico
+                          .filter((v) => def.grafico!.tipo !== 'torta' || v.suma)
+                          .map((v) => (
+                            <option key={v.valor} value={v.valor}>
+                              {v.nombre}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {esTabla
+                      ? 'Muestra el número de las casillas: en barras o líneas, cada fila de la tabla es una serie; en torta, cada fila es una porción.'
+                      : def.agrupaciones.length > 1
+                        ? `Un punto por cada grupo de "${col(def.agrupaciones[0].columna).nombre}" (el primer nivel). Para mostrar otro número, agrégalo en Totales.`
+                        : 'Un punto por cada grupo. Para mostrar otro número, agrégalo en Totales.'}
+                  </p>
                 </div>
               )}
 
