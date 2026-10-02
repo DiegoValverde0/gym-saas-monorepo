@@ -155,7 +155,7 @@ export function VentaRapidaModal({
     if (open && cuentas && !cuentaId) setCuentaId(cuentas.length === 1 ? cuentas[0].id : '');
   }, [open, cuentas, cuentaId]);
 
-  const { data: resultados = [] } = useQuery({
+  const { data: resultados = [], isFetching: buscandoClientes } = useQuery({
     queryKey: ['clientes-venta-rapida', busquedaDebounced],
     queryFn: async () => unwrapList<ClienteVenta>(await apiGet(`/clientes?search=${encodeURIComponent(busquedaDebounced)}&limit=6`)),
     enabled: open && !cliente && !alta && busquedaDebounced.trim().length >= 2,
@@ -314,7 +314,11 @@ export function VentaRapidaModal({
                   className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
                 >
                   <UserPlus className="h-4 w-4" />
-                  {busquedaDebounced.trim().length >= 2 && resultados.length === 0 ? `No está registrado: agregar a "${busqueda.trim()}"` : 'Cliente nuevo'}
+                  {/* "No está registrado" solo con la búsqueda terminada: mientras busca
+                      decía eso de clientes que sí existen, y se podía duplicar uno. */}
+                  {busquedaDebounced.trim().length >= 2 && busqueda === busquedaDebounced && !buscandoClientes && resultados.length === 0
+                    ? `No está registrado: agregar a "${busqueda.trim()}"`
+                    : 'Cliente nuevo'}
                 </button>
               </>
             )}

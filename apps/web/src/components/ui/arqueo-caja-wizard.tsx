@@ -123,6 +123,7 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
                      <Input 
                        type="number" 
                        min="0"
+                       aria-label={`Cantidad de ${denom.tipo === 'billete' ? 'billetes' : 'monedas'} de Bs. ${denom.valor}`}
                        className="bg-white border-0 shadow-xs h-9 font-bold text-center"
                        placeholder="0"
                        value={cantidades[denom.valor] === undefined ? '' : cantidades[denom.valor]}
@@ -173,21 +174,23 @@ export function ArqueoCajaWizard({ isOpen, onClose, onSubmit, estadoApertura, is
 
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="font-semibold text-slate-700">Dinero a Retirar a Bóveda (Bs.)</Label>
+                    <Label htmlFor="arqueo-extraido" className="font-semibold text-slate-700">Dinero a Retirar a Bóveda (Bs.)</Label>
                     <p className="text-xs text-slate-500 mb-2">Si vas a extraer dinero para dejar un saldo inicial menor para el próximo turno, ingrésalo aquí.</p>
                     <Input 
                       type="number" 
                       step="0.01" 
                       min="0"
+                      id="arqueo-extraido"
                       {...form.register('montoExtraido')} 
                       className="text-lg py-6"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="font-semibold text-slate-700">Observaciones</Label>
+                    <Label htmlFor="arqueo-observaciones" className="font-semibold text-slate-700">Observaciones</Label>
                     <p className="text-xs text-slate-500 mb-2">Si existe un descuadre (faltante o sobrante), es obligatorio dejar un comentario explicando el motivo.</p>
                     <textarea 
+                      id="arqueo-observaciones"
                       {...form.register('observaciones')} 
                       className="flex min-h-[80px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       placeholder="Ej: Faltaron 5 Bs de cambio, el cliente quedó en traerlos mañana..."

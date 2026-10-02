@@ -158,6 +158,7 @@ const TIPOS_ACTIVIDAD: { valor: string; nombre: string }[] = [
   { valor: 'cambiar_configuracion', nombre: 'Cambios de configuración' },
   { valor: 'forzar_ingreso', nombre: 'Ingresos forzados' },
   { valor: 'cerrar_caja_con_diferencia', nombre: 'Cierres de caja con diferencia' },
+  { valor: 'abrir_caja_con_diferencia', nombre: 'Aperturas de caja con diferencia' },
   { valor: 'pin_kiosco', nombre: 'PIN del kiosco' },
   { valor: 'restablecer_contrasena', nombre: 'Contraseñas restablecidas' },
   { valor: 'compartir_reportes', nombre: 'Reportes compartidos' },

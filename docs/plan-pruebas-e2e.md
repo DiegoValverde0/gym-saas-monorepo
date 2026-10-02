@@ -84,10 +84,16 @@ Rama sugerida: `pruebas-e2e`.
 - Hecho así: `menu.spec.ts` (dueño 22 pantallas, recepción 19, instructor 6, y el dueño en experto), `busqueda.spec.ts`, `celular.spec.ts` y `modo.spec.ts`; ayudas compartidas en `ayudas.ts`. La preparación enciende todos los módulos y marca la guía de inicio como hecha (con el pedido de Configuración).
 - Encontrado y corregido en la web: mientras cargaban los permisos y la configuración, el menú mostraba por un instante pantallas que no le tocaban (por ejemplo, Accesos avanzados). Ahora espera esos datos, muestra barras de carga y queda con `aria-busy` hasta tenerlos.
 
-### Fase 3: el día a día de recepción
+### Fase 3: el día a día de recepción (HECHA)
 - Recorridos 4 y 5.
 - Donde un formulario no tenga etiquetas que se puedan nombrar (por ejemplo, un campo sin `<label>`), se le agregan. También mejora la accesibilidad.
 - **Listo cuando:** el recorrido completo pasa varias veces seguidas sin fallar al azar.
+- Hecho así: `recepcion.spec.ts`, en serie: abre la caja con Bs. 100, registra un cliente, le vende el plan mensual en efectivo (queda Activa), registra su ingreso (aparece adentro) y cierra la caja contando Bs. 400 sin descuadre. Pasó tres veces seguidas.
+- Encontrado y corregido:
+  - **Caja (API, decidido con el usuario el 2026-10-02):** al abrir un turno, el monto inicial se guardaba pero no contaba (se esperaba el saldo que la caja traía de antes), y al cerrar con el arqueo quedaba como saldo lo esperado en vez de lo contado, así que un faltante pasaba al turno siguiente. Ahora es igual que "Cerrar el día": al abrir, el saldo es el monto contado (si no coincide con el que había, queda en la auditoría como "abrir_caja_con_diferencia"); al cerrar, el saldo es lo contado menos lo retirado (no se puede retirar más de lo contado). El seed deja la caja con los Bs. 400 de su turno de ejemplo.
+  - **Venta de membresía:** mientras la búsqueda de clientes cargaba, decía "No está registrado: agregar a …" de clientes que sí existen (se podía duplicar uno). Ahora lo dice solo con la búsqueda terminada.
+  - **Asistencias:** al confirmar un ingreso, la lista de resultados volvía a aparecer un instante con el cliente anterior.
+  - **Arqueo:** los campos de billetes y monedas, el dinero a retirar y las observaciones no tenían su etiqueta asociada (lectores de pantalla y pruebas no los podían nombrar).
 
 ### Fase 4: dueño y reportería
 - Recorridos 6 y 7, con la revisión del CSV y del Excel descargados.

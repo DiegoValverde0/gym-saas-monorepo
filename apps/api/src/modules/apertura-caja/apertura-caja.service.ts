@@ -49,8 +49,13 @@ export class AperturaCajaService {
     // índices únicos parciales `uq_caja_una_apertura_abierta` y
     // `uq_usuario_un_turno_abierto` (ver la migración 0_inicial), que Postgres
     // aplica de forma atómica y cuya violación se traduce abajo a un 409 claro.
+    // El saldo de la caja pasa a ser el monto inicial que se contó al abrir (igual
+    // que "Cerrar el día" en cierre-dia.service.ts): al cerrar se espera ese
+    // monto más los cobros en efectivo del turno. Si no coincide con lo que la
+    // caja traía del turno anterior, queda en la auditoría.
+    const saldoAnterior = Number(caja.saldoActual);
     try {
-      return await this.prisma.extendedClient.$transaction(async (tx) => {
+      const apertura = await this.prisma.extendedClient.$transaction(async (tx) => {
         const apertura = await tx.aperturaCaja.create({
           // organizacionId lo inyecta la extensión RLS en runtime (ver prisma.service.ts).
           data: {
@@ -67,11 +72,20 @@ export class AperturaCajaService {
 
         await tx.cajaRegistradora.update({
           where: { id: dto.cajaId },
-          data: { estado: 'ABIERTA' }
+          data: { estado: 'ABIERTA', saldoActual: dto.montoInicial }
         });
 
         return apertura;
       });
+      const diferencia = Number(dto.montoInicial) - saldoAnterior;
+      if (Math.abs(diferencia) >= 0.01) {
+        await registrarAuditoria(this.prisma.extendedClient, {
+          tabla: 'aperturas_caja', operacion: 'INSERT', accion: 'abrir_caja_con_diferencia',
+          descripcion: `Abrió "${caja.nombre}" con ${diferencia > 0 ? 'más' : 'menos'} efectivo del que había (Bs. ${Math.abs(diferencia).toFixed(2)}: la caja tenía Bs. ${saldoAnterior.toFixed(2)} y contó Bs. ${Number(dto.montoInicial).toFixed(2)})`,
+          despues: { aperturaId: apertura.id, anterior: saldoAnterior, contado: Number(dto.montoInicial) },
+        });
+      }
+      return apertura;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Esta caja ya fue abierta o ya tienes un turno abierto (intento simultáneo).');
@@ -138,6 +152,9 @@ export class AperturaCajaService {
     }
 
     const esperado = Number(apertura.caja.saldoActual);
+    if (Number(dto.montoExtraido) > Number(dto.montoCierreReal)) {
+      throw new BadRequestException('No se puede retirar más efectivo del que se contó.');
+    }
 
     // 2. Ejecutar transacción
     return this.prisma.extendedClient.$transaction(async (tx) => {
@@ -153,14 +170,13 @@ export class AperturaCajaService {
         }
       });
 
-      // B. Cerrar Caja y ajustar saldo (retiros)
+      // B. Cerrar la caja: queda lo que se contó menos lo que se retira (no lo
+      // esperado: un faltante no puede pasar al turno siguiente como si estuviera).
       await tx.cajaRegistradora.update({
         where: { id: apertura.cajaId },
         data: {
           estado: 'CERRADA',
-          saldoActual: {
-            decrement: dto.montoExtraido
-          }
+          saldoActual: Number(dto.montoCierreReal) - Number(dto.montoExtraido)
         }
       });
 

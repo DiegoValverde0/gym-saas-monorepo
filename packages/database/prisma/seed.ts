@@ -171,6 +171,8 @@ async function main() {
     where: { id: aperturaTitan.id },
     data: { estado: EstadoAperturaCaja.CERRADA, fechaCierre: new Date(), montoCierreEsperado: 400.00, montoCierreReal: 400.00 }
   });
+  // Y la caja queda con lo contado, como al cerrar desde Cajas (apertura-caja.service.ts).
+  await prisma.cajaRegistradora.update({ where: { id: cajaTitan.id }, data: { saldoActual: 400.00 } });
 
   // =======================================================
   // 6. PORTAL DEL CLIENTE (docs/plan-portal-cliente.md)

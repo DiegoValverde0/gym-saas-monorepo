@@ -20,6 +20,7 @@ export const ACCIONES_AUDITORIA = [
   'forzar_ingreso',
   'pin_kiosco',
   'cerrar_caja_con_diferencia',
+  'abrir_caja_con_diferencia',
   'restablecer_contrasena',
   'plataforma_acceso_total_administrador',
   'compartir_reportes',
