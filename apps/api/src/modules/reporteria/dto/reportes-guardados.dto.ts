@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -103,6 +104,13 @@ export class EjecutarGuardadoDto {
   @IsOptional()
   @IsObject()
   filtros?: { fecha?: Record<string, unknown>; sucursalId?: string | null };
+
+  // false: no se cuenta como una ejecución (las tarjetas del Inicio corren su
+  // reporte en cada visita; si contaran, llenarían "Recientes" con plantillas
+  // que nadie abrió).
+  @IsOptional()
+  @IsBoolean()
+  contar?: boolean;
 }
 
 export const VISTAS_REPORTES = ['todos', 'recientes', 'mios', 'compartidos', 'plantillas'] as const;

@@ -21,6 +21,11 @@ export interface PlantillaLista {
   definicion: Definicion;
 }
 
+/** La clave de una plantilla a partir de su id en un gimnasio (o undefined si no es una). */
+export function clavePlantillaDe(organizacionId: string, id: string): string | undefined {
+  return PLANTILLAS.find((p) => idDePlantilla(organizacionId, p.clave) === id)?.clave;
+}
+
 let validadas: PlantillaLista[] | undefined;
 
 /** Las plantillas con su definición ya validada (y completa) contra el catálogo. */

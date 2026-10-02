@@ -16,6 +16,72 @@ export interface Plantilla {
 const fecha = (columna: string, rango: string) => ({ fecha: { columna, rango } });
 
 export const PLANTILLAS: Plantilla[] = [
+  // ---- Pensadas para el Inicio (docs/plan-inicio.md, fase 2)
+  {
+    clave: 'ingresos-anio-vs-pasado',
+    nombre: 'Ingresos por mes: este año y los anteriores',
+    descripcion: 'Lo vendido cada mes, con este año destacado sobre los anteriores.',
+    definicion: {
+      tipo: 'ventas',
+      formato: 'TABLA_CRUZADA',
+      columnas: [],
+      agrupaciones: [{ columna: 'fecha', granularidad: 'anio' }],
+      columnaCruzada: { columna: 'mesDelAnio' },
+      totales: [{ columna: 'monto', funcion: 'suma' }],
+      filtros: fecha('fecha', 'todo'),
+      orden: [],
+      grafico: { tipo: 'lineas', valor: 'suma:monto', destacar: true },
+    },
+  },
+  {
+    clave: 'horas-pico',
+    nombre: '¿A qué hora viene la gente?',
+    descripcion: 'Los ingresos por día de la semana y hora: cuanto más intenso el color, más gente.',
+    definicion: {
+      tipo: 'asistencias',
+      formato: 'TABLA_CRUZADA',
+      columnas: [],
+      agrupaciones: [{ columna: 'diaSemana' }],
+      columnaCruzada: { columna: 'hora' },
+      totales: [],
+      filtros: fecha('ingreso', 'ultimos_30'),
+      orden: [],
+      grafico: { tipo: 'calor', valor: 'cantidad' },
+    },
+  },
+  {
+    clave: 'asistencias-por-dia',
+    nombre: 'Asistencias por día',
+    descripcion: 'Cuántos ingresos hubo cada día.',
+    definicion: {
+      tipo: 'asistencias',
+      formato: 'AGRUPADO',
+      columnas: [],
+      agrupaciones: [{ columna: 'ingreso', granularidad: 'dia' }],
+      totales: [],
+      mostrarDetalle: false,
+      filtros: fecha('ingreso', 'ultimos_30'),
+      orden: [],
+      grafico: { tipo: 'area', valor: 'cantidad' },
+    },
+  },
+  {
+    clave: 'clientes-nuevos-por-mes',
+    nombre: 'Clientes nuevos por mes',
+    descripcion: 'Cuántos clientes se registraron cada mes.',
+    definicion: {
+      tipo: 'clientes',
+      formato: 'AGRUPADO',
+      columnas: [],
+      agrupaciones: [{ columna: 'alta', granularidad: 'mes' }],
+      totales: [],
+      mostrarDetalle: false,
+      filtros: fecha('alta', 'este_anio'),
+      orden: [],
+      grafico: { tipo: 'barras', valor: 'cantidad' },
+    },
+  },
+  // ---- Las de la reportería
   {
     clave: 'ventas-mes-plan',
     nombre: 'Ventas de este mes por plan',

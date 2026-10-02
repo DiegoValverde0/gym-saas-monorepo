@@ -24,10 +24,16 @@ const cuando = (d: number | null) => (d == null ? '' : d === 0 ? 'vence hoy' : d
  * "Membresías por vencer esta semana" (plan 11.13), con botón para avisar por
  * WhatsApp y acceso a la ficha del cliente para renovar.
  */
-export function PorVencer() {
+/**
+ * `limite`: cuántas se muestran antes de "Ver todas" (con muchos clientes la
+ * lista entera era larguísima). `enTarjeta`: sin marco propio, dentro de una
+ * tarjeta del Inicio.
+ */
+export function PorVencer({ limite = 8, enTarjeta = false }: { limite?: number; enTarjeta?: boolean } = {}) {
   const { token, isSuperAdmin } = useAuth();
   const { activeTenantId } = useTenantStore();
   const [fichaId, setFichaId] = useState<string | null>(null);
+  const [todas, setTodas] = useState(false);
 
   const { data } = useQuery({
     queryKey: ['dashboard-por-vencer', activeTenantId],
@@ -41,19 +47,21 @@ export function PorVencer() {
   });
 
   if (!data) return null;
+  const visibles = todas ? data : data.slice(0, limite);
+  const px = enTarjeta ? '' : 'px-4';
 
   return (
-    <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <div className="flex items-baseline justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-3">
-        <h3 className="font-semibold text-slate-900 dark:text-white">Membresías por vencer esta semana</h3>
+    <section className={enTarjeta ? '' : 'rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'}>
+      <div className={`flex items-baseline justify-between ${enTarjeta ? 'pb-2' : 'border-b border-slate-100 dark:border-slate-800 px-4 py-3'}`}>
+        <h3 className={`font-semibold text-slate-900 dark:text-white ${enTarjeta ? 'text-base' : ''}`}>Membresías por vencer esta semana</h3>
         <span className="text-xs text-slate-500 dark:text-slate-400">{data.length} {data.length === 1 ? 'cliente' : 'clientes'}</span>
       </div>
       {data.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Nadie vence en los próximos 7 días.</p>
+        <p className={`${px} py-6 text-center text-sm text-slate-500 dark:text-slate-400`}>Nadie vence en los próximos 7 días.</p>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-          {data.map((m) => (
-            <li key={m.clienteId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+          {visibles.map((m) => (
+            <li key={m.clienteId} className={`flex items-center justify-between gap-3 py-2.5 ${px}`}>
               <button type="button" onClick={() => setFichaId(m.clienteId)} className="min-w-0 text-left">
                 <p className="truncate text-sm font-medium text-slate-900 dark:text-white hover:underline">{m.cliente}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{m.plan} · {cuando(m.diasRestantes)}</p>
@@ -77,6 +85,11 @@ export function PorVencer() {
             </li>
           ))}
         </ul>
+      )}
+      {data.length > limite && (
+        <button type="button" onClick={() => setTodas(!todas)} className={`w-full py-2.5 text-center text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400 ${px}`}>
+          {todas ? 'Ver menos' : `Ver las ${data.length.toLocaleString('es-ES')}`}
+        </button>
       )}
       <FichaCliente clienteId={fichaId} onClose={() => setFichaId(null)} />
     </section>

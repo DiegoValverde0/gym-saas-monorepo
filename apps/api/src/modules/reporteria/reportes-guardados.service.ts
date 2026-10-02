@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { nombreRolLegible, registrarAuditoria } from '../../common/utils/auditoria.util';
 import { tipoReporte, TipoReporte } from './catalogo';
 import { Definicion, validarDefinicion } from './motor/definicion';
+import { clavePlantillaDe } from './motor/plantillas';
 import { aCsv, aExcel, NOMBRE_RANGO, nombreArchivo } from './motor/exportador';
 import { Contexto, MAX_FILAS_EXPORTACION, ReporteriaService, ResultadoReporte } from './reporteria.service';
 import {
@@ -111,6 +112,8 @@ export class ReportesGuardadosService {
       tipo: { clave: r.tipoReporte, nombre: tipo?.nombre ?? r.tipoReporte },
       formato: r.formato,
       esPlantilla: r.esPlantilla,
+      // Para pedir una plantilla por su clave (el Inicio, docs/plan-inicio.md).
+      clavePlantilla: r.esPlantilla ? clavePlantillaDe(ctx.ejecucion.organizacionId, r.id) ?? null : null,
       carpeta: r.carpeta && !r.carpeta.deletedAt ? { id: r.carpeta.id, nombre: r.carpeta.nombre } : null,
       creadoPor: r.esPlantilla ? 'Sistema' : r.creadoPor?.nombreCompleto ?? null,
       esMio: r.creadoPorId === ctx.ejecucion.usuarioId,
@@ -202,7 +205,9 @@ export class ReportesGuardadosService {
     // Los de tipos a los que no tiene acceso no se listan.
     return (reportes as (ReporteFila & { definicion: Prisma.JsonValue })[]).flatMap((r) => {
       const tipo = this.tipoDe(r, ctx);
-      return tipo ? [{ ...this.describir(r, ctx), usaModoExperto: this.usaModoExperto(r.definicion, tipo) }] : [];
+      // `grafico`: la forma de su gráfico, si tiene (la galería del Inicio).
+      const grafico = (r.definicion as { grafico?: { tipo?: string } | null } | null)?.grafico?.tipo ?? null;
+      return tipo ? [{ ...this.describir(r, ctx), usaModoExperto: this.usaModoExperto(r.definicion, tipo), grafico }] : [];
     });
   }
 
@@ -314,7 +319,7 @@ export class ReportesGuardadosService {
     const definicion = this.definicionConFiltros(reporte.definicion, tipo, dto);
     const pagina = dto.pagina ?? 1;
     const resultado = await this.motor.ejecutar(tipo, definicion, ctx, pagina, dto.porPagina ?? 50);
-    if (pagina === 1) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
+    if (pagina === 1 && dto.contar !== false) await this.motor.registrarEjecucion(id, ctx.ejecucion.organizacionId);
     return { ...resultado, reporte: this.describir(reporte, ctx) };
   }
 

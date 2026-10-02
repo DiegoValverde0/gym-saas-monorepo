@@ -49,6 +49,15 @@ export class SucursalService {
     return paginar(data, total, page, limit);
   }
 
+  /** Las sucursales activas del gimnasio, solo con lo que hace falta para elegir una. */
+  async basicas() {
+    return this.prisma.extendedClient.sucursal.findMany({
+      where: { estado: 'ACTIVO' },
+      select: { id: true, nombre: true, esPrincipal: true },
+      orderBy: { nombre: 'asc' },
+    });
+  }
+
   async findOne(id: string) {
     const sucursal = await this.prisma.extendedClient.sucursal.findUnique({
       where: { id },

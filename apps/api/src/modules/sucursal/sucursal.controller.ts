@@ -24,6 +24,16 @@ export class SucursalController {
     return this.sucursalService.findAll(pagination);
   }
 
+  // Solo id y nombre de las sucursales activas, para cualquier miembro del
+  // gimnasio: el selector de sucursal y la sucursal por defecto de cada
+  // pantalla (useSucursalActiva). Sin esto, quien no puede administrar
+  // sucursales (un instructor con acceso a todas) se quedaba sin sucursal y,
+  // por ejemplo, sin agenda. Va antes de ':id'.
+  @Get('basicas')
+  basicas() {
+    return this.sucursalService.basicas();
+  }
+
   @Get(':id')
   @RequirePermissions({ accion: 'leer', modulo: 'sucursales' })
   findOne(@Param('id') id: string) {

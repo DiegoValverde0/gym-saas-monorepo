@@ -124,14 +124,17 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
 
   // Tabla cruzada (modo experto): filas (1 o 2 grupos) × columnas, un total por casilla.
   const elegirFormato = (tabla: boolean) => {
+    const tipoGrafico = def.grafico?.tipo;
+    const sirve = !tipoGrafico || (tabla ? !['area', 'barrasH'].includes(tipoGrafico) : tipoGrafico !== 'calor');
+    const grafico = sirve ? (def.grafico && { ...def.grafico, destacar: tabla ? def.grafico.destacar : undefined }) : undefined;
     if (!tabla) {
-      setDef({ ...def, formato: def.agrupaciones.length ? 'AGRUPADO' : 'LISTA', columnaCruzada: undefined, mostrarDetalle: true });
+      setDef({ ...def, grafico, formato: def.agrupaciones.length ? 'AGRUPADO' : 'LISTA', columnaCruzada: undefined, mostrarDetalle: true });
       return;
     }
     const filas = def.agrupaciones.length ? def.agrupaciones.slice(0, 2) : [conPeriodo(agrupables.find((c) => c.tipo !== 'fechaHora' && c.tipo !== 'fecha') ?? agrupables[0])];
     const fecha = tipoVista.columnas.find((c) => c.clave === tipo.fechaPorDefecto);
     const propuesta = fecha && !filas.some((f) => f.columna === fecha.clave) ? fecha : agrupables.find((c) => !filas.some((f) => f.columna === c.clave));
-    setDef({ ...def, formato: 'TABLA_CRUZADA', agrupaciones: filas, columnaCruzada: propuesta && conPeriodo(propuesta), totales: def.totales.slice(0, 1), mostrarDetalle: false });
+    setDef({ ...def, grafico, formato: 'TABLA_CRUZADA', agrupaciones: filas, columnaCruzada: propuesta && conPeriodo(propuesta), totales: def.totales.slice(0, 1), mostrarDetalle: false });
   };
 
   // Grupos personalizados: crear, editar y quitar (con todo lo que los usaba).
@@ -177,6 +180,8 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
       .map((t) => ({ valor: `${t.funcion}:${t.columna}`, nombre: `${NOMBRE_FUNCION[t.funcion]} de ${col(t.columna).nombre}`, suma: t.funcion === 'suma' })),
   ];
   const tortaPosible = !esTabla || !def.totales[0] || def.totales[0].funcion === 'suma';
+  // Formas de gráfico de cada formato (las valida igual la API: definicion.ts).
+  const formasGrafico: (TipoGrafico | null)[] = esTabla ? [null, 'barras', 'lineas', 'calor', 'torta'] : [null, 'barras', 'barrasH', 'lineas', 'area', 'torta'];
   const elegirGrafico = (tipoGrafico: TipoGrafico | null) => {
     if (!tipoGrafico) return cambiar({ ...def, grafico: undefined });
     const posibles = valoresGrafico.filter((v) => tipoGrafico !== 'torta' || v.suma);
@@ -502,7 +507,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
               {pestana === 'grafico' && def.formato !== 'LISTA' && (
                 <div className="space-y-3">
                   <div className="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800" role="group" aria-label="Tipo de gráfico">
-                    {([null, 'barras', 'lineas', 'torta'] as (TipoGrafico | null)[]).map((t) => {
+                    {formasGrafico.map((t) => {
                       const elegido = (def.grafico?.tipo ?? null) === t;
                       const deshabilitado = t === 'torta' && !tortaPosible;
                       return (
@@ -522,6 +527,17 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       );
                     })}
                   </div>
+                  {def.grafico && esTabla && (def.grafico.tipo === 'barras' || def.grafico.tipo === 'lineas') && (
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={!!def.grafico.destacar}
+                        onChange={(e) => cambiar({ ...def, grafico: { ...def.grafico!, destacar: e.target.checked || undefined } })}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Destacar la última fila y las demás en gris (por ejemplo, este año contra los anteriores)
+                    </label>
+                  )}
                   {def.grafico && !esTabla && (
                     <label className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                       Qué muestra
@@ -542,7 +558,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                   )}
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {esTabla
-                      ? 'Muestra el número de las casillas: en barras o líneas, cada fila de la tabla es una serie; en torta, cada fila es una porción.'
+                      ? 'Muestra el número de las casillas: en barras o líneas, cada fila de la tabla es una serie; en el mapa de calor, cada casilla se pinta más fuerte cuanto más tiene; en torta, cada fila es una porción.'
                       : def.agrupaciones.length > 1
                         ? `Un punto por cada grupo de "${col(def.agrupaciones[0].columna).nombre}" (el primer nivel). Para mostrar otro número, agrégalo en Totales.`
                         : 'Un punto por cada grupo. Para mostrar otro número, agrégalo en Totales.'}

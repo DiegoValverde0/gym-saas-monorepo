@@ -94,6 +94,7 @@ const SECCION_LEGIBLE: Record<string, string> = {
   clases: 'reglas de clases',
   jornadas: 'tolerancia de atrasos',
   onboarding: 'asistente de inicio',
+  tablero: 'tarjetas del Inicio',
   nombre: 'nombre',
   razonSocial: 'razón social',
   identificacionFiscal: 'NIT',

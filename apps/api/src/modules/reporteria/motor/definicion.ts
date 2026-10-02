@@ -44,7 +44,8 @@ export const FUNCIONES_TOTAL = ['suma', 'promedio', 'minimo', 'maximo', 'distint
 export type FuncionTotal = (typeof FUNCIONES_TOTAL)[number];
 
 // Gráfico del reporte (fase 7): sobre un reporte agrupado o una tabla cruzada.
-export const TIPOS_GRAFICO = ['barras', 'lineas', 'torta'] as const;
+// area y barrasH: agrupado. calor (mapa de calor): tabla cruzada. Plan del Inicio, fase 2.
+export const TIPOS_GRAFICO = ['barras', 'lineas', 'torta', 'area', 'barrasH', 'calor'] as const;
 export type TipoGrafico = (typeof TIPOS_GRAFICO)[number];
 
 export type Operador =
@@ -100,6 +101,11 @@ export interface Grafico {
   tipo: TipoGrafico;
   /** "cantidad" o un total del reporte, como "suma:monto". */
   valor: string;
+  /**
+   * Tabla cruzada en barras o líneas: la última fila (el año actual, por
+   * ejemplo) en el color principal y las demás en gris, para comparar.
+   */
+  destacar?: boolean;
 }
 
 export interface FiltroCruzado {
@@ -264,7 +270,10 @@ export function validarDefinicion(entrada: unknown, tipoBase: TipoReporte, opcio
     if (formato === 'TABLA_CRUZADA' && totales[0] && !total) error('El gráfico necesita un número en las casillas: elige otro total.');
     // Una torta reparte un todo: cantidades o sumas, no promedios ni máximos.
     if (tipoGrafico === 'torta' && total && total.funcion !== 'suma') error('El gráfico de torta muestra cantidades o sumas.');
-    grafico = { tipo: tipoGrafico, valor: total ? `${total.funcion}:${total.columna}` : 'cantidad' };
+    if (tipoGrafico === 'calor' && formato !== 'TABLA_CRUZADA') error('El mapa de calor es para la tabla cruzada.');
+    if ((tipoGrafico === 'area' || tipoGrafico === 'barrasH') && formato !== 'AGRUPADO') error('Ese gráfico es para un reporte agrupado.');
+    const destacar = g.destacar === true && formato === 'TABLA_CRUZADA' && (tipoGrafico === 'barras' || tipoGrafico === 'lineas');
+    grafico = { tipo: tipoGrafico, valor: total ? `${total.funcion}:${total.columna}` : 'cantidad', ...(destacar ? { destacar } : {}) };
   }
 
   // Filtros

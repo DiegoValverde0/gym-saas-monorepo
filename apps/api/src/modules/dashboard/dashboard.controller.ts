@@ -9,6 +9,8 @@ interface RequestWithUser extends ExpressRequest {
   user: {
     sucursalId?: string;
   };
+  /** Los deja RolesGuard. */
+  permisos?: string[];
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,14 +22,16 @@ export class DashboardController {
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getKpis(@Req() req: RequestWithUser) {
     const sucursalId = req.user.sucursalId;
-    return this.dashboardService.getKpis(sucursalId);
+    // Los ingresos solo para quien puede ver los movimientos (el instructor no).
+    return this.dashboardService.getKpis(sucursalId, { verIngresos: !!req.permisos?.includes('transacciones:leer') });
   }
 
-  @Get('charts')
+  // "Lo que hay que saber hoy" (docs/plan-inicio.md, fase 4): hasta 4 frases
+  // con su botón, según los permisos y los módulos de cada uno.
+  @Get('para-saber')
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
-  async getCharts(@Req() req: RequestWithUser) {
-    const sucursalId = req.user.sucursalId;
-    return this.dashboardService.getRevenueChart(sucursalId);
+  async getParaSaber(@Req() req: RequestWithUser) {
+    return this.dashboardService.getParaSaber(req.user.sucursalId);
   }
 
   @Get('recent-activity')

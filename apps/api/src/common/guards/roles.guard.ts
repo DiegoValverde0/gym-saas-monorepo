@@ -57,6 +57,9 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('No tienes permisos suficientes para realizar esta acción.');
     }
 
+    // Quedan en el pedido para lo que muestra más o menos según el rol (por
+    // ejemplo, los ingresos del Inicio solo con transacciones:leer).
+    request.permisos = userPermissions;
     return true;
   }
 }
