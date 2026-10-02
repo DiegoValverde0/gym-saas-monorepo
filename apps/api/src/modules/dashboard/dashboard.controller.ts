@@ -26,6 +26,14 @@ export class DashboardController {
     return this.dashboardService.getKpis(sucursalId, { verIngresos: !!req.permisos?.includes('transacciones:leer') });
   }
 
+  // "Lo que hay que saber hoy" (docs/plan-inicio.md, fase 4): hasta 4 frases
+  // con su botón, según los permisos y los módulos de cada uno.
+  @Get('para-saber')
+  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
+  async getParaSaber(@Req() req: RequestWithUser) {
+    return this.dashboardService.getParaSaber(req.user.sucursalId);
+  }
+
   @Get('recent-activity')
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getRecentActivity(@Req() req: RequestWithUser) {

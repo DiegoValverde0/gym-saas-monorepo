@@ -165,6 +165,19 @@ export class ReporteriaService {
   }
 
   /**
+   * Corre una plantilla del sistema por su clave (para "Lo que hay que saber
+   * hoy" del Inicio: el mismo número que muestra su tarjeta). null si esta
+   * persona no puede usar su tipo (permiso o módulo apagado).
+   */
+  async correrPlantilla(clave: string, ctx?: Contexto, porPagina = 1): Promise<ResultadoReporte | null> {
+    ctx ??= await this.contexto();
+    const plantilla = plantillasListas().find((p) => p.clave === clave);
+    const tipo = plantilla ? tipoReporte(plantilla.definicion.tipo) : undefined;
+    if (!plantilla || !tipo || !this.disponible(tipo, ctx)) return null;
+    return this.ejecutar(tipo, plantilla.definicion, ctx, 1, porPagina);
+  }
+
+  /**
    * `limite`: cuántas filas de detalle se pueden pedir en total (2.000 en
    * pantalla e impresión; 50.000 al exportar, en una sola página).
    */

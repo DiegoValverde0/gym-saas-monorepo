@@ -11,10 +11,14 @@ import { useModoUso } from '@/hooks/use-modo-uso';
 import { AccionesRapidas } from '@/components/ui/acciones-rapidas';
 import { Indicadores, IndicadoresCargando, Kpis } from '@/components/inicio/indicadores';
 import { Tablero } from '@/components/inicio/tablero';
+import { ParaSaber } from '@/components/inicio/para-saber';
+import { AvisoEjemplos, ConEjemplos, useEjemplos } from '@/components/inicio/ejemplos';
+import { kpisDeEjemplo } from '@/lib/ejemplos';
 
 /**
- * El Inicio (docs/plan-inicio.md): los indicadores con su comparación y, debajo,
- * las tarjetas del gimnasio (gráficos y listas de la reportería). En modo
+ * El Inicio (docs/plan-inicio.md): los indicadores con su comparación, "Lo que
+ * hay que saber hoy" y, debajo, las tarjetas del gimnasio (gráficos y listas
+ * de la reportería). Sin datos todavía, con números de ejemplo. En modo
  * simple, por ahora, lo del día y a quién avisar (plan 11.13; se adapta en la
  * fase 5).
  */
@@ -29,6 +33,9 @@ export default function DashboardPage() {
     enabled: !!token && !esSimple,
   });
 
+  const ejemplos = useEjemplos(kpis);
+  const kpisVista = kpis && ejemplos.activos ? kpisDeEjemplo(kpis) : kpis;
+
   if (!token) return null;
 
   return (
@@ -38,17 +45,23 @@ export default function DashboardPage() {
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Lo que pasa hoy en tu gimnasio.</p>
       </div>
 
-      {/* Indicadores con comparación y tendencia: lo primero que se ve. */}
-      {!esSimple && (kpis ? <Indicadores kpis={kpis} /> : <IndicadoresCargando />)}
+      <ConEjemplos value={!esSimple && ejemplos.activos}>
+        {!esSimple && <AvisoEjemplos {...ejemplos} />}
 
-      <PrimerosPasos />
+        {/* Indicadores con comparación y tendencia: lo primero que se ve. */}
+        {!esSimple && (kpisVista ? <Indicadores kpis={kpisVista} /> : <IndicadoresCargando />)}
 
-      {/* data-recorrido: lo que resalta la guía del modo simple (components/ui/recorrido.tsx). */}
-      <div data-recorrido="acciones"><AccionesRapidas /></div>
+        {!esSimple && <ParaSaber />}
 
-      {esSimple && <div data-recorrido="resumen"><ResumenHoy /></div>}
+        <PrimerosPasos />
 
-      {esSimple ? <div data-recorrido="por-vencer"><PorVencer /></div> : <Tablero />}
+        {/* data-recorrido: lo que resalta la guía del modo simple (components/ui/recorrido.tsx). */}
+        <div data-recorrido="acciones"><AccionesRapidas /></div>
+
+        {esSimple && <div data-recorrido="resumen"><ResumenHoy /></div>}
+
+        {esSimple ? <div data-recorrido="por-vencer"><PorVencer /></div> : <Tablero />}
+      </ConEjemplos>
     </div>
   );
 }

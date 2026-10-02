@@ -11,10 +11,13 @@ import { apiGet, apiPost, apiPut } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useToast } from '@/hooks/use-toast';
+import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { useTenantStore } from '@/store/use-tenant-store';
-import { CLASE_TAMANO, DISENO_SUGERIDO, MAX_TARJETAS, NOMBRE_TAMANO, RANGOS_TARJETA, TamanoTarjeta, TARJETAS_PROPIAS, TarjetaTablero } from '@/lib/tablero';
+import { CLASE_TAMANO, disenoSugerido, MAX_TARJETAS, NOMBRE_TAMANO, RANGOS_TARJETA, TamanoTarjeta, TARJETAS_PROPIAS, TarjetaTablero } from '@/lib/tablero';
 import { PorVencer } from '@/components/ui/por-vencer';
 import { GaleriaTarjetas, opcionesGaleria } from './galeria';
+import { MarcaEjemplo, useEsEjemplo } from './ejemplos';
+import { ESTADO_CLIENTES_EJEMPLO, resultadoDeEjemplo } from '@/lib/ejemplos';
 import { GraficoReporte } from '@/app/dashboard/reporteria/grafico-reporte';
 import { formatearValor, NOMBRE_RANGO, RangoFecha, ReporteGuardado, Resultado } from '@/app/dashboard/reporteria/tipos';
 
@@ -62,13 +65,18 @@ function TarjetaReporte({ reporteId, nombre, rangoInicial }: { reporteId: string
   const titulo = data?.reporte.nombre ?? nombre ?? 'Reporte';
   const rangoActual = rango ?? data?.definicion.filtros.fecha.rango;
   const conGrafico = data?.definicion.grafico && data.definicion.formato !== 'LISTA';
-  const vacio = data && data.totalFilas === 0;
+  // Un gimnasio sin datos ve el gráfico con números de ejemplo (las listas, vacías).
+  const ejemplo = useEsEjemplo() && !!data && data.totalFilas === 0 && conGrafico ? resultadoDeEjemplo(data) : null;
+  const vacio = data && data.totalFilas === 0 && !ejemplo;
 
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">{titulo}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">{titulo}</h3>
+            {ejemplo && <MarcaEjemplo />}
+          </div>
           {data?.reporte.descripcion && <p className="text-xs text-slate-500 dark:text-slate-400">{data.reporte.descripcion}</p>}
         </div>
         <div className="flex items-center gap-2">
@@ -97,7 +105,7 @@ function TarjetaReporte({ reporteId, nombre, rangoInicial }: { reporteId: string
       ) : vacio ? (
         <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">No hay datos en este período.</p>
       ) : data && conGrafico ? (
-        <GraficoReporte resultado={data} enTarjeta />
+        <GraficoReporte resultado={ejemplo ?? data} enTarjeta />
       ) : data ? (
         <ListaCorta resultado={data} />
       ) : null}
@@ -117,11 +125,13 @@ const GRUPOS_ESTADO = [
 function TarjetaEstadoClientes() {
   const { token } = useAuth();
   const { activeTenantId } = useTenantStore();
-  const { data } = useQuery({
+  const { data: real } = useQuery({
     queryKey: ['dashboard-segmentacion', activeTenantId],
     queryFn: () => apiGet<{ total: number; porSegmento: Record<string, number> }>('/dashboard/segmentacion-clientes'),
     enabled: !!token,
   });
+  const ejemplo = useEsEjemplo() && !!real && real.total === 0;
+  const data = ejemplo ? ESTADO_CLIENTES_EJEMPLO : real;
   const grupos = GRUPOS_ESTADO.map((g) => ({ ...g, cantidad: g.segmentos.reduce((s, x) => s + (data?.porSegmento[x] ?? 0), 0) }));
   const total = data?.total ?? 0;
   const porcentaje = (n: number) => (total ? Math.round((n / total) * 100) : 0);
@@ -130,7 +140,10 @@ function TarjetaEstadoClientes() {
     <>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Estado de los clientes</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">Estado de los clientes</h3>
+            {ejemplo && <MarcaEjemplo />}
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">Según sus membresías, de {total.toLocaleString('es-ES')} registrados.</p>
         </div>
         <Link href="/dashboard/clientes" className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10">
@@ -296,19 +309,27 @@ export function Tablero() {
   const puedePersonalizar = hasPermission('organizaciones:actualizar');
   const { data: org } = useQuery({
     queryKey: ['organizacion'],
-    queryFn: () => apiGet<{ configuracion?: { tablero?: { tarjetas?: TarjetaTablero[] | null } } | null }>('/organizaciones/me/info'),
+    queryFn: () => apiGet<{ configuracion?: { tablero?: { tarjetas?: TarjetaTablero[] | null }; onboarding?: { tipoGimnasio?: string } } | null }>('/organizaciones/me/info'),
     enabled: !!token && !isSuperAdmin,
   });
-  const guardadas = org?.configuracion?.tablero?.tarjetas ?? DISENO_SUGERIDO;
+  const modulos = useModulosActivos();
+  // Sin diseño guardado, el sugerido para este gimnasio y esta persona.
+  const sugerido = disenoSugerido({
+    modulos,
+    tipoGimnasio: org?.configuracion?.onboarding?.tipoGimnasio,
+    administra: puedePersonalizar,
+    disponible: (id) => contenido({ id, tamano: 'mediana' }) !== null,
+  });
+  const guardadas = org?.configuracion?.tablero?.tarjetas ?? sugerido;
 
   // Personalizando: la lista en edición (null = viendo el Inicio).
   const [edicion, setEdicion] = useState<TarjetaTablero[] | null>(null);
   // "Volver al diseño sugerido" sin otros cambios: se guarda como "sin diseño".
-  const [sugerido, setSugerido] = useState(false);
+  const [restablecido, setRestablecido] = useState(false);
   const [galeria, setGaleria] = useState(false);
   const cambiar = (lista: TarjetaTablero[]) => {
     setEdicion(lista);
-    setSugerido(false);
+    setRestablecido(false);
   };
 
   const guardar = useMutation({
@@ -349,8 +370,8 @@ export function Tablero() {
           <button
             type="button"
             onClick={() => {
-              setEdicion(DISENO_SUGERIDO);
-              setSugerido(true);
+              setEdicion(sugerido);
+              setRestablecido(true);
             }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -361,7 +382,7 @@ export function Tablero() {
           </button>
           <button
             type="button"
-            onClick={() => guardar.mutate(sugerido ? null : edicion)}
+            onClick={() => guardar.mutate(restablecido ? null : edicion)}
             disabled={guardar.isPending}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
           >
@@ -427,7 +448,7 @@ export function Tablero() {
             type="button"
             onClick={() => {
               setEdicion(guardadas);
-              setSugerido(false);
+              setRestablecido(false);
             }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >

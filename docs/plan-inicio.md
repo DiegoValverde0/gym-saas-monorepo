@@ -154,11 +154,27 @@ Rama sugerida: `inicio`.
   - Mirado en claro y oscuro: agregar, quitar, mover con flechas y arrastrando, tamaño, período, cancelar y volver al sugerido, comparando con lo que guarda la API.
   - e2e: el dueño quita, mueve, agrega desde la galería y guarda; queda al recargar; recepción ve ese Inicio sin el botón; y vuelve al sugerido. El instructor tampoco ve el botón. 31 pruebas.
 
-### Fase 4: inteligencia
+### Fase 4: inteligencia (HECHA)
 - Diseño sugerido según el tipo de gimnasio, los módulos y el rol.
 - "Lo que hay que saber hoy" (sección 4): endpoint con las reglas, con sus pruebas.
 - Datos de ejemplo para gimnasios nuevos.
 - **Listo cuando:** un gimnasio recién creado ve un Inicio completo (con ejemplos) y uno con datos ve frases ciertas, comparadas con SQL.
+- Hecho así:
+  - Diseño sugerido (`disenoSugerido` en `lib/tablero.ts`, con pruebas): quien administra ve primero el dinero (ingresos por año y ventas por plan); recepción e instructores, lo del día (vencimientos y quién no viene). Las de asistencias solo con control de acceso, la ocupación de clases con clases grupales (arriba si el asistente dijo box, estudio o artes marciales) y los atrasos con control del personal. Una mediana que queda sola entre dos anchas se agranda, para no dejar huecos. Se arma para quien mira mientras el gimnasio no guarde su diseño.
+  - La galería ya escondía las plantillas de módulos apagados: la API no lista los reportes de tipos sin su módulo.
+  - "Lo que hay que saber hoy": `GET /dashboard/para-saber`, reglas puras en `dashboard/para-saber.ts` (7 pruebas) y consultas en `getParaSaber`. Las que cuentan lo mismo que una tarjeta corren su plantilla (`ReporteriaService.correrPlantilla`), así el número coincide al hacer clic. Hasta 4, lo urgente primero:
+    - Caja: el último cierre de ayer o de hoy con faltante (o sobrante, más abajo).
+    - Clientes que no vienen: 30 días, no 21 como decía la sección 4, para que sea la misma lista de la plantilla. Solo si el gimnasio registra ingresos.
+    - Vencen en 3 días (sin contar a quien ya renovó).
+    - Ritmo del mes: ±10 % contra los mismos días del mes pasado, desde el día 3.
+    - Stock en su punto de reorden.
+    - Clases de los próximos 7 días: una llena (90 % o más) o, si no, la más vacía de hoy o mañana (30 % o menos, con 5 lugares o más).
+    - Hora pico de los últimos 30 días, con cuántos por semana (con 50 ingresos o más).
+  - El ritmo del mes y la caja son para quien administra (`organizaciones:actualizar`). Sin la reportería, el botón lleva a la pantalla de siempre (clientes, asistencias, productos, cajas).
+  - Comparado con SQL con 200.000 ventas y 500.000 asistencias: clientes sin venir (201), vencen en 3 días (200) y la hora pico (jueves 2 h, 142; empata con las 15 h y gana la más temprana) coinciden. La caja, el stock y las clases, con casos armados en la base de pruebas (faltante de Bs. 20, 2 productos, Funcional con 18 de 20). Responde en unos 100 a 200 ms.
+  - Datos de ejemplo (`lib/ejemplos.ts`, con pruebas): `/dashboard/kpis` dice `conDatos` (alguna venta o algún ingreso). Sin datos, los indicadores y las tarjetas con gráfico se llenan con números creíbles armados sobre el resultado real (vacío) de cada una, y cada una dice "Ejemplo". Las listas no llevan ejemplo (serían personas inventadas). "Ocultar los ejemplos" se recuerda en el navegador y "Ver con datos de ejemplo" los vuelve a mostrar. Con la primera venta o el primer ingreso se apagan solos.
+  - Mirado en el navegador con un gimnasio recién creado (tipo box, con clases), en claro y oscuro, y con el de datos grandes.
+  - e2e: las frases del dueño se ven, el instructor no recibe las del dinero ni botones a la reportería; un gimnasio sin datos (simulado cambiando `conDatos`) ve ejemplos, los oculta y los vuelve a mostrar; con datos no hay ejemplos. 34 pruebas.
 
 ### Fase 5: pulido y cierre
 - Recorrido en el navegador: dueño, recepción e instructor; los tres modos; claro y oscuro; celular.

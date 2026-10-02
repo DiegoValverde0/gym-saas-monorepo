@@ -1,16 +1,36 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 import { promedioMismoDia, proyeccionDelMes, rangos, ultimosDias, variacion } from './indicadores';
 import { asistenciasPorDia, ventasPorDia } from './series-diarias';
 import { calcularSegmentoCliente, SEGMENTOS_CLIENTE } from '../clientes/segmentacion-cliente.util';
+import { ReporteriaService } from '../reporteria/reporteria.service';
+import { idDePlantilla } from '../reporteria/motor/plantillas';
+import {
+  ClaseProxima,
+  elegirFrases,
+  Frase,
+  fraseCaja,
+  fraseClase,
+  fraseHoraPico,
+  frasePorVencer,
+  fraseRitmo,
+  fraseSinVenir,
+  fraseStock,
+  horaMasLlena,
+  vecesPorDiaDeSemana,
+} from './para-saber';
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
+
   constructor(
     private prisma: PrismaService,
     private cls: ClsService,
+    private reporteria: ReporteriaService,
   ) {}
 
   private async zonaHoraria(): Promise<string | null> {
@@ -72,6 +92,12 @@ export class DashboardService {
         }),
       ]);
 
+    // Un gimnasio recién creado (sin ventas ni ingresos registrados) ve el
+    // Inicio con datos de ejemplo (decisión I4).
+    const [unaVenta, unaAsistencia] = await Promise.all([
+      db.transaccion.findFirst({ where: { tipo: 'INGRESO' }, select: { id: true } }),
+      db.registroAsistencia.findFirst({ select: { id: true } }),
+    ]);
     const asistencias = asistenciasMapa as Map<string, { total: number; hastaLaHora: number }>;
     const hastaLaHora = new Map([...asistencias].map(([dia, x]) => [dia, x.hastaLaHora]));
     const claveHoy = fechaHoy.toISOString().slice(0, 10);
@@ -101,7 +127,105 @@ export class DashboardService {
         altasMesPasadoMismaAltura: altasMesPasado,
       },
       membresiasPorVencer: porVencer as number,
+      conDatos: !!unaVenta || !!unaAsistencia,
     };
+  }
+
+  /**
+   * "Lo que hay que saber hoy" (docs/plan-inicio.md, sección 4): cada regla mira
+   * los datos y, si se cumple, propone una frase con su botón. Las que cuentan
+   * lo mismo que una tarjeta corren su plantilla, así el número coincide. Las
+   * del dinero (el ritmo del mes y la caja) son para quien administra el
+   * gimnasio. Una regla que falla no deja sin las demás.
+   */
+  async getParaSaber(sucursalId?: string): Promise<{ frases: Frase[] }> {
+    const ctx = await this.reporteria.contexto();
+    const { organizacionId, zonaHoraria } = ctx.ejecucion;
+    const puede = (p: string) => ctx.permisos.includes(p);
+    const m = ctx.modulos;
+    const administra = puede('organizaciones:actualizar');
+    // El botón abre la plantilla; sin la reportería, la pantalla de siempre.
+    const plantilla = (clave: string, sinReportes: string) => (puede('reportes:leer') ? `/dashboard/reporteria/${idDePlantilla(organizacionId, clave)}` : sinReportes);
+    const hoy = ctx.ejecucion.hoy.toISOString().slice(0, 10);
+    const db = this.prisma.extendedClient;
+    // SQL directo: no pasa por la extensión RLS, así que filtra la organización a mano.
+    const crudo = db as unknown as { $queryRaw<T>(query: Prisma.Sql): Promise<T> };
+    const sucursal = (columna: string) => (sucursalId ? Prisma.sql` AND ${Prisma.raw(columna)} = ${sucursalId}::uuid` : Prisma.empty);
+
+    const regla = async (nombre: string, fn: () => Promise<Frase | null>): Promise<Frase | null> => {
+      try {
+        return await fn();
+      } catch (err) {
+        this.logger.warn(`La regla "${nombre}" de "Lo que hay que saber hoy" falló: ${(err as Error).message}`);
+        return null;
+      }
+    };
+    const r = rangos(new Date(), zonaHoraria);
+    // ¿El gimnasio registra los ingresos de sus clientes? Si no, "no vienen" no sería cierto.
+    const hayAsistencias = async () => (await db.registroAsistencia.count({ where: { fechaHoraIngreso: { gte: new Date(r.hoy.getTime() - 30 * 86_400_000) } } })) > 0;
+
+    const frases = await Promise.all([
+      regla('ritmo del mes', async () => {
+        if (!administra || !puede('transacciones:leer') || !m.puntoVenta) return null;
+        const suma = async (desde: Date, hasta: Date) =>
+          Number((await db.transaccion.aggregate({ where: { tipo: 'INGRESO', ...(sucursalId ? { sucursalId } : {}), fechaHora: { gte: desde, lt: hasta } }, _sum: { montoTotal: true } }))._sum.montoTotal ?? 0);
+        const [mes, mesPasado] = await Promise.all([suma(r.mes, r.ahora), suma(r.mesPasado, r.mesPasadoMismaAltura)]);
+        return fraseRitmo({ mes, mesPasado, diaDelMes: Number(hoy.slice(8, 10)), href: plantilla('ingresos-anio-vs-pasado', '/dashboard/transacciones') });
+      }),
+      regla('clientes sin venir', async () => {
+        if (!m.controlAcceso || !(await hayAsistencias())) return null;
+        const res = await this.reporteria.correrPlantilla('clientes-sin-venir-30', ctx);
+        return res ? fraseSinVenir(res.totalFilas, plantilla('clientes-sin-venir-30', '/dashboard/clientes')) : null;
+      }),
+      regla('por vencer', async () => {
+        if (!puede('membresias:leer')) return null;
+        return frasePorVencer((await this.getPorVencer(sucursalId, 3)).length, '/dashboard/membresias');
+      }),
+      regla('hora pico', async () => {
+        const res = await this.reporteria.correrPlantilla('horas-pico', ctx);
+        if (!res) return null;
+        const casillas = res.resumenes.filter((x) => x.nivel === 1 && x.conColumna).map((x) => ({ dia: String(x.grupo[0]), hora: Number(x.columna), cantidad: x.cantidad }));
+        const total = res.resumenes.find((x) => x.nivel === 0 && !x.conColumna)?.cantidad ?? 0;
+        const pico = horaMasLlena(casillas);
+        // Los mismos 30 días que la plantilla (ultimos_30: de hace 29 días a hoy).
+        const desde = new Date(ctx.ejecucion.hoy.getTime() - 29 * 86_400_000).toISOString().slice(0, 10);
+        const hasta = new Date(ctx.ejecucion.hoy.getTime() + 86_400_000).toISOString().slice(0, 10);
+        const semanas = pico ? (vecesPorDiaDeSemana(desde, hasta)[pico.dia] ?? 1) : 1;
+        return fraseHoraPico(pico ? { ...pico, semanas } : null, total, plantilla('horas-pico', '/dashboard/asistencias'));
+      }),
+      regla('caja', async () => {
+        if (!administra || !puede('aperturas_caja:leer') || !m.puntoVenta) return null;
+        // El último turno cerrado de ayer o de hoy (en la hora del gimnasio).
+        const desde = new Date(r.ayer.getTime());
+        const filas = await crudo.$queryRaw<{ caja: string; fecha: string; diferencia: number }[]>(Prisma.sql`
+          SELECT cj.nombre AS caja, to_char((ap.fecha_cierre AT TIME ZONE ${zonaHoraria})::date, 'YYYY-MM-DD') AS fecha,
+                 (ap.monto_cierre_real - ap.monto_cierre_esperado)::float8 AS diferencia
+          FROM aperturas_caja ap JOIN cajas_registradoras cj ON cj.id = ap.caja_id
+          WHERE ap.organizacion_id = ${organizacionId}::uuid AND ap.estado = 'CERRADA' AND ap.fecha_cierre >= ${desde}
+            AND ap.monto_cierre_real IS NOT NULL AND ap.monto_cierre_esperado IS NOT NULL${sucursal('cj.sucursal_id')}
+          ORDER BY ap.fecha_cierre DESC LIMIT 1`);
+        return fraseCaja(filas[0] ? { ...filas[0], diferencia: Number(filas[0].diferencia) } : null, hoy, plantilla('diferencias-caja-mes', '/dashboard/cajas'));
+      }),
+      regla('stock', async () => {
+        const res = await this.reporteria.correrPlantilla('productos-reponer', ctx);
+        return res ? fraseStock(res.totalFilas, plantilla('productos-reponer', '/dashboard/productos')) : null;
+      }),
+      regla('clases', async () => {
+        if (!puede('clases:leer') || !m.clasesGrupales) return null;
+        // Las sesiones que vienen en los próximos 7 días (las que ya empezaron, no).
+        const hasta = new Date(r.hoy.getTime() + 8 * 86_400_000);
+        const clases = await crudo.$queryRaw<(Omit<ClaseProxima, 'ocupados' | 'capacidad'> & { ocupados: number; capacidad: number })[]>(Prisma.sql`
+          SELECT k.nombre_clase AS nombre, to_char(k.fecha_hora AT TIME ZONE ${zonaHoraria}, 'YYYY-MM-DD') AS fecha,
+                 to_char(k.fecha_hora AT TIME ZONE ${zonaHoraria}, 'HH24:MI') AS hora, k.capacidad_maxima AS capacidad,
+                 (SELECT count(*)::int FROM reservas_clases rc WHERE rc.clase_id = k.id AND rc.estado IN ('CONFIRMADA', 'ASISTIO')) AS ocupados
+          FROM clases_programadas k
+          WHERE k.organizacion_id = ${organizacionId}::uuid AND k.deleted_at IS NULL AND k.estado = 'ACTIVO'
+            AND k.fecha_hora >= ${r.ahora} AND k.fecha_hora < ${hasta}${sucursal('k.sucursal_id')}
+          ORDER BY k.fecha_hora LIMIT 200`);
+        return fraseClase(clases.map((c) => ({ ...c, ocupados: Number(c.ocupados), capacidad: Number(c.capacidad) })), hoy, '/dashboard/agenda');
+      }),
+    ]);
+    return { frases: elegirFrases(frases) };
   }
 
   // Reporte agregado para el Objetivo 1 de segmentación (ver

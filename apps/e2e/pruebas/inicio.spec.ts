@@ -40,6 +40,68 @@ test.describe('dueño', () => {
   });
 });
 
+test.describe('lo que hay que saber hoy', () => {
+  test.use({ storageState: sesion('dueno') });
+
+  test('hasta 4 frases con su botón, y las del dinero solo para quien administra', async ({ page, browser }) => {
+    const dueno = await page.request.get(`${URL_API}/dashboard/para-saber`);
+    expect(dueno.ok()).toBeTruthy();
+    const frases: { clave: string; texto: string; accion?: { href: string } }[] = (await dueno.json()).data.frases;
+    expect(frases.length).toBeLessThanOrEqual(4);
+    await page.goto('/dashboard');
+    if (frases.length > 0) {
+      const seccion = page.getByRole('region', { name: 'Lo que hay que saber hoy' });
+      for (const f of frases) await expect(seccion).toContainText(f.texto);
+    }
+    // El instructor no recibe las del dinero ni botones a la reportería.
+    const contexto = await browser.newContext({ storageState: sesion('instructor') });
+    const instructor = await contexto.request.get(`${URL_API}/dashboard/para-saber`);
+    const suyas: { clave: string; accion?: { href: string } }[] = (await instructor.json()).data.frases;
+    expect(suyas.map((f) => f.clave)).not.toContain('caja');
+    expect(suyas.map((f) => f.clave)).not.toContain('ritmo-mes');
+    for (const f of suyas) expect(f.accion?.href ?? '').not.toContain('/reporteria/');
+    await contexto.close();
+  });
+});
+
+test.describe('datos de ejemplo', () => {
+  test.use({ storageState: sesion('dueno') });
+
+  test('un gimnasio sin datos ve su Inicio con ejemplos marcados, y los puede ocultar', async ({ page }) => {
+    // El gimnasio del seed tiene datos: se simula uno nuevo cambiando solo esa marca.
+    await page.route(`${URL_API}/dashboard/kpis`, async (route) => {
+      const respuesta = await route.fetch();
+      const cuerpo = await respuesta.json();
+      cuerpo.data.conDatos = false;
+      await route.fulfill({ response: respuesta, json: cuerpo });
+    });
+    await page.goto('/dashboard');
+    await expect(page.getByText('Así se va a ver tu Inicio')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Ingresos del mes' })).toContainText('Ejemplo');
+    // El seed no tiene asistencias recientes: el mapa de calor sale de ejemplo.
+    const horas = page.locator('[data-tarjeta="plantilla:horas-pico"]');
+    await expect(horas.getByRole('table', { name: /Mapa de calor/ })).toBeVisible();
+    await expect(horas).toContainText('Ejemplo');
+
+    await page.getByRole('button', { name: 'Ocultar los ejemplos' }).click();
+    await expect(page.getByRole('button', { name: 'Ver con datos de ejemplo' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Ingresos del mes' })).not.toContainText('Ejemplo');
+    await expect(horas).toContainText('No hay datos en este período.');
+    // Se recuerda al volver.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Ver con datos de ejemplo' })).toBeVisible();
+    await page.getByRole('button', { name: 'Ver con datos de ejemplo' }).click();
+    await expect(page.getByText('Así se va a ver tu Inicio')).toBeVisible();
+  });
+
+  test('con datos no hay ejemplos', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page.getByRole('region', { name: 'Ingresos del mes' })).toBeVisible();
+    await expect(page.getByText('Así se va a ver tu Inicio')).toHaveCount(0);
+    await expect(page.getByText('Ejemplo', { exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe('personalizar', () => {
   test.use({ storageState: sesion('dueno') });
   // Deja el Inicio como al principio para las demás pruebas.

@@ -7,6 +7,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarClock, ScanFace, User
 import { bs } from '@/lib/formato';
 import { useColoresGraficos } from '@/lib/colores-graficos';
 import { usePermissions } from '@/hooks/use-permissions';
+import { MarcaEjemplo, useEsEjemplo } from './ejemplos';
 
 // Indicadores del Inicio (docs/plan-inicio.md, fase 1): cada número con su
 // comparación "a la misma altura" y su tendencia, para saber si es mucho o poco.
@@ -26,6 +27,8 @@ export interface Kpis {
   asistencias: { hoy: number; promedioMismoDia: number | null; serie: { fecha: string; valor: number }[] };
   clientes: { activos: number; totales: number; altasMes: number; altasMesPasadoMismaAltura: number };
   membresiasPorVencer: number;
+  /** Sin ventas ni ingresos registrados todavía: el Inicio muestra ejemplos. */
+  conDatos: boolean;
 }
 
 const cantidad = (n: number) => n.toLocaleString('es-ES', { maximumFractionDigits: 1 });
@@ -83,10 +86,14 @@ function Tendencia({ serie, formato, alto = 'h-12', nombre }: { serie: { fecha: 
 }
 
 function Tarjeta({ titulo, icono: Icono, children, enlace }: { titulo: string; icono: typeof Wallet; children: ReactNode; enlace?: { href: string; texto: string } }) {
+  const ejemplo = useEsEjemplo();
   return (
     <section aria-label={titulo} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">{titulo}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">{titulo}</h3>
+          {ejemplo && <MarcaEjemplo />}
+        </div>
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
           <Icono className="h-4 w-4 text-slate-500 dark:text-slate-400" aria-hidden />
         </span>
@@ -106,10 +113,14 @@ const Numero = ({ children }: { children: ReactNode }) => <p className="text-3xl
 /** Los ingresos del mes, en grande: el número con el que abre el Inicio. */
 function IngresosDelMes({ ingresos }: { ingresos: NonNullable<Kpis['ingresos']> }) {
   const sinHistoria = ingresos.mesPasadoMismaAltura === 0;
+  const ejemplo = useEsEjemplo();
   return (
     <section aria-label="Ingresos del mes" className="relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-5 shadow-xs dark:border-indigo-500/20 dark:from-indigo-500/10 dark:via-slate-900 dark:to-slate-900 lg:col-span-2 lg:row-span-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">Ingresos del mes</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">Ingresos del mes</h3>
+          {ejemplo && <MarcaEjemplo />}
+        </div>
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-500/20">
           <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-300" aria-hidden />
         </span>
@@ -144,6 +155,8 @@ export function Indicadores({ kpis }: { kpis: Kpis }) {
   const { hasPermission } = usePermissions();
   const verMembresias = hasPermission('membresias:leer');
   const nombreDia = new Date().toLocaleDateString('es-ES', { weekday: 'long' });
+  // Con ejemplos, la lista de abajo es la real (vacía): no se la nombra.
+  const ejemplo = useEsEjemplo();
   const variacionAsistencias = asistencias.promedioMismoDia ? Math.round(((asistencias.hoy - asistencias.promedioMismoDia) / asistencias.promedioMismoDia) * 1000) / 10 : null;
 
   const tarjetas = (
@@ -172,7 +185,7 @@ export function Indicadores({ kpis }: { kpis: Kpis }) {
       {verMembresias && (
         <Tarjeta titulo="Vencen en 7 días" icono={CalendarClock} enlace={{ href: '/dashboard/membresias', texto: 'Ver membresías' }}>
           <Numero>{cantidad(kpis.membresiasPorVencer)}</Numero>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{kpis.membresiasPorVencer === 0 ? 'Nadie vence esta semana.' : 'Avísales para que renueven: abajo están quiénes son.'}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{kpis.membresiasPorVencer === 0 ? 'Nadie vence esta semana.' : ejemplo ? 'Avísales para que renueven.' : 'Avísales para que renueven: abajo están quiénes son.'}</p>
         </Tarjeta>
       )}
     </>
