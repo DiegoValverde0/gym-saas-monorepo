@@ -1,10 +1,13 @@
-# Verificación automática en cada cambio: tipos, lint y pruebas de la API y
-# la web. No necesita base de datos (las pruebas la simulan).
+# Verificación automática en cada cambio:
+# - verificar: tipos, lint y pruebas de la API y la web, sin base de datos
+#   (las pruebas la simulan). Alrededor de 1 minuto.
+# - e2e: las pruebas de punta a punta (apps/e2e, docs/pruebas-e2e.md) con
+#   Postgres, Redis, la API y la web reales y un navegador. Entre 6 y 8 minutos.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, pruebas-e2e] # TEMPORAL: validar el trabajo e2e antes de unir
   pull_request:
 
 concurrency:
@@ -46,3 +49,84 @@ jobs:
 
       - name: Pruebas
         run: pnpm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: gym
+          POSTGRES_PASSWORD: gym
+          POSTGRES_DB: gym_saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gym -d gym_saas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Lo que en una computadora sale del .env de la raíz. La tanda usa su
+      # propia base (gym_e2e, la crea sola) y otros puertos (apps/e2e/entorno.ts).
+      DATABASE_URL: postgresql://gym:gym@localhost:5432/gym_saas?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: solo-para-las-pruebas-del-ci
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Generar el cliente de Prisma
+        run: pnpm --filter @repo/database exec prisma generate
+
+      - name: Tipos (pruebas e2e)
+        run: pnpm --filter e2e exec tsc -p tsconfig.json
+
+      # El navegador se guarda entre corridas: solo se descarga al cambiar de versión de Playwright.
+      - name: Navegador en caché
+        id: cache-navegador
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Instalar Chromium
+        if: steps.cache-navegador.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Dependencias del sistema para Chromium
+        if: steps.cache-navegador.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps chromium
+
+      - name: Pruebas e2e
+        run: pnpm e2e
+
+      # Si algo falla: el reporte con capturas, videos y trazas paso a paso.
+      - name: Guardar el reporte
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-e2e
+          path: |
+            apps/e2e/playwright-report/
+            apps/e2e/test-results/
+          retention-days: 14
