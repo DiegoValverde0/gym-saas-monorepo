@@ -25,6 +25,17 @@ export const DISENO_SUGERIDO: TarjetaTablero[] = [
   { id: 'por-vencer', tamano: 'ancha' },
 ];
 
+export const NOMBRE_TAMANO: Record<TamanoTarjeta, string> = { chica: 'Chica', mediana: 'Mediana', ancha: 'Ancha' };
+
+/** Hasta cuántas tarjetas (lo mismo valida la API). */
+export const MAX_TARJETAS = 16;
+
+/** Las tarjetas propias del Inicio (no son reportes), con el permiso que piden. */
+export const TARJETAS_PROPIAS: { id: string; nombre: string; descripcion: string; permiso: string; tamano: TamanoTarjeta }[] = [
+  { id: 'estado-clientes', nombre: 'Estado de los clientes', descripcion: 'Cuántos están al día, por empezar, vencidos o sin membresía.', permiso: 'clientes:leer', tamano: 'mediana' },
+  { id: 'por-vencer', nombre: 'Membresías por vencer esta semana', descripcion: 'A quién avisar para que renueve, con el botón "Avisar".', permiso: 'membresias:leer', tamano: 'ancha' },
+];
+
 /** Cuánto ocupa cada tamaño en una grilla de 6 columnas (en el celular, todo el ancho). */
 export const CLASE_TAMANO: Record<TamanoTarjeta, string> = {
   chica: 'col-span-6 md:col-span-3 xl:col-span-2',

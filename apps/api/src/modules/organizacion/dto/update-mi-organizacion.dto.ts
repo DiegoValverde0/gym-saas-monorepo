@@ -127,11 +127,13 @@ export class TarjetaTableroDto {
 }
 
 export class TableroConfigDto {
+  // null: "Volver al diseño sugerido" (el Inicio se arma solo otra vez).
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(16, { message: 'El Inicio puede tener hasta 16 tarjetas.' })
   @ValidateNested({ each: true })
   @Type(() => TarjetaTableroDto)
-  tarjetas: TarjetaTableroDto[];
+  tarjetas?: TarjetaTableroDto[] | null;
 }
 
 export class ConfiguracionTenantDto {

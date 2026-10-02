@@ -172,6 +172,8 @@ export interface ReporteGuardado {
   definicion?: Definicion;
   /** Usa tabla cruzada, filtros con/sin, lógica o grupos personalizados. */
   usaModoExperto?: boolean;
+  /** En la lista: la forma de su gráfico, si tiene (la galería del Inicio). */
+  grafico?: TipoGrafico | null;
 }
 
 export interface Carpeta {

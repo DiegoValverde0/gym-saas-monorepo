@@ -143,9 +143,16 @@ Rama sugerida: `inicio`.
   - Mirado en claro y oscuro, como dueño, recepción (ve todo: tiene reportes y movimientos) e instructor (solo asistencias, clientes y el estado de los clientes). El mapa de calor se desliza de lado en el celular.
   - e2e: `inicio.spec.ts` suma las tarjetas del dueño (y el cambio de período) y lo que no ve el instructor. 30 pruebas.
 
-### Fase 3: personalizar
+### Fase 3: personalizar (HECHA)
 - "Personalizar el Inicio": galería con vista previa, agregar, quitar, arrastrar o mover con botones, tamaño, y "Volver al diseño sugerido".
 - **Listo cuando:** el dueño arma su Inicio y recepción lo ve con sus tarjetas permitidas.
+- Hecho así:
+  - "Personalizar el Inicio" (con `organizaciones:actualizar`) pasa el mismo Inicio a modo edición, con una barra fija arriba: Agregar tarjeta, Volver al diseño sugerido, Cancelar y Guardar. Cada tarjeta lleva su barra: los puntitos para arrastrar, mover antes y después, tamaño, período (las de reportería; "El del reporte" deja el suyo) y quitar. Mientras se edita, la tarjeta se ve pero no se toca.
+  - Arrastrar con `@dnd-kit` (core, sortable, utilities), con el mouse o el dedo. Con el teclado se usan las flechas de cada tarjeta: el modo teclado de dnd-kit empezaba a arrastrar pero no movía tarjetas tan altas dentro del panel que se desliza, y dejaba la tarjeta "tomada"; se sacó. Los avisos para lectores de pantalla, en español.
+  - Galería (`components/inicio/galeria.tsx`): las propias del Inicio, las plantillas y los reportes guardados con gráfico, con buscador. La elegida se ve de verdad, con los datos del gimnasio, antes de agregarla; las que ya están se marcan. Tamaño sugerido: ancha para el mapa de calor y las comparaciones de tabla cruzada. La lista de reportes trae `grafico` (su forma) para esto.
+  - "Volver al diseño sugerido" guarda `tablero.tarjetas = null`: el Inicio vuelve a armarse solo (en la fase 4, según el gimnasio). La auditoría lo anota como "tarjetas del Inicio".
+  - Mirado en claro y oscuro: agregar, quitar, mover con flechas y arrastrando, tamaño, período, cancelar y volver al sugerido, comparando con lo que guarda la API.
+  - e2e: el dueño quita, mueve, agrega desde la galería y guarda; queda al recargar; recepción ve ese Inicio sin el botón; y vuelve al sugerido. El instructor tampoco ve el botón. 31 pruebas.
 
 ### Fase 4: inteligencia
 - Diseño sugerido según el tipo de gimnasio, los módulos y el rol.

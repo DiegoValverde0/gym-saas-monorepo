@@ -205,7 +205,9 @@ export class ReportesGuardadosService {
     // Los de tipos a los que no tiene acceso no se listan.
     return (reportes as (ReporteFila & { definicion: Prisma.JsonValue })[]).flatMap((r) => {
       const tipo = this.tipoDe(r, ctx);
-      return tipo ? [{ ...this.describir(r, ctx), usaModoExperto: this.usaModoExperto(r.definicion, tipo) }] : [];
+      // `grafico`: la forma de su gráfico, si tiene (la galería del Inicio).
+      const grafico = (r.definicion as { grafico?: { tipo?: string } | null } | null)?.grafico?.tipo ?? null;
+      return tipo ? [{ ...this.describir(r, ctx), usaModoExperto: this.usaModoExperto(r.definicion, tipo), grafico }] : [];
     });
   }
 
