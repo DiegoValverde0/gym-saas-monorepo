@@ -37,7 +37,8 @@ import {
   CalendarRange,
   Receipt,
   Truck,
-  Lightbulb
+  Lightbulb,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -122,6 +123,8 @@ const navigationGroups: NavGroup[] = [
       { name: 'Accesos avanzados', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
       { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
       { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
+      // Reportería (docs/plan-reporteria.md): separada del tablero de Reportes.
+      { name: 'Reportería', href: '/dashboard/reporteria', icon: BarChart3, permission: 'reportes:leer' },
       // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
       { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
     ]
@@ -311,16 +314,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (esCliente) return <div className="h-screen w-full bg-slate-50 dark:bg-slate-900" />;
 
+  // Clases print:*: al imprimir (Reportería) sale solo el contenido, entero,
+  // sin menú ni barra superior.
   return (
-    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900">
+    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900 print:block print:h-auto print:bg-white">
       {/* Sidebar Desktop */}
-      <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40">
+      <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden">
         <SidebarContent />
       </div>
 
-      <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden">
+      <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0">
         {/* Top App Bar */}
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs print:hidden">
           <div className="flex items-center gap-4 flex-1">
             <Sheet>
               <SheetTrigger asChild>
@@ -462,7 +467,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8 print:overflow-visible print:bg-white print:p-0">
           <div className="mx-auto max-w-7xl h-full">
             {children}
           </div>

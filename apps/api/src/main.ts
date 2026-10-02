@@ -26,7 +26,9 @@ async function bootstrap() {
   // dev server local (localhost:3000) en vez de fallar cerrado por completo,
   // para no romper `pnpm dev` a quien no la haya configurado todavía.
   const frontendOrigins = process.env.FRONTEND_URL?.split(',').map((o) => o.trim()).filter(Boolean) ?? ['http://localhost:3000'];
-  app.enableCors({ origin: frontendOrigins, credentials: true });
+  // Content-Disposition expuesta: el navegador lee el nombre del archivo de
+  // las exportaciones de la reportería (en producción va por el mismo dominio).
+  app.enableCors({ origin: frontendOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] });
   
   // Validaciones globales
   app.useGlobalPipes(new ValidationPipe({

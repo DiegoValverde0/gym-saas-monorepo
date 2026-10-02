@@ -14,7 +14,9 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={cn("font-sans", inter.variable)}>
+    // suppressHydrationWarning: next-themes pone la clase del tema en <html>
+    // antes de que React cargue (si no, React avisa que no coincide).
+    <html lang="es" className={cn("font-sans", inter.variable)} suppressHydrationWarning>
       <body>
         <Providers>
           {children}

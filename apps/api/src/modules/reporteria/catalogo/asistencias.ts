@@ -1,0 +1,61 @@
+import { Prisma } from '@prisma/client';
+import { enHoraLocal, NOMBRES, TipoReporte } from './tipos';
+
+// Asistencias: una fila por cada ingreso al gimnasio (los anulados no cuentan).
+export const ASISTENCIAS: TipoReporte = {
+  clave: 'asistencias',
+  nombre: 'Asistencias',
+  descripcion: 'Los ingresos al gimnasio: quién vino, cuándo, a qué sucursal y cuánto tiempo se quedó.',
+  fila: 'Una fila por cada ingreso',
+  permiso: 'asistencias:leer',
+  moduloGimnasio: 'controlAcceso',
+  tabla: { nombre: 'registros_asistencia', alias: 'a', tieneDeletedAt: true },
+  relaciones: [
+    { alias: 'c', sql: 'LEFT JOIN clientes c ON c.id = a.cliente_id' },
+    { alias: 'm', sql: 'LEFT JOIN membresias m ON m.id = a.membresia_id' },
+    { alias: 'pl', sql: 'LEFT JOIN planes pl ON pl.id = m.plan_id', requiere: ['m'] },
+    { alias: 's', sql: 'LEFT JOIN sucursales s ON s.id = a.sucursal_id' },
+    { alias: 'u', sql: 'LEFT JOIN usuarios u ON u.id = a.registrado_por_id' },
+  ],
+  sucursal: { sql: 'a.sucursal_id', opcional: false },
+  creadoPor: { sql: 'a.registrado_por_id' },
+  fechaPorDefecto: 'ingreso',
+  columnas: [
+    { clave: 'ingreso', nombre: 'Ingreso', grupo: 'Asistencia', tipo: 'fechaHora', sql: 'a.fecha_hora_ingreso' },
+    { clave: 'dia', nombre: 'Día', grupo: 'Asistencia', tipo: 'fecha', sql: (ctx) => Prisma.sql`${enHoraLocal('a.fecha_hora_ingreso')(ctx)}::date`, ayuda: 'La fecha del ingreso, sin la hora (sirve para agrupar por día, semana o mes).' },
+    { clave: 'salida', nombre: 'Salida', grupo: 'Asistencia', tipo: 'fechaHora', sql: 'a.fecha_hora_salida' },
+    {
+      clave: 'permanencia',
+      nombre: 'Tiempo en el gimnasio (min)',
+      grupo: 'Asistencia',
+      tipo: 'numero',
+      sql: 'ROUND(EXTRACT(EPOCH FROM (a.fecha_hora_salida - a.fecha_hora_ingreso)) / 60)',
+      ayuda: 'Minutos entre el ingreso y la salida (vacío si no marcó salida).',
+    },
+    {
+      clave: 'hora',
+      nombre: 'Hora del día',
+      grupo: 'Asistencia',
+      tipo: 'numero',
+      sql: (ctx) => Prisma.sql`EXTRACT(HOUR FROM ${enHoraLocal('a.fecha_hora_ingreso')(ctx)})::int`,
+      ayuda: 'De 0 a 23: para ver las horas con más gente.',
+    },
+    {
+      clave: 'diaSemana',
+      nombre: 'Día de la semana',
+      grupo: 'Asistencia',
+      tipo: 'lista',
+      sql: (ctx) => Prisma.sql`EXTRACT(ISODOW FROM ${enHoraLocal('a.fecha_hora_ingreso')(ctx)})::int::text`,
+      opciones: NOMBRES.diaSemana,
+    },
+    { clave: 'tipoAsistencia', nombre: 'Tipo de ingreso', grupo: 'Asistencia', tipo: 'lista', sql: 'a.tipo_asistencia::text', opciones: NOMBRES.tipoAsistencia },
+    { clave: 'metodo', nombre: 'Cómo se validó', grupo: 'Asistencia', tipo: 'lista', sql: 'a.metodo_validacion::text', opciones: NOMBRES.metodoValidacion },
+    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: 'COALESCE(c.nombre, a.nombre_visitante)', usa: ['c'] },
+    { clave: 'clienteDocumento', nombre: 'Documento del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.numero_documento', usa: ['c'] },
+    { clave: 'plan', nombre: 'Plan', grupo: 'Plan', tipo: 'texto', sql: 'pl.nombre', usa: ['pl'] },
+    { clave: 'tipoPlan', nombre: 'Tipo de plan', grupo: 'Plan', tipo: 'lista', sql: 'pl.tipo_plan::text', usa: ['pl'], opciones: NOMBRES.tipoPlan },
+    { clave: 'sucursal', nombre: 'Sucursal', grupo: 'Dónde y quién', tipo: 'texto', sql: 's.nombre', usa: ['s'] },
+    { clave: 'registradoPor', nombre: 'Registrado por', grupo: 'Dónde y quién', tipo: 'texto', sql: 'u.nombre_completo', usa: ['u'] },
+  ],
+  columnasIniciales: ['ingreso', 'cliente', 'plan', 'sucursal'],
+};

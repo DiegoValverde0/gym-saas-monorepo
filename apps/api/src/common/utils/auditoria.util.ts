@@ -68,6 +68,8 @@ const NOMBRE_MODELO: Record<string, string> = {
   TurnoPlantilla: 'el horario de trabajo',
   Usuario: 'la cuenta',
   Sala: 'la sala',
+  Reporte: 'el reporte',
+  CarpetaReporte: 'la carpeta de reportes',
 };
 
 // Cómo se identifica el registro en la descripción.

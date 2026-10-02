@@ -207,6 +207,18 @@ enum TipoComprobante {
 // MODULO 1: CORE INSTITUCIONAL (MULTI-TENANT ROOT)
 // =============================================================================
 
+// DB-7 (reportería, docs/plan-reporteria.md): con quién se comparte una carpeta.
+enum VisibilidadCarpetaReporte {
+  PRIVADA
+  COMPARTIDA
+}
+
+enum FormatoReporte {
+  LISTA
+  AGRUPADO
+  TABLA_CRUZADA
+}
+
 model Organizacion {
   id                   String             @id @default(uuid()) @db.Uuid
   nombre               String             @db.VarChar(150) // nombre comercial / marca
@@ -259,6 +271,8 @@ model Organizacion {
   auditorias          Auditoria[]
   notificaciones      Notificacion[]
   apiKeys             ApiKey[]
+  carpetasReportes    CarpetaReporte[]
+  reportes            Reporte[]
 
   @@map("organizaciones")
 }
@@ -351,6 +365,8 @@ model Usuario {
   auditorias              Auditoria[]
   notificacionesRecibidas Notificacion[]
   fichasCliente           Cliente[]          @relation("CuentaPortal")
+  carpetasReportesCreadas CarpetaReporte[]   @relation("CarpetasReportesCreadas")
+  reportesCreados         Reporte[]          @relation("ReportesCreados")
 
   // Firmas de auditoria operativa (trazabilidad de "quien hizo que")
   clientesCreados        Cliente[]            @relation("ClientesCreados")
@@ -1283,4 +1299,66 @@ model ApiKey {
 
   @@index([organizacionId])
   @@map("api_keys")
+}
+
+// =======================================================================
+// REPORTERÍA (DB-7, docs/plan-reporteria.md)
+// =======================================================================
+
+// Carpeta de reportes guardados. PRIVADA: solo quien la creó. COMPARTIDA:
+// los roles de rolesIds, o todo el equipo con reportes:leer si está vacía.
+// El nombre no es único en la base (chocaría con los de la papelera): lo
+// valida el servicio entre las carpetas no eliminadas.
+model CarpetaReporte {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizacionId String                    @map("organizacion_id") @db.Uuid
+  nombre         String                    @db.VarChar(100)
+  descripcion    String?                   @db.Text
+  visibilidad    VisibilidadCarpetaReporte @default(PRIVADA)
+  rolesIds       String[]                  @default([]) @map("roles_ids") @db.Uuid
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  creadoPor    Usuario?     @relation("CarpetasReportesCreadas", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  reportes     Reporte[]
+
+  @@unique([id, organizacionId])
+  @@index([organizacionId])
+  @@map("carpetas_reportes")
+}
+
+// Reporte guardado: la definición (columnas, filtros, agrupaciones...) va en
+// `definicion`, validada contra el catálogo de tipos de reporte del código
+// (apps/api/src/modules/reporteria/catalogo) en cada ejecución.
+// Sin carpeta = "Mis reportes" (privado de quien lo creó).
+model Reporte {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizacionId String         @map("organizacion_id") @db.Uuid
+  carpetaId      String?        @map("carpeta_id") @db.Uuid
+  nombre         String         @db.VarChar(150)
+  descripcion    String?        @db.Text
+  tipoReporte    String         @map("tipo_reporte") @db.VarChar(50)
+  formato        FormatoReporte @default(LISTA)
+  definicion     Json           @db.JsonB
+  esPlantilla    Boolean        @default(false) @map("es_plantilla")
+  ultimaEjecucion DateTime?     @map("ultima_ejecucion") @db.Timestamptz(6)
+  vecesEjecutado Int            @default(0) @map("veces_ejecutado")
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  creadoPorId String?   @map("creado_por_id") @db.Uuid
+
+  organizacion Organizacion    @relation(fields: [organizacionId], references: [id], onDelete: Cascade)
+  // Restrict, no SetNull: FK compuesta con organizacionId NOT NULL (ver nota en ClaseProgramada).
+  carpeta      CarpetaReporte? @relation(fields: [carpetaId, organizacionId], references: [id, organizacionId], onDelete: Restrict)
+  creadoPor    Usuario?        @relation("ReportesCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([organizacionId, carpetaId])
+  @@index([organizacionId, creadoPorId])
+  @@map("reportes")
 }
