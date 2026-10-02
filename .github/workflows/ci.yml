@@ -2,12 +2,12 @@
 # - verificar: tipos, lint y pruebas de la API y la web, sin base de datos
 #   (las pruebas la simulan). Alrededor de 1 minuto.
 # - e2e: las pruebas de punta a punta (apps/e2e, docs/pruebas-e2e.md) con
-#   Postgres, Redis, la API y la web reales y un navegador. Entre 6 y 8 minutos.
+#   Postgres, Redis, la API y la web reales y un navegador. Unos 3 minutos.
 name: CI
 
 on:
   push:
-    branches: [main, pruebas-e2e] # TEMPORAL: validar el trabajo e2e antes de unir
+    branches: [main]
   pull_request:
 
 concurrency:

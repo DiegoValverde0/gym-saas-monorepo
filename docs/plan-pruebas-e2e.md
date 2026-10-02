@@ -56,7 +56,7 @@ Fuera de este plan quedan el portal del cliente, las clases, el modo kiosco y la
 | E4 | Límite de 100 pedidos por minuto | Configurable por variable · Apagarlo en pruebas | **Variable `THROTTLE_LIMIT`** (por defecto 100, como hoy) que solo las pruebas suben. **Es un cambio chico en la API**; en producción queda igual. |
 | E5 | Instructor de prueba | Agregarlo al seed · Crearlo en cada tanda | **Agregarlo al seed** (un instructor de Gym Titan, con clave en `seed.ts`, como las demás cuentas). Sirve también para mostrar el sistema. Cambia los datos de ejemplo, no las tablas. |
 | E6 | ¿Qué navegadores? | Solo Chromium · Chromium, Firefox y Safari (WebKit) | **Solo Chromium** por ahora: es lo que usan los gimnasios. Se suman los otros si hace falta. |
-| E7 | ¿Cuándo corren en el CI? | En cada cambio a main y en cada PR · Solo antes de unir | **En cada cambio a main y en cada PR,** en un trabajo aparte del CI de hoy, que sigue rápido (alrededor de 1 minuto). El nuevo tarda entre 6 y 8 minutos. |
+| E7 | ¿Cuándo corren en el CI? | En cada cambio a main y en cada PR · Solo antes de unir | **En cada cambio a main y en cada PR,** en un trabajo aparte del CI de hoy, que sigue rápido (alrededor de 1 minuto). El nuevo tarda unos 3 minutos (se estimaban entre 6 y 8). |
 
 ---
 
@@ -103,10 +103,12 @@ Rama sugerida: `pruebas-e2e`.
   - **Gastos:** los montos se mostraban con signo de dólar ("- $75.00") y el detalle escrito al registrar el gasto no aparecía en la lista. Ahora en bolivianos (`bs()`) y con el detalle bajo la categoría. Lo mismo en Promociones (descuento fijo).
   - **Nuevo reporte:** quien solo puede ver reportes (recepción) entraba por la dirección al constructor y la vista previa daba error. Ahora se le explica que su rol ve y exporta, pero no arma.
 
-### Fase 5: CI y documentación
+### Fase 5: CI y documentación (HECHA)
 - Un trabajo `e2e` en `ci.yml` con Postgres y Redis, que instala Chromium, migra, siembra, compila y corre las pruebas. Si falla, sube el reporte, los videos y las trazas.
 - `docs/pruebas-e2e.md`: cómo correrlas en local, cómo ver el reporte de un fallo y cómo agregar una prueba.
 - **Listo cuando:** el CI pasa en GitHub, y una prueba rota a propósito lo pone en rojo y deja el reporte para descargar.
+- Hecho así: trabajo `e2e` en `ci.yml` (Postgres 15 y Redis 7 como servicios, Chromium en caché, tipos de las pruebas, `pnpm e2e` y el artefacto `reporte-e2e` si falla) y `docs/pruebas-e2e.md`. En el CI, Playwright usa también el reporte `github`: cada prueba que falla queda marcada con su archivo y su línea. Acciones al día (`actions/cache@v6`, `actions/upload-artifact@v7`) para no usar Node 20.
+- Comprobado en GitHub (2026-10-02), con la rama agregada por un rato a los disparadores: con una prueba rota a propósito, rojo, solo esa marcada (27 pasaron) y el reporte guardado (2,5 MB); sin ella, verde en unos 3 minutos (corrida 37047468106).
 
 ---
 

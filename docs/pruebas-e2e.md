@@ -57,4 +57,4 @@ Todas las pruebas fallan además si la página tiene un error de JavaScript, si 
 
 ## En el CI
 
-El trabajo `e2e` de `.github/workflows/ci.yml` corre en cada cambio a `main` y en cada PR, aparte del trabajo `verificar`. Levanta Postgres y Redis como servicios, instala Chromium (queda en caché entre corridas), revisa los tipos de las pruebas y corre `pnpm e2e`. Tarda entre 6 y 8 minutos.
+El trabajo `e2e` de `.github/workflows/ci.yml` corre en cada cambio a `main` y en cada PR, aparte del trabajo `verificar`. Levanta Postgres y Redis como servicios, instala Chromium (queda en caché entre corridas), revisa los tipos de las pruebas y corre `pnpm e2e`. Tarda unos 3 minutos. Cada prueba que falla queda marcada con su archivo, su línea y el motivo en la corrida (y en el PR), y el reporte completo queda para descargar.
