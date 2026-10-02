@@ -199,6 +199,16 @@ export function menuVisible(ctx: ContextoMenu, grupos: GrupoMenu[] = GRUPOS_MENU
     .filter((grupo) => grupo.pantallas.length > 0);
 }
 
+// Barra inferior del celular (fase 4): lo de recepción a un toque. Inicio y
+// "Menú" van siempre; de estas, las que la persona puede usar.
+export const ACCESOS_CELULAR = ['/dashboard/asistencias', '/dashboard/clientes', '/dashboard/membresias'] as const;
+
+/** Las pantallas de la barra inferior, en su orden, entre las que esta persona ve. */
+export function accesosCelular(grupos: GrupoVisible[]): PantallaVisible[] {
+  const visibles = grupos.flatMap((g) => g.pantallas);
+  return ACCESOS_CELULAR.map((href) => visibles.find((p) => p.href === href)).filter((p): p is PantallaVisible => !!p);
+}
+
 /**
  * Si una pantalla del menú es la página actual (o una de sus subpáginas,
  * como /dashboard/reporteria/123). Inicio ('/dashboard') es prefijo de todo:

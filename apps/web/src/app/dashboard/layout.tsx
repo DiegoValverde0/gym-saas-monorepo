@@ -9,7 +9,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
-import { esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
+import { accesosCelular, esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
 import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -99,6 +99,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // En el celular, el menú se cierra al ir a otra pantalla.
   const [menuAbierto, setMenuAbierto] = useState(false);
   useEffect(() => setMenuAbierto(false), [pathname]);
+
+  // Barra inferior del celular (fase 4): Inicio, lo de recepción y "Menú".
+  // No va en la tablet de marcaje, que queda abierta en recepción para el equipo.
+  const accesos = useMemo(() => accesosCelular(filteredNavigationGroups), [filteredNavigationGroups]);
+  const conBarraInferior = !esCliente && !pathname.startsWith('/dashboard/marcaje');
+  // Avisa a lo que está fijo abajo (avisos, guías) para correrse hacia arriba (ver globals.css).
+  useEffect(() => {
+    if (!conBarraInferior) return;
+    document.documentElement.setAttribute('data-barra-inferior', '');
+    return () => document.documentElement.removeAttribute('data-barra-inferior');
+  }, [conBarraInferior]);
 
   // La pantalla actual siempre a la vista en el menú (el del dueño en experto
   // no entra entero en una pantalla baja).
@@ -333,7 +344,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8 print:overflow-visible print:bg-white print:p-0">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8 max-md:pb-[calc(1.5rem+var(--barra-inferior,0px))] print:overflow-visible print:bg-white print:p-0">
           <div className="mx-auto max-w-7xl h-full">
             {children}
           </div>
@@ -342,6 +353,41 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <Recorrido />
         </main>
       </div>
+
+      {conBarraInferior && (
+        <nav
+          aria-label="Accesos rápidos"
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:hidden print:hidden"
+        >
+          <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${accesos.length + 2}, minmax(0, 1fr))` }}>
+            {[{ href: INICIO.href, nombre: INICIO.nombre, icono: LayoutDashboard }, ...accesos].map((p) => {
+              const actual = p.href === INICIO.href ? pathname === INICIO.href : esPantallaActual(pathname, p.href);
+              return (
+                <Link
+                  key={p.href}
+                  href={p.href}
+                  aria-current={actual ? 'page' : undefined}
+                  className={`flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${
+                    actual ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  <p.icono className={`h-5 w-5 ${actual ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
+                  <span className="max-w-full truncate px-1">{p.nombre}</span>
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMenuAbierto(true)}
+              aria-label="Abrir el menú completo"
+              className="flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400"
+            >
+              <Menu className="h-5 w-5" />
+              <span>Menú</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

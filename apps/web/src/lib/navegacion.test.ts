@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModulosConfig } from '@/hooks/use-modulos-activos';
 import type { ModoUso } from '@/hooks/use-modo-uso';
-import { ContextoMenu, esPantallaActual, GRUPOS_MENU, menuVisible } from './navegacion';
+import { accesosCelular, ContextoMenu, esPantallaActual, GRUPOS_MENU, menuVisible } from './navegacion';
 
 // Permisos de los roles base (packages/database/prisma/base.ts), solo los que usa el menú.
 const DUENO = [...new Set(GRUPOS_MENU.flatMap((g) => g.pantallas.map((p) => p.permiso)).filter(Boolean) as string[]), 'turnos:leer', 'clases:leer'];
@@ -75,6 +75,14 @@ describe('menú lateral', () => {
     expect(nombres(ctx(DUENO, 'experto', { controlAcceso: false }))).not.toContain('Asistencias');
     for (const p of ['Caja', 'Productos', 'Movimientos']) expect(nombres(ctx(DUENO, 'experto', { puntoVenta: false }))).not.toContain(p);
     expect(menuVisible(ctx(DUENO, 'experto', { controlPersonal: false })).map((g) => g.titulo)).not.toContain('Equipo');
+  });
+
+  it('barra del celular: Asistencias, Clientes y Membresías, solo si se pueden usar', () => {
+    const barra = (c: ContextoMenu) => accesosCelular(menuVisible(c)).map((p) => p.nombre);
+    expect(barra(ctx(RECEPCION, 'intermedio'))).toEqual(['Asistencias', 'Clientes', 'Membresías']);
+    // El instructor no ve membresías; sin control de acceso no hay Asistencias.
+    expect(barra(ctx(INSTRUCTOR, 'intermedio'))).toEqual(['Asistencias', 'Clientes']);
+    expect(barra(ctx(DUENO, 'experto', { controlAcceso: false }))).toEqual(['Clientes', 'Membresías']);
   });
 
   it('cada ruta aparece una sola vez en todo el menú', () => {

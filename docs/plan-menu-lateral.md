@@ -121,10 +121,11 @@ Rama sugerida: `menu-lateral`.
 - **Listo cuando:** la paleta tiene lo mismo que el menú de cada persona.
 - Hecho así: menú de 64 px con íconos (nombre al pasar el mouse), recordado en `gym_menu_compacto:<usuario>`; se anima solo al apretar el botón. Acciones de la paleta: Nuevo cliente (abre el formulario de Clientes con `?nuevo=1` o, si ya está ahí, con el evento `gym:nuevo-cliente`), Vender membresía, Vender producto, Registrar gasto y Cerrar el día (los mismos formularios del Inicio) y Registrar ingreso (lleva a Asistencias). El superadmin sin gimnasio elegido no ve acciones.
 
-### Fase 4: celular
+### Fase 4: celular (HECHA)
 - Barra inferior (M4) con Inicio, Asistencias, Clientes, Membresías y "Menú", que abre el sidebar completo. Solo aparece en pantallas chicas, y cada acceso solo si la persona lo puede usar.
 - Revisar que ninguna pantalla quede tapada por la barra (márgenes inferiores, botones fijos, modo kiosco y tablet de marcaje, que no deben mostrarla).
 - **Listo cuando:** en 390 px se llega a todo, no hay desbordes y la barra no tapa nada.
+- Hecho así: `ACCESOS_CELULAR` y `accesosCelular()` en lib/navegacion.ts (con prueba). Mientras se ve la barra, `<html data-barra-inferior>` define `--barra-inferior` (solo por debajo de 48rem, en globals.css) y la usan el contenido (espacio abajo), los avisos (toast) y la tarjeta de los recorridos. El modo kiosco (/kiosco) está fuera del panel y no la tiene; la tablet de marcaje la oculta.
 
 ### Fase 5: recorrido completo y cierre
 - Recorrido en el navegador con dueño (simple, intermedio y experto), recepción e instructor; claro y oscuro; escritorio, tablet y celular.
