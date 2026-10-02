@@ -176,11 +176,18 @@ Rama sugerida: `inicio`.
   - Mirado en el navegador con un gimnasio recién creado (tipo box, con clases), en claro y oscuro, y con el de datos grandes.
   - e2e: las frases del dueño se ven, el instructor no recibe las del dinero ni botones a la reportería; un gimnasio sin datos (simulado cambiando `conDatos`) ve ejemplos, los oculta y los vuelve a mostrar; con datos no hay ejemplos. 34 pruebas.
 
-### Fase 5: pulido y cierre
+### Fase 5: pulido y cierre (HECHA)
 - Recorrido en el navegador: dueño, recepción e instructor; los tres modos; claro y oscuro; celular.
 - Pruebas e2e del Inicio (personalizar, permisos, rangos).
 - La guía de 3 pasos del modo simple adaptada.
 - Documentación.
+- Hecho así:
+  - Modo simple (decisión I7): el mismo Inicio, con las acciones rápidas arriba de todo. Los indicadores con comparación reemplazan el resumen que tenía (`resumen-hoy.tsx`, que se borró), y "Por vencer" pasa a ser la tarjeta del tablero. Al personalizar no se eligen tamaños (se acomodan solos, sin huecos) y la galería no trae reportes guardados (la API solo lista plantillas en modo simple).
+  - La guía de 3 pasos resalta los indicadores, las acciones rápidas y la tarjeta de vencimientos; su primer texto habla de la comparación con el mes pasado.
+  - Recorrido con Playwright sobre los datos grandes: 3 roles × 3 modos × claro y oscuro × escritorio y celular (36 vistas). Ninguna se sale a lo ancho, y cada rol ve lo suyo: el dueño 9 tarjetas y 4 frases, recepción 6 y 4 (sin las del dinero), el instructor 1 y 3 (sin ingresos). En el celular se corrigieron la leyenda del estado de los clientes (iba en dos columnas y no entraba) y las listas cortas (el nombre se cortaba).
+  - Fuera del Inicio: el instructor recibe un 403 al pedir `/sucursales` desde el selector de sucursal del encabezado (`use-sucursal-activa.ts`), que lo pide sin mirar el permiso. No se tocó aquí.
+  - e2e: el modo simple (la guía de 3 pasos sobre lo que resalta, las acciones primero, personalizar sin tamaños) y el celular (nada se sale a lo ancho, las tarjetas una debajo de otra). 36 pruebas.
+  - Documentación: [inicio.md](inicio.md) (cómo funciona y cómo agregar una tarjeta o una frase) y la lista de [pruebas-e2e.md](pruebas-e2e.md).
 
 ---
 

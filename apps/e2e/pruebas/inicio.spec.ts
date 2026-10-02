@@ -153,6 +153,74 @@ test.describe('personalizar', () => {
   });
 });
 
+test.describe('en el celular', () => {
+  test.use({ storageState: sesion('dueno'), viewport: { width: 390, height: 844 } });
+
+  test('nada se sale a lo ancho y las tarjetas van una debajo de otra', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page.locator('[data-tarjeta="estado-clientes"]')).toBeVisible();
+    // Lo que se sale de la pantalla, sin contar lo que está dentro de algo que se desliza (el mapa de calor).
+    const salidos = await page.locator('main').evaluate((main) => {
+      const ancho = window.innerWidth;
+      const deslizable = (el: Element) => {
+        for (let p = el.parentElement; p; p = p.parentElement) {
+          if (['auto', 'scroll', 'hidden'].includes(getComputedStyle(p).overflowX) && p.scrollWidth > p.clientWidth + 1) return true;
+        }
+        return false;
+      };
+      return [...main.querySelectorAll('*')].filter((el) => el.getBoundingClientRect().right > ancho + 1 && !deslizable(el)).length;
+    });
+    expect(salidos).toBe(0);
+    const anchos = await page.locator('[data-tarjeta]').evaluateAll((s) => s.map((x) => Math.round(x.getBoundingClientRect().width)));
+    expect(new Set(anchos).size).toBe(1);
+    // La leyenda del estado de los clientes, en una columna (en dos no entraba).
+    const leyenda = page.locator('[data-tarjeta="estado-clientes"] ul > li');
+    const izquierdas = await leyenda.evaluateAll((li) => li.map((x) => Math.round(x.getBoundingClientRect().left)));
+    expect(new Set(izquierdas).size).toBe(1);
+  });
+});
+
+test.describe('modo simple', () => {
+  test.use({ storageState: sesion('dueno') });
+
+  test('las acciones arriba, la guía de 3 pasos sobre el tablero, y personalizar sin tamaños', async ({ page, playwright }) => {
+    await configurarGimnasio(playwright, { modoUso: 'simple' });
+    try {
+      await page.goto('/dashboard');
+      // La guía resalta, en orden, los indicadores, las acciones y los vencimientos.
+      const guia = page.getByRole('dialog', { name: /Guía de la pantalla/ });
+      for (const [titulo, marca] of [
+        ['Lo que pasa hoy', 'resumen'],
+        ['Lo que más haces, a un toque', 'acciones'],
+        ['Quién está por vencer', 'por-vencer'],
+      ]) {
+        await expect(guia).toContainText(titulo);
+        await expect(page.locator(`[data-recorrido="${marca}"]`)).toHaveClass(/ring-indigo-500/);
+        await guia.getByRole('button', { name: /Siguiente|Entendido/ }).click();
+      }
+      await expect(guia).toBeHidden();
+
+      // Las acciones rápidas, antes que los indicadores.
+      const orden = await page.locator('[data-recorrido]').evaluateAll((e) => e.map((x) => x.getAttribute('data-recorrido')));
+      expect(orden.slice(0, 2)).toEqual(['acciones', 'resumen']);
+      await expect(page.getByRole('region', { name: 'Ingresos del mes' })).toBeVisible();
+      await expect(page.locator('[data-tarjeta="por-vencer"]')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Personalizar el Inicio' }).click();
+      await expect(page.getByLabel(/^Tamaño de /)).toHaveCount(0);
+      await page.getByRole('button', { name: 'Agregar tarjeta' }).click();
+      const galeria = page.getByRole('dialog', { name: 'Agregar una tarjeta' });
+      await expect(galeria.getByRole('option').first()).toBeVisible();
+      await expect(galeria.getByText('Tus reportes')).toHaveCount(0);
+      await expect(galeria.getByText('Tamaño')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Cancelar' }).click();
+    } finally {
+      await configurarGimnasio(playwright, { modoUso: 'intermedio' });
+    }
+  });
+});
+
 test.describe('instructor', () => {
   test.use({ storageState: sesion('instructor') });
 

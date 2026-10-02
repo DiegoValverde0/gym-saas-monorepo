@@ -58,6 +58,7 @@ export function GaleriaTarjetas({
   lleno,
   onAgregar,
   vistaPrevia,
+  conTamano = true,
 }: {
   abierta: boolean;
   onCerrar: () => void;
@@ -69,6 +70,8 @@ export function GaleriaTarjetas({
   onAgregar: (t: TarjetaTablero) => void;
   /** La tarjeta tal como se va a ver (la arma el tablero). */
   vistaPrevia: (t: TarjetaTablero) => React.ReactNode;
+  /** En modo simple no se elige el tamaño. */
+  conTamano?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [elegidaId, setElegidaId] = useState<string | null>(null);
@@ -152,16 +155,18 @@ export function GaleriaTarjetas({
                   <div key={elegida.id}>{vistaPrevia({ id: elegida.id, tamano: tamanoElegido })}</div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    Tamaño
-                    <select className={claseSelector} value={tamanoElegido} onChange={(e) => setTamano(e.target.value as TamanoTarjeta)}>
-                      {(Object.keys(NOMBRE_TAMANO) as TamanoTarjeta[]).map((t) => (
-                        <option key={t} value={t}>
-                          {NOMBRE_TAMANO[t]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {conTamano && (
+                    <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      Tamaño
+                      <select className={claseSelector} value={tamanoElegido} onChange={(e) => setTamano(e.target.value as TamanoTarjeta)}>
+                        {(Object.keys(NOMBRE_TAMANO) as TamanoTarjeta[]).map((t) => (
+                          <option key={t} value={t}>
+                            {NOMBRE_TAMANO[t]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <button
                     type="button"
                     disabled={yaEsta || lleno}

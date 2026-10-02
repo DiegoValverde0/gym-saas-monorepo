@@ -12,8 +12,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useToast } from '@/hooks/use-toast';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { useTenantStore } from '@/store/use-tenant-store';
-import { CLASE_TAMANO, disenoSugerido, MAX_TARJETAS, NOMBRE_TAMANO, RANGOS_TARJETA, TamanoTarjeta, TARJETAS_PROPIAS, TarjetaTablero } from '@/lib/tablero';
+import { CLASE_TAMANO, disenoSugerido, emparejar, MAX_TARJETAS, NOMBRE_TAMANO, RANGOS_TARJETA, TamanoTarjeta, TARJETAS_PROPIAS, TarjetaTablero } from '@/lib/tablero';
 import { PorVencer } from '@/components/ui/por-vencer';
 import { GaleriaTarjetas, opcionesGaleria } from './galeria';
 import { MarcaEjemplo, useEsEjemplo } from './ejemplos';
@@ -40,7 +41,8 @@ function ListaCorta({ resultado }: { resultado: Resultado }) {
       {(resultado.filas ?? []).slice(0, 6).map((f, i) => (
         <li key={i} className="flex items-baseline justify-between gap-3 py-2">
           <span className="min-w-0 truncate font-medium text-slate-900 dark:text-white">{formatearValor(f[columnas[0].clave], columnas[0].tipo, columnas[0].opciones)}</span>
-          <span className="shrink-0 truncate text-xs text-slate-500 dark:text-slate-400">
+          {/* Hasta la mitad del ancho: en el celular, el nombre no se corta. */}
+          <span className="min-w-0 max-w-[50%] truncate text-right text-xs text-slate-500 dark:text-slate-400">
             {columnas
               .slice(1)
               .map((c) => formatearValor(f[c.clave], c.tipo, c.opciones))
@@ -164,7 +166,7 @@ function TarjetaEstadoClientes() {
                 <div key={g.nombre} className={`${g.clase} h-full first:rounded-l-md last:rounded-r-md`} style={{ width: `${(g.cantidad / total) * 100}%` }} title={`${g.nombre}: ${g.cantidad}`} />
               ))}
           </div>
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
             {grupos.map((g) => (
               <li key={g.nombre} className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${g.clase}`} aria-hidden />
@@ -229,6 +231,7 @@ function TarjetaEditable({
   primera,
   ultima,
   conPeriodo,
+  conTamano,
   onCambiar,
   onMover,
   onQuitar,
@@ -239,6 +242,8 @@ function TarjetaEditable({
   primera: boolean;
   ultima: boolean;
   conPeriodo: boolean;
+  /** En modo simple no se eligen tamaños: se acomodan solos. */
+  conTamano: boolean;
   onCambiar: (cambios: Partial<TarjetaTablero>) => void;
   onMover: (paso: -1 | 1) => void;
   onQuitar: () => void;
@@ -271,13 +276,15 @@ function TarjetaEditable({
         <button type="button" className={claseBotonIcono} disabled={ultima} onClick={() => onMover(1)} aria-label={`Mover después: ${nombre}`} title="Mover después">
           <ArrowDown className="h-4 w-4" aria-hidden />
         </button>
-        <select aria-label={`Tamaño de ${nombre}`} className={claseSelector} value={t.tamano} onChange={(e) => onCambiar({ tamano: e.target.value as TamanoTarjeta })}>
-          {(Object.keys(NOMBRE_TAMANO) as TamanoTarjeta[]).map((x) => (
-            <option key={x} value={x}>
-              {NOMBRE_TAMANO[x]}
-            </option>
-          ))}
-        </select>
+        {conTamano && (
+          <select aria-label={`Tamaño de ${nombre}`} className={claseSelector} value={t.tamano} onChange={(e) => onCambiar({ tamano: e.target.value as TamanoTarjeta })}>
+            {(Object.keys(NOMBRE_TAMANO) as TamanoTarjeta[]).map((x) => (
+              <option key={x} value={x}>
+                {NOMBRE_TAMANO[x]}
+              </option>
+            ))}
+          </select>
+        )}
         {conPeriodo && (
           <select aria-label={`Período de ${nombre}`} className={claseSelector} value={t.rango ?? ''} onChange={(e) => onCambiar({ rango: (e.target.value || undefined) as RangoFecha | undefined })}>
             <option value="">El del reporte</option>
@@ -307,6 +314,8 @@ export function Tablero() {
   const queryClient = useQueryClient();
   const { contenido, nombre, reportes, hasPermission, esReporte } = useContenido();
   const puedePersonalizar = hasPermission('organizaciones:actualizar');
+  // Modo simple (decisión I7): el mismo tablero, sin tamaños ni reportes guardados.
+  const { esSimple } = useModoUso();
   const { data: org } = useQuery({
     queryKey: ['organizacion'],
     queryFn: () => apiGet<{ configuracion?: { tablero?: { tarjetas?: TarjetaTablero[] | null }; onboarding?: { tipoGimnasio?: string } } | null }>('/organizaciones/me/info'),
@@ -382,7 +391,7 @@ export function Tablero() {
           </button>
           <button
             type="button"
-            onClick={() => guardar.mutate(restablecido ? null : edicion)}
+            onClick={() => guardar.mutate(restablecido ? null : esSimple ? emparejar(edicion) : edicion)}
             disabled={guardar.isPending}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
           >
@@ -407,6 +416,7 @@ export function Tablero() {
                     primera={i === 0}
                     ultima={i === edicion.length - 1}
                     conPeriodo={esReporte(t)}
+                    conTamano={!esSimple}
                     onCambiar={(c) => cambiar(edicion.map((x) => (x.id === t.id ? { ...x, ...c } : x)))}
                     onMover={(paso) => cambiar(arrayMove(edicion, i, i + paso))}
                     onQuitar={() => cambiar(edicion.filter((x) => x.id !== t.id))}
@@ -429,15 +439,19 @@ export function Tablero() {
             toast({ title: 'Tarjeta agregada', description: 'Quedó al final. Guarda para que se quede.', variant: 'success' });
           }}
           vistaPrevia={(t) => contenido(t)}
+          conTamano={!esSimple}
         />
       </div>
     );
   }
 
-  const visibles = guardadas.flatMap((t) => {
+  const conContenido = guardadas.flatMap((t) => {
     const c = contenido(t);
     return c ? [{ t, contenido: c }] : [];
   });
+  // En modo simple los tamaños se acomodan solos (sin huecos entre las que se ven).
+  const tamanos = esSimple ? emparejar(conContenido.map((x) => x.t)) : conContenido.map((x) => x.t);
+  const visibles = conContenido.map((x, i) => ({ ...x, t: tamanos[i] }));
   if (visibles.length === 0 && !puedePersonalizar) return null;
 
   return (
@@ -458,7 +472,8 @@ export function Tablero() {
       )}
       <div className="grid grid-cols-6 gap-4">
         {visibles.map(({ t, contenido }) => (
-          <section key={t.id} data-tarjeta={t.id} className={`${claseTarjeta} ${CLASE_TAMANO[t.tamano]}`}>
+          // data-recorrido: el paso "Quién está por vencer" de la guía del modo simple.
+          <section key={t.id} data-tarjeta={t.id} data-recorrido={t.id === 'por-vencer' ? 'por-vencer' : undefined} className={`${claseTarjeta} ${CLASE_TAMANO[t.tamano]}`}>
             {contenido}
           </section>
         ))}

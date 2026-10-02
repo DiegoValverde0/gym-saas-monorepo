@@ -20,7 +20,7 @@ interface Paso { titulo: string; texto: string; objetivo?: () => Element | null 
 // recorrido de 3 pasos que se puede saltar.
 const RECORRIDOS: Record<string, Paso[]> = {
   '/dashboard': [
-    { titulo: 'Lo que pasa hoy', texto: 'Aquí ves cuánto cobraste hoy, cuántos clientes entraron y cómo va el mes.', objetivo: marca('resumen') },
+    { titulo: 'Lo que pasa hoy', texto: 'Cuánto cobraste hoy y en el mes, comparado con el mes pasado, y cuántos clientes entraron.', objetivo: marca('resumen') },
     { titulo: 'Lo que más haces, a un toque', texto: 'Vender una membresía, registrar un ingreso, anotar un gasto y cerrar el día.', objetivo: marca('acciones') },
     { titulo: 'Quién está por vencer', texto: 'Los clientes cuya membresía vence esta semana. Con "Avisar" les escribes por WhatsApp.', objetivo: marca('por-vencer') },
   ],
