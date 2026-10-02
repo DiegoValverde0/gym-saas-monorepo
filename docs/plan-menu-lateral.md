@@ -114,11 +114,12 @@ Rama sugerida: `menu-lateral`.
 - **Listo cuando:** dueño, recepción e instructor ven su menú, en los tres modos, en claro y oscuro, y cada pantalla queda a un clic.
 - Además: la paleta de comandos se caía al abrirse (a `CommandDialog` le faltaba la raíz `Command` de cmdk; pasaba también con Ctrl+K). El sidebar ya no se vuelve a montar en cada render: conserva su scroll y trae a la vista la pantalla actual.
 
-### Fase 3: sidebar achicable y paleta de comandos
+### Fase 3: sidebar achicable y paleta de comandos (HECHA)
 - Botón para achicar el sidebar a íconos, con el nombre al pasar el mouse. Se recuerda por persona en el navegador.
 - La paleta de comandos lee la misma definición: tiene todas las pantallas, respeta permisos, módulos y modo, y busca también por nombres viejos ("transacciones", "control de acceso", "roles") para quien ya los conoce.
 - Acciones rápidas en la paleta ("Nuevo cliente", "Vender membresía", "Registrar ingreso", "Registrar gasto"). En esta fase se revisa cuáles pueden abrir el formulario directo y cuáles llevan a la página.
 - **Listo cuando:** la paleta tiene lo mismo que el menú de cada persona.
+- Hecho así: menú de 64 px con íconos (nombre al pasar el mouse), recordado en `gym_menu_compacto:<usuario>`; se anima solo al apretar el botón. Acciones de la paleta: Nuevo cliente (abre el formulario de Clientes con `?nuevo=1` o, si ya está ahí, con el evento `gym:nuevo-cliente`), Vender membresía, Vender producto, Registrar gasto y Cerrar el día (los mismos formularios del Inicio) y Registrar ingreso (lleva a Asistencias). El superadmin sin gimnasio elegido no ve acciones.
 
 ### Fase 4: celular
 - Barra inferior (M4) con Inicio, Asistencias, Clientes, Membresías y "Menú", que abre el sidebar completo. Solo aparece en pantallas chicas, y cada acceso solo si la persona lo puede usar.

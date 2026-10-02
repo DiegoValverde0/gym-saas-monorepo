@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
 import { esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
-import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb, Search } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -25,35 +25,39 @@ import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
 type Icono = React.ComponentType<{ className?: string }>;
 
-// Un enlace del menú. La pantalla actual se marca aquí y solo aquí.
-function Enlace({ href, nombre, icono: Icono, actual }: { href: string; nombre: string; icono: Icono; actual: boolean }) {
+// Un enlace del menú. La pantalla actual se marca aquí y solo aquí. Con el
+// menú achicado solo se ve el ícono y el nombre aparece al pasar el mouse.
+function Enlace({ href, nombre, icono: Icono, actual, compacto = false }: { href: string; nombre: string; icono: Icono; actual: boolean; compacto?: boolean }) {
   return (
     <Link
       href={href}
       aria-current={actual ? 'page' : undefined}
-      className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+      title={compacto ? nombre : undefined}
+      className={`flex items-center gap-3 rounded-lg py-1.5 text-sm font-medium transition-colors ${compacto ? 'justify-center px-0' : 'px-3'} ${
         actual
           ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
       }`}
     >
       <Icono className={`h-4 w-4 shrink-0 ${actual ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-      <span className="truncate">{nombre}</span>
+      <span className={compacto ? 'sr-only' : 'truncate'}>{nombre}</span>
     </Link>
   );
 }
 
 // Un grupo del menú: título (no se clica) y todas sus pantallas a la vista.
-function Grupo({ grupo, pathname }: { grupo: GrupoVisible; pathname: string }) {
+// Achicado, el título se cambia por una línea (y queda para los lectores de pantalla).
+function Grupo({ grupo, pathname, compacto = false }: { grupo: GrupoVisible; pathname: string; compacto?: boolean }) {
   const id = `menu-${grupo.titulo.toLowerCase().replace(/[^a-z]+/g, '-')}`;
   return (
-    <div role="group" aria-labelledby={id} className="pt-4">
-      <p id={id} className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+    <div role="group" aria-labelledby={id} className={compacto ? 'pt-2' : 'pt-4'}>
+      {compacto && <div className="mx-2 mb-2 border-t border-slate-200 dark:border-slate-800" />}
+      <p id={id} className={compacto ? 'sr-only' : 'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500'}>
         {grupo.titulo}
       </p>
       <div className="space-y-0.5">
         {grupo.pantallas.map((p) => (
-          <Enlace key={p.href} href={p.href} nombre={p.nombre} icono={p.icono} actual={esPantallaActual(pathname, p.href)} />
+          <Enlace key={p.href} href={p.href} nombre={p.nombre} icono={p.icono} actual={esPantallaActual(pathname, p.href)} compacto={compacto} />
         ))}
       </div>
     </div>
@@ -102,6 +106,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     document.querySelector('nav[aria-label="Menú principal"] [aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
   }, [pathname]);
 
+  // Menú achicado a íconos (escritorio): se recuerda para cada persona en este navegador.
+  const claveCompacto = userData?.sub ? `gym_menu_compacto:${userData.sub}` : null;
+  const [compacto, setCompacto] = useState(false);
+  // Se anima solo al apretar el botón, no al cargar la preferencia guardada.
+  const [animar, setAnimar] = useState(false);
+  useEffect(() => {
+    if (!claveCompacto) return;
+    try {
+      setCompacto(localStorage.getItem(claveCompacto) === '1');
+    } catch {
+      // Sin almacenamiento (ventana privada): queda abierto.
+    }
+  }, [claveCompacto]);
+  const alternarCompacto = () => {
+    setAnimar(true);
+    setCompacto((antes) => {
+      try {
+        if (claveCompacto) localStorage.setItem(claveCompacto, antes ? '0' : '1');
+      } catch {
+        // Sin almacenamiento: vale solo para esta visita.
+      }
+      return !antes;
+    });
+  };
+
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setActiveTenantId(val === 'all' ? null : val);
@@ -109,44 +138,61 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  // Un elemento, no un componente: así no se vuelve a montar en cada render
-  // y el menú conserva su scroll al cambiar de pantalla.
-  const contenidoSidebar = (
+  // Se llama como función y no como componente (<Sidebar />): así no se
+  // vuelve a montar en cada render y el menú conserva su scroll.
+  const sidebar = (achicado: boolean, escritorio: boolean) => (
     <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-      <div className="flex h-16 shrink-0 items-center px-6">
+      <div className={`flex h-16 shrink-0 items-center ${achicado ? 'justify-center' : 'px-6'}`}>
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-1.5 rounded-lg shadow-sm">
             <Dumbbell className="h-5 w-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-            Gym<span className="text-indigo-600 dark:text-indigo-400 font-normal">Manager</span>
-          </span>
+          {!achicado && (
+            <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+              Gym<span className="text-indigo-600 dark:text-indigo-400 font-normal">Manager</span>
+            </span>
+          )}
         </div>
       </div>
 
       {/* Menú (docs/plan-menu-lateral.md): todos los grupos abiertos, lo de
           todos los días arriba y Ajustes al fondo. */}
-      <nav aria-label="Menú principal" className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
-        <Enlace href={INICIO.href} nombre={INICIO.nombre} icono={LayoutDashboard} actual={pathname === INICIO.href} />
+      <nav aria-label="Menú principal" className={`flex flex-1 flex-col overflow-y-auto pb-4 ${achicado ? 'px-2' : 'px-3'}`}>
+        <Enlace href={INICIO.href} nombre={INICIO.nombre} icono={LayoutDashboard} actual={pathname === INICIO.href} compacto={achicado} />
         {isSuperAdmin && (
           <div className="pt-4">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Sistema</p>
-            <Enlace href="/dashboard/organizaciones" nombre="Organizaciones" icono={Globe} actual={pathname === '/dashboard/organizaciones'} />
+            <p className={achicado ? 'sr-only' : 'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500'}>Sistema</p>
+            <Enlace href="/dashboard/organizaciones" nombre="Organizaciones" icono={Globe} actual={pathname === '/dashboard/organizaciones'} compacto={achicado} />
           </div>
         )}
         {gruposArriba.map((grupo) => (
-          <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} />
+          <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} compacto={achicado} />
         ))}
         {gruposAlFondo.length > 0 && (
           <div className="mt-auto pt-4">
-            <div className="border-t border-slate-200 dark:border-slate-800">
+            <div className={achicado ? '' : 'border-t border-slate-200 dark:border-slate-800'}>
               {gruposAlFondo.map((grupo) => (
-                <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} />
+                <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} compacto={achicado} />
               ))}
             </div>
           </div>
         )}
       </nav>
+
+      {escritorio && (
+        <div className={`shrink-0 border-t border-slate-200 p-2 dark:border-slate-800 ${achicado ? 'flex justify-center' : ''}`}>
+          <button
+            type="button"
+            onClick={alternarCompacto}
+            title={achicado ? 'Agrandar el menú' : undefined}
+            aria-label={achicado ? 'Agrandar el menú' : 'Achicar el menú'}
+            className={`flex items-center gap-3 rounded-lg py-1.5 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white ${achicado ? 'px-2' : 'w-full px-3'}`}
+          >
+            {achicado ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {!achicado && 'Achicar el menú'}
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -157,11 +203,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900 print:block print:h-auto print:bg-white">
       {/* Sidebar Desktop */}
-      <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden">
-        {contenidoSidebar}
+      <div className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden ${animar ? 'transition-[width]' : ''} ${compacto ? 'md:w-[64px]' : 'md:w-[240px]'}`}>
+        {sidebar(compacto, true)}
       </div>
 
-      <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0">
+      <div className={`flex flex-col flex-1 h-full ${animar ? 'transition-[padding]' : ''} ${compacto ? 'md:pl-[64px]' : 'md:pl-[240px]'} overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0`}>
         {/* Top App Bar */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs print:hidden">
           <div className="flex items-center gap-4 flex-1">
@@ -172,7 +218,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-[260px]">
-                {contenidoSidebar}
+                {sidebar(false, false)}
               </SheetContent>
             </Sheet>
 
