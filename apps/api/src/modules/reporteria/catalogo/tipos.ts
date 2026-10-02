@@ -32,6 +32,35 @@ export interface ColumnaCatalogo {
   agrupable?: boolean;
   /** Ayuda corta para el panel de columnas. */
   ayuda?: string;
+  /** Orden de los grupos cuando no es el alfabético (tramos de un grupo personalizado). */
+  orden?: ExpresionSql;
+}
+
+/** Contexto de un filtro "con / sin": la zona horaria y las fechas del gimnasio como instantes. */
+export interface ContextoCruzado extends ContextoSql {
+  inicioDelDia: (fecha: string) => Date;
+}
+
+/**
+ * Filtro "con / sin" (Salesforce: cross filter): "clientes CON asistencias en
+ * los últimos 30 días", "clientes SIN membresía activa". `existe` devuelve un
+ * EXISTS (...) correlacionado con la fila; desde/hasta son fechas locales
+ * ("hasta" excluido) cuando el filtro usa un rango.
+ */
+export interface CruzadoCatalogo {
+  clave: string;
+  /** "asistencias", "membresía activa"... (se lee "con ..." / "sin ..."). */
+  nombre: string;
+  conRango: boolean;
+  existe: (ctx: ContextoCruzado, desde?: string, hasta?: string) => Prisma.Sql;
+}
+
+/** Condición de rango sobre una columna con hora (timestamptz), en fechas del gimnasio. */
+export function entreFechas(columna: string, ctx: ContextoCruzado, desde?: string, hasta?: string): Prisma.Sql {
+  const partes: Prisma.Sql[] = [];
+  if (desde) partes.push(Prisma.sql` AND ${Prisma.raw(columna)} >= ${ctx.inicioDelDia(desde)}`);
+  if (hasta) partes.push(Prisma.sql` AND ${Prisma.raw(columna)} < ${ctx.inicioDelDia(hasta)}`);
+  return partes.length ? Prisma.join(partes, '') : Prisma.empty;
 }
 
 export interface RelacionCatalogo {
@@ -70,6 +99,8 @@ export interface TipoReporte {
   columnas: ColumnaCatalogo[];
   /** Columnas que se proponen al crear un reporte nuevo. */
   columnasIniciales: string[];
+  /** Filtros "con / sin" disponibles (modo experto). */
+  cruzados?: CruzadoCatalogo[];
 }
 
 // Nombres legibles compartidos entre tipos.

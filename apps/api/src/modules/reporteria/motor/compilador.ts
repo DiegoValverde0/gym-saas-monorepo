@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { ColumnaCatalogo, ContextoSql, ExpresionSql, TipoReporte } from '../catalogo';
-import { Definicion, FiltroCampo, FuncionTotal, Granularidad } from './definicion';
+import { Agrupacion, Definicion, FiltroCampo, FuncionTotal, Granularidad } from './definicion';
 import { diaSiguiente, rangoDeFechas } from './fechas';
+import { analizarLogica, sqlDeLogica, tipoConGrupos } from './avanzado';
 
 // Compilador de reportes (docs/plan-reporteria.md, sección 3.2): definición
 // validada -> SQL parametrizado. Reglas:
@@ -35,6 +36,8 @@ export interface ReporteCompilado {
     columnas: { clave: string; alias: string }[];
     grupos: { clave: string; alias: string; granularidad?: Granularidad }[];
     totales: { clave: string; funcion: FuncionTotal; alias: string }[];
+    /** Tabla cruzada: lo que va en las columnas (alias "gc"). */
+    columnaCruzada?: { clave: string; alias: string; granularidad?: Granularidad };
   };
   /** Filas de detalle, paginadas (null si el reporte agrupado oculta el detalle). */
   filas: ((pagina: number, porPagina: number) => Prisma.Sql) | null;
@@ -123,7 +126,9 @@ function condicionDeFiltro(columna: ColumnaCatalogo, f: FiltroCampo, ctx: Contex
   throw new Error(`Operador sin traducir: ${f.operador}`);
 }
 
-export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: ContextoEjecucion): ReporteCompilado {
+export function compilarReporte(tipoBase: TipoReporte, def: Definicion, ctx: ContextoEjecucion): ReporteCompilado {
+  // Los grupos personalizados son columnas más (con su CASE y su orden).
+  const tipo = tipoConGrupos(tipoBase, def.gruposPersonalizados);
   const col = (clave: string) => tipo.columnas.find((c) => c.clave === clave)!;
   const a = tipo.tabla.alias;
 
@@ -133,6 +138,7 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
   const clavesUsadas = new Set([
     ...def.columnas,
     ...def.agrupaciones.map((g) => g.columna),
+    ...(def.columnaCruzada ? [def.columnaCruzada.columna] : []),
     ...def.totales.map((t) => t.columna),
     ...def.filtros.campos.map((f) => f.columna),
     def.filtros.fecha.columna,
@@ -181,7 +187,18 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
   if (rangoLocal.desde) where.push(Prisma.sql`${eFecha} >= ${limiteFecha(rangoLocal.desde)}`);
   if (rangoLocal.hasta) where.push(Prisma.sql`${eFecha} < ${limiteFecha(rangoLocal.hasta)}`);
 
-  def.filtros.campos.forEach((f) => where.push(condicionDeFiltro(col(f.columna), f, ctx)));
+  // Filtros por columna: todos a la vez, o combinados con la lógica ("1 Y (2 O 3)").
+  const condiciones = def.filtros.campos.map((f) => condicionDeFiltro(col(f.columna), f, ctx));
+  if (def.filtros.logica) where.push(sqlDeLogica(analizarLogica(def.filtros.logica, condiciones.length).arbol, condiciones));
+  else where.push(...condiciones);
+
+  // Filtros "con / sin": EXISTS correlacionado (definido en el catálogo).
+  for (const x of def.filtros.cruzados) {
+    const cruzado = tipoBase.cruzados!.find((c) => c.clave === x.clave)!;
+    const limites = cruzado.conRango ? rangoDeFechas(x.rango ?? 'todo', ctx.hoy) : {};
+    const existe = cruzado.existe(ctx, limites.desde, limites.hasta);
+    where.push(x.modo === 'sin' ? Prisma.sql`NOT ${existe}` : existe);
+  }
 
   // ---- Subconsulta con cada expresión una sola vez, con alias propios.
   const select: Prisma.Sql[] = [];
@@ -190,7 +207,10 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
     select.push(Prisma.sql`${expresion(col(clave).sql, ctx)} AS ${Prisma.raw(`c${i}`)}`);
     mapa.columnas.push({ clave, alias: `c${i}` });
   });
-  def.agrupaciones.forEach((g, i) => {
+  // Un grupo: su expresión (por día/semana/mes/año si es fecha) y, si tiene
+  // un orden propio (tramos de un grupo personalizado), "o..." para ordenar.
+  const conOrden = new Set<string>();
+  const agrupar = (g: Agrupacion, alias: string) => {
     const c = col(g.columna);
     const e = expresion(c.sql, ctx);
     let agrupada = e;
@@ -201,9 +221,23 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
           ? Prisma.sql`date_trunc(${trunc}, (${e} AT TIME ZONE ${ctx.zonaHoraria}))::date`
           : Prisma.sql`date_trunc(${trunc}, (${e})::timestamp)::date`;
     }
-    select.push(Prisma.sql`${agrupada} AS ${Prisma.raw(`g${i}`)}`);
+    select.push(Prisma.sql`${agrupada} AS ${Prisma.raw(alias)}`);
+    if (c.orden) {
+      select.push(Prisma.sql`${expresion(c.orden, ctx)} AS ${Prisma.raw(`o${alias}`)}`);
+      conOrden.add(alias);
+    }
+  };
+  def.agrupaciones.forEach((g, i) => {
+    agrupar(g, `g${i}`);
     mapa.grupos.push({ clave: g.columna, alias: `g${i}`, granularidad: g.granularidad });
   });
+  if (def.columnaCruzada) {
+    agrupar(def.columnaCruzada, 'gc');
+    mapa.columnaCruzada = { clave: def.columnaCruzada.columna, alias: 'gc', granularidad: def.columnaCruzada.granularidad };
+  }
+  // En GROUP BY y ORDER BY, cada grupo va con su orden propio si lo tiene.
+  const enConjunto = (alias: string) => (conOrden.has(alias) ? `${alias}, o${alias}` : alias);
+  const ordenGrupo = (alias: string) => (conOrden.has(alias) ? `o${alias} NULLS LAST, ${alias} NULLS LAST` : `${alias} NULLS LAST`);
   // Una expresión por columna que se totaliza (aunque tenga varios totales).
   const fuentes = [...new Set(def.totales.map((t) => t.columna))];
   fuentes.forEach((clave, i) => select.push(Prisma.sql`${expresion(col(clave).sql, ctx)} AS ${Prisma.raw(`t${i}`)}`));
@@ -231,12 +265,19 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
     resumen = Prisma.sql`SELECT ${Prisma.join(agregados, ', ')} FROM (${base}) b`;
   } else {
     // Un conjunto por nivel: (g0, g1, g2), (g0, g1), (g0) y () = total general.
+    // Tabla cruzada: cada nivel también con la columna (gc), así salen las
+    // casillas, los totales de cada columna y los de cada fila.
     const g = mapa.grupos.map((x) => x.alias);
-    const conjuntos = g.map((_, i) => `(${g.slice(0, g.length - i).join(', ')})`).concat('()');
-    const marcas = g.map((x, i) => `GROUPING(${x}) AS x${i}`);
-    resumen = Prisma.sql`SELECT ${Prisma.raw(g.join(', '))}, ${Prisma.raw(marcas.join(', '))}, ${Prisma.join(agregados, ', ')}
+    const prefijos = g.map((_, i) => g.slice(0, g.length - i)).concat([[]]);
+    const conjuntos = prefijos.flatMap((p) => {
+      const sin = `(${p.map(enConjunto).join(', ')})`;
+      return mapa.columnaCruzada ? [`(${[...p, 'gc'].map(enConjunto).join(', ')})`, sin] : [sin];
+    });
+    const seleccion = [...g, ...(mapa.columnaCruzada ? ['gc'] : [])];
+    const marcas = [...g.map((x, i) => `GROUPING(${x}) AS x${i}`), ...(mapa.columnaCruzada ? ['GROUPING(gc) AS xc'] : [])];
+    resumen = Prisma.sql`SELECT ${Prisma.raw(seleccion.join(', '))}, ${Prisma.raw(marcas.join(', '))}, ${Prisma.join(agregados, ', ')}
       FROM (${base}) b GROUP BY GROUPING SETS (${Prisma.raw(conjuntos.join(', '))})
-      ORDER BY ${Prisma.raw(g.map((x) => `${x} NULLS LAST`).join(', '))}
+      ORDER BY ${Prisma.raw(seleccion.map(ordenGrupo).join(', '))}
       LIMIT ${MAX_GRUPOS + 1}`;
   }
 
@@ -244,12 +285,12 @@ export function compilarReporte(tipo: TipoReporte, def: Definicion, ctx: Context
   const aliasDe = (clave: string) =>
     mapa.grupos.find((x) => x.clave === clave)?.alias ?? mapa.columnas.find((x) => x.clave === clave)?.alias;
   const orden = [
-    ...mapa.grupos.map((x) => `${x.alias} ASC NULLS LAST`),
+    ...mapa.grupos.map((x) => ordenGrupo(x.alias)),
     ...def.orden.map((o) => `${aliasDe(o.columna)} ${o.direccion === 'desc' ? 'DESC NULLS LAST' : 'ASC NULLS LAST'}`),
   ];
   const visibles = [...mapa.grupos.map((x) => x.alias), ...mapa.columnas.map((x) => x.alias)];
   const filas =
-    def.formato === 'AGRUPADO' && !def.mostrarDetalle
+    def.formato === 'TABLA_CRUZADA' || (def.formato === 'AGRUPADO' && !def.mostrarDetalle)
       ? null
       : (pagina: number, porPagina: number) =>
           Prisma.sql`SELECT ${Prisma.raw(visibles.join(', ') || '1 AS uno')} FROM (${base}) b

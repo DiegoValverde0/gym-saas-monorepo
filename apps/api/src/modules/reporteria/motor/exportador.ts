@@ -20,11 +20,47 @@ export interface DatosExportacion {
   zonaHoraria: string;
   generado: Date;
   grupos: ColumnaExportable[];
+  /** Tabla cruzada: lo que va en las columnas. */
+  cruzada?: ColumnaExportable;
   columnas: ColumnaExportable[];
   totales: { nombre: string; tipo: string }[];
   /** Detalle: g0, g1... y las columnas por su clave. null = solo subtotales. */
   filas: Record<string, unknown>[] | null;
-  resumenes: { nivel: number; grupo: unknown[]; cantidad: number; totales: (number | string | null)[] }[];
+  resumenes: { nivel: number; grupo: unknown[]; cantidad: number; totales: (number | string | null)[]; columna?: unknown; conColumna?: boolean }[];
+}
+
+/**
+ * Tabla cruzada como matriz: una fila por grupo (con subtotales si hay dos
+ * niveles), una columna por cada valor de la columna cruzada, "Total" a la
+ * derecha y abajo. En cada casilla, el total elegido o la cantidad.
+ */
+export function matrizCruzada(d: DatosExportacion): { titulos: string[]; filas: (string | number | null)[][]; subtotal: boolean[] } {
+  const c = d.cruzada!;
+  const niveles = d.grupos.length;
+  const valor = (r: { cantidad: number; totales: (number | string | null)[] }) =>
+    d.totales.length ? (r.totales[0] === null ? null : Number(r.totales[0])) : r.cantidad;
+  const clave = (v: unknown) => JSON.stringify(v ?? null);
+  const columnas: unknown[] = [];
+  for (const r of d.resumenes) if (r.conColumna && !columnas.some((x) => clave(x) === clave(r.columna))) columnas.push(r.columna);
+  const titulos = [...d.grupos.map((g) => g.nombre), ...columnas.map((v) => textoValor(v, c, d.zonaHoraria) || '(sin dato)'), 'Total'];
+  const filas: (string | number | null)[][] = [];
+  const subtotal: boolean[] = [];
+  const mismaFila = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((v, i) => clave(v) === clave(b[i]));
+  // Filas en el orden de la consulta: cada grupo y, debajo, sus subgrupos.
+  const filasGrupo = d.resumenes.filter((r) => !r.conColumna && r.nivel > 0);
+  const totalGeneral = d.resumenes.find((r) => !r.conColumna && r.nivel === 0);
+  for (const r of [...filasGrupo, ...(totalGeneral ? [totalGeneral] : [])]) {
+    const etiquetas = d.grupos.map((g, i) =>
+      r.nivel === 0 && i === 0 ? 'Total' : i < r.nivel ? textoValor(r.grupo[i], g, d.zonaHoraria) || '(sin dato)' : r.nivel < niveles && i === r.nivel ? 'Subtotal' : '',
+    );
+    const casillas = columnas.map((v) => {
+      const celda = d.resumenes.find((x) => x.conColumna && x.nivel === r.nivel && mismaFila(x.grupo, r.grupo) && clave(x.columna) === clave(v));
+      return celda ? valor(celda) : null;
+    });
+    filas.push([...etiquetas, ...casillas, valor(r)]);
+    subtotal.push(r.nivel < niveles);
+  }
+  return { titulos, filas, subtotal };
 }
 
 export const NOMBRE_RANGO: Record<RangoFecha, string> = {
@@ -121,7 +157,14 @@ const campoCsv = (texto: string) => (/[;"\r\n]/.test(texto) ? `"${texto.replace(
  */
 export function aCsv(d: DatosExportacion): Buffer {
   const lineas: string[][] = [];
-  if (d.filas) {
+  if (d.cruzada) {
+    const m = matrizCruzada(d);
+    const moneda = d.totales[0]?.tipo === 'moneda';
+    lineas.push(m.titulos);
+    for (const f of m.filas) {
+      lineas.push(f.map((x) => (typeof x === 'number' ? (moneda ? x.toFixed(2) : String(x)).replace('.', ',') : x ?? '')));
+    }
+  } else if (d.filas) {
     lineas.push([...d.grupos, ...d.columnas].map((c) => c.nombre));
     for (const f of d.filas) {
       lineas.push([
@@ -196,6 +239,26 @@ export async function aExcel(d: DatosExportacion): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
   libro.creator = 'Gym Manager';
   libro.created = d.generado;
+
+  if (d.cruzada) {
+    // Tabla cruzada: una sola hoja con la matriz.
+    const hoja = libro.addWorksheet('Tabla');
+    encabezado(hoja, d, d.titulo);
+    const m = matrizCruzada(d);
+    const primera = filaTitulos(hoja, m.titulos);
+    m.filas.forEach((valores, i) => {
+      const fila = hoja.addRow(valores);
+      if (d.totales[0]?.tipo === 'moneda') {
+        for (let j = d.grupos.length + 1; j <= valores.length; j++) fila.getCell(j).numFmt = '#,##0.00';
+      }
+      if (m.subtotal[i]) {
+        fila.font = { bold: true };
+        fila.eachCell((c) => (c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS } }));
+      }
+    });
+    anchos(hoja, primera);
+    return Buffer.from(await libro.xlsx.writeBuffer());
+  }
 
   if (d.filas) {
     const hoja = libro.addWorksheet('Datos');

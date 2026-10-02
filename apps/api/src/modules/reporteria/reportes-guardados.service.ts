@@ -149,7 +149,8 @@ export class ReportesGuardadosService {
     const tipo = typeof clave === 'string' ? tipoReporte(clave) : undefined;
     if (!tipo) throw new BadRequestException('Ese tipo de reporte no existe.');
     if (!this.motor.disponible(tipo, ctx)) throw new ForbiddenException(`No tienes acceso al reporte de ${tipo.nombre}.`);
-    return validarDefinicion(definicion, tipo);
+    // Guardar algo con funciones avanzadas: solo en modo experto.
+    return validarDefinicion(definicion, tipo, { avanzado: ctx.modo === 'experto' });
   }
 
   private noEnSimple(ctx: Contexto) {
@@ -237,7 +238,7 @@ export class ReportesGuardadosService {
     const { reporte, tipo } = await this.reporteVisible(id, ctx);
     const carpetaId = dto.carpetaId === undefined ? null : await this.carpetaDestino(dto.carpetaId, ctx);
     // Se valida al copiar: si la original quedó vieja, la copia no nace rota.
-    const definicion = validarDefinicion(reporte.definicion, tipo);
+    const definicion = validarDefinicion(reporte.definicion, tipo, { avanzado: true });
     const copia = await this.db.reporte.create({
       data: {
         nombre: dto.nombre ?? `${reporte.nombre} (copia)`.slice(0, 150),
@@ -305,7 +306,8 @@ export class ReportesGuardadosService {
       },
     };
     try {
-      return validarDefinicion(entrada, tipo);
+      // Un reporte guardado se corre aunque el gimnasio ya no esté en modo experto.
+      return validarDefinicion(entrada, tipo, { avanzado: true });
     } catch (err) {
       throw new BadRequestException(`Este reporte ya no se puede correr: ${(err as Error).message} Edítalo para corregirlo.`);
     }
@@ -350,6 +352,7 @@ export class ReportesGuardadosService {
       zonaHoraria: ctx.ejecucion.zonaHoraria,
       generado,
       grupos: r.agrupaciones,
+      cruzada: r.columnaCruzada,
       columnas: r.columnas,
       totales: r.totales,
       filas: r.filas,

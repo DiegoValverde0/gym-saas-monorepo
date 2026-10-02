@@ -63,10 +63,14 @@ export interface TipoCatalogo {
   columnasIniciales: string[];
   tieneSoloMios: boolean;
   columnas: ColumnaCatalogo[];
+  /** Filtros "con / sin" (modo experto). */
+  cruzados: { clave: string; nombre: string; conRango: boolean }[];
 }
 
 export interface Catalogo {
   modo: 'simple' | 'intermedio' | 'experto';
+  /** Tabla cruzada, filtros con/sin, lógica y grupos personalizados (modo experto). */
+  avanzado: boolean;
   operadores: Record<TipoDato, Operador[]>;
   maxFilasEnPantalla: number;
   tipos: TipoCatalogo[];
@@ -80,12 +84,31 @@ export interface FiltroCampo {
   valores?: string[];
 }
 
+export interface GrupoPersonalizado {
+  clave: string;
+  nombre: string;
+  columna: string;
+  rangos?: { hasta: number; etiqueta: string }[];
+  valores?: { etiqueta: string; valores: string[] }[];
+  otros: string;
+}
+
+export interface FiltroCruzado {
+  clave: string;
+  modo: 'con' | 'sin';
+  rango?: RangoFecha;
+}
+
 export interface Definicion {
   version?: number;
   tipo: string;
-  formato: 'LISTA' | 'AGRUPADO';
+  formato: 'LISTA' | 'AGRUPADO' | 'TABLA_CRUZADA';
   columnas: string[];
+  /** Agrupado: los niveles. Tabla cruzada: las filas. */
   agrupaciones: { columna: string; granularidad?: Granularidad }[];
+  /** Tabla cruzada: lo que va en las columnas. */
+  columnaCruzada?: { columna: string; granularidad?: Granularidad };
+  gruposPersonalizados?: GrupoPersonalizado[];
   totales: { columna: string; funcion: FuncionTotal }[];
   mostrarDetalle: boolean;
   filtros: {
@@ -93,6 +116,9 @@ export interface Definicion {
     sucursalId?: string;
     soloMios: boolean;
     campos: FiltroCampo[];
+    /** "1 Y (2 O 3)" */
+    logica?: string;
+    cruzados?: FiltroCruzado[];
   };
   orden: { columna: string; direccion: 'asc' | 'desc' }[];
 }
@@ -102,12 +128,16 @@ export interface Resumen {
   grupo: unknown[];
   cantidad: number;
   totales: (number | string | null)[];
+  /** Tabla cruzada: la casilla de esta columna (sin esto, el total de la fila). */
+  columna?: unknown;
+  conColumna?: boolean;
 }
 
 export interface Resultado {
   definicion: Definicion;
   columnas: { clave: string; nombre: string; tipo: TipoDato; opciones?: Record<string, string> }[];
   agrupaciones: { clave: string; nombre: string; tipo: TipoDato; granularidad?: Granularidad; opciones?: Record<string, string> }[];
+  columnaCruzada?: { clave: string; nombre: string; tipo: TipoDato; granularidad?: Granularidad; opciones?: Record<string, string> };
   totales: { clave: string; funcion: FuncionTotal; nombre: string; tipo: TipoDato }[];
   filas: Record<string, unknown>[] | null;
   resumenes: Resumen[];
@@ -239,6 +269,21 @@ export function formatearValor(
     default:
       return String(valor);
   }
+}
+
+/**
+ * El tipo con las columnas de los grupos personalizados de la definición
+ * (son columnas de texto más, para elegir, agrupar y filtrar).
+ */
+export function conGruposPersonalizados(tipo: TipoCatalogo, grupos: GrupoPersonalizado[] = []): TipoCatalogo {
+  if (grupos.length === 0) return tipo;
+  return {
+    ...tipo,
+    columnas: [
+      ...tipo.columnas,
+      ...grupos.map((g) => ({ clave: g.clave, nombre: g.nombre, grupo: 'Grupos personalizados', tipo: 'texto' as const, agrupable: true })),
+    ],
+  };
 }
 
 /** Una definición nueva para un tipo, con sus columnas iniciales. */

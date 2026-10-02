@@ -50,7 +50,7 @@ export const ASISTENCIAS: TipoReporte = {
     },
     { clave: 'tipoAsistencia', nombre: 'Tipo de ingreso', grupo: 'Asistencia', tipo: 'lista', sql: 'a.tipo_asistencia::text', opciones: NOMBRES.tipoAsistencia },
     { clave: 'metodo', nombre: 'Cómo se validó', grupo: 'Asistencia', tipo: 'lista', sql: 'a.metodo_validacion::text', opciones: NOMBRES.metodoValidacion },
-    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: "COALESCE(c.nombre, a.nombre_visitante, 'Visitante')", usa: ['c'] },
+    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: 'COALESCE(c.nombre, a.nombre_visitante)', usa: ['c'] },
     { clave: 'clienteDocumento', nombre: 'Documento del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.numero_documento', usa: ['c'] },
     { clave: 'plan', nombre: 'Plan', grupo: 'Plan', tipo: 'texto', sql: 'pl.nombre', usa: ['pl'] },
     { clave: 'tipoPlan', nombre: 'Tipo de plan', grupo: 'Plan', tipo: 'lista', sql: 'pl.tipo_plan::text', usa: ['pl'], opciones: NOMBRES.tipoPlan },

@@ -43,7 +43,7 @@ export const VENTAS: TipoReporte = {
     { clave: 'cantidad', nombre: 'Cantidad', grupo: 'Venta', tipo: 'numero', sql: 'd.cantidad' },
     { clave: 'precio', nombre: 'Precio unitario', grupo: 'Venta', tipo: 'moneda', sql: 'd.precio_unitario' },
     { clave: 'monto', nombre: 'Monto', grupo: 'Venta', tipo: 'moneda', sql: 'd.subtotal', ayuda: 'Cantidad × precio de esta línea.' },
-    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: "COALESCE(c.nombre, 'Sin cliente')", usa: ['c'] },
+    { clave: 'cliente', nombre: 'Cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.nombre', usa: ['c'] },
     { clave: 'clienteDocumento', nombre: 'Documento del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.numero_documento', usa: ['c'] },
     { clave: 'clienteTelefono', nombre: 'Teléfono del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.telefono', usa: ['c'] },
     { clave: 'plan', nombre: 'Plan', grupo: 'Plan', tipo: 'texto', sql: 'pl.nombre', usa: ['pl'] },

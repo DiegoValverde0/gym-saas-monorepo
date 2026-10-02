@@ -192,7 +192,7 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
 - Auditoría de exportaciones.
 - **Listo cuando:** el Excel abre sin avisos y los totales coinciden con la pantalla.
 
-### Fase 6: el resto del catálogo y funciones avanzadas
+### Fase 6: el resto del catálogo y funciones avanzadas (HECHA)
 - Tipos: Clientes, Pagos, Gastos, Sesiones de clase, Reservas, Cierres de caja, Inventario y Jornadas.
 - **Tabla cruzada**, **filtros con/sin**, **lógica de filtros** ("1 Y (2 O 3)", con un analizador propio, nunca `eval`) y **grupos personalizados** (rangos y agrupaciones de valores).
 - **Listo cuando:** "Clientes sin asistencias en los últimos 30 días con membresía vigente" y "Ingresos por mes × sucursal" dan lo mismo que una consulta hecha a mano.

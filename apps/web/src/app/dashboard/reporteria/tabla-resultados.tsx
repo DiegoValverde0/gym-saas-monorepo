@@ -24,13 +24,81 @@ function Totales({ resumen, resultado, grande = false }: { resumen: Resumen; res
 }
 
 /**
+ * Tabla cruzada (fase 6): una fila por grupo (con subtotales si hay dos
+ * niveles), una columna por cada valor de la columna elegida, "Total" a la
+ * derecha y abajo. En cada casilla, el total elegido o la cantidad.
+ */
+function TablaCruzada({ resultado }: { resultado: Resultado }) {
+  const { agrupaciones, resumenes, totales } = resultado;
+  const c = resultado.columnaCruzada!;
+  const niveles = agrupaciones.length;
+  const medida = totales[0];
+  const valor = (r: Resumen) => (medida ? formatearValor(r.totales[0], medida.tipo) : r.cantidad.toLocaleString('es-ES'));
+  const clave = (v: unknown) => JSON.stringify(v ?? null);
+  const columnas: unknown[] = [];
+  for (const r of resumenes) if (r.conColumna && !columnas.some((x) => clave(x) === clave(r.columna))) columnas.push(r.columna);
+  const casilla = (r: Resumen, columna: unknown) =>
+    resumenes.find((x) => x.conColumna && x.nivel === r.nivel && clave(x.columna) === clave(columna) && r.grupo.every((v, i) => igual(x.grupo[i], v)));
+  const filas = [...resumenes.filter((r) => !r.conColumna && r.nivel > 0), ...resumenes.filter((r) => !r.conColumna && r.nivel === 0)];
+  const etiqueta = (v: unknown, g: { tipo: Resultado['agrupaciones'][number]['tipo']; opciones?: Record<string, string>; granularidad?: Granularidad }) =>
+    v === null || v === undefined || v === '' ? '(sin dato)' : formatearValor(v, g.tipo, g.opciones, g.granularidad);
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <table className="w-full text-sm">
+        <thead className="bg-white dark:bg-slate-900">
+          <tr className="border-b border-slate-200 dark:border-slate-800">
+            <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              {agrupaciones.map((g) => (g.granularidad ? NOMBRE_PERIODO[g.granularidad] : g.nombre)).join(' / ')}
+              <span className="font-normal normal-case"> · {c.granularidad ? NOMBRE_PERIODO[c.granularidad] : c.nombre} →</span>
+            </th>
+            {columnas.map((v) => (
+              <th key={clave(v)} className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {etiqueta(v, c)}
+              </th>
+            ))}
+            <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Total</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white dark:bg-slate-900">
+          {filas.map((r) => {
+            const total = r.nivel === 0;
+            const subtotal = !total && r.nivel < niveles;
+            const g = agrupaciones[Math.max(r.nivel - 1, 0)];
+            return (
+              <tr
+                key={clave(r.grupo)}
+                className={`border-b border-slate-100 dark:border-slate-800 ${total ? 'bg-indigo-50/60 font-semibold dark:bg-indigo-500/10' : subtotal ? 'bg-slate-100 font-semibold dark:bg-slate-800' : ''}`}
+              >
+                <td className="whitespace-nowrap px-3 py-1.5 text-slate-800 dark:text-slate-100" style={{ paddingLeft: `${0.75 + Math.max(r.nivel - 1, 0) * 1.25}rem` }}>
+                  {total ? 'Total' : etiqueta(r.grupo[r.nivel - 1], g)}
+                </td>
+                {columnas.map((v) => {
+                  const x = casilla(r, v);
+                  return (
+                    <td key={clave(v)} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                      {x ? valor(x) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                    </td>
+                  );
+                })}
+                <td className="whitespace-nowrap px-3 py-1.5 text-right font-semibold tabular-nums text-slate-900 dark:text-white">{valor(r)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
  * Resultado de un reporte (docs/plan-reporteria.md, fases 4 y 5). Lista: las
  * filas y el total general. Agrupado: cada grupo con su subtotal y, debajo,
  * sus filas de detalle (las de la página actual).
  */
 export function TablaResultados({ resultado, vacio }: { resultado: Resultado; vacio?: ReactNode }) {
   const { columnas, agrupaciones, filas, resumenes } = resultado;
-  const general = resumenes.find((r) => r.nivel === 0);
+  const general = resumenes.find((r) => r.nivel === 0 && !r.conColumna);
   const niveles = agrupaciones.length;
   const ancho = Math.max(columnas.length, 1);
 
@@ -85,7 +153,8 @@ export function TablaResultados({ resultado, vacio }: { resultado: Resultado; va
       <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 dark:border-indigo-500/20 dark:bg-indigo-500/10">
         <Totales resumen={general} resultado={resultado} grande />
       </div>
-      {(filas || niveles > 0) && (
+      {resultado.columnaCruzada && <TablaCruzada resultado={resultado} />}
+      {!resultado.columnaCruzada && (filas || niveles > 0) && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
             {columnas.length > 0 && filas && (

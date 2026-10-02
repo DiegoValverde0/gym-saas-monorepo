@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useDebounce } from '@/hooks/use-debounce';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost, apiPut, apiGet } from '@/lib/api-client';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Loader2, Plus, Save, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Loader2, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { claseCampo, EditorFiltros } from './editor-filtros';
+import { EditorGrupoPersonalizado } from './editor-grupo-personalizado';
 import { TablaResultados } from './tabla-resultados';
 import {
   Carpeta,
@@ -23,6 +24,8 @@ import {
   ReporteGuardado,
   Resultado,
   TipoCatalogo,
+  conGruposPersonalizados,
+  GrupoPersonalizado,
 } from './tipos';
 
 type Pestana = 'columnas' | 'filtros' | 'agrupar' | 'totales';
@@ -49,10 +52,15 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
   const [pestana, setPestana] = useState<Pestana>('columnas');
   const [buscar, setBuscar] = useState('');
   const [guardando, setGuardando] = useState<'nuevo' | null>(null);
-  const col = (clave: string) => tipo.columnas.find((c) => c.clave === clave)!;
+  const [editandoGrupo, setEditandoGrupo] = useState<GrupoPersonalizado | null | undefined>(undefined);
+  // El tipo con los grupos personalizados como columnas más.
+  const tipoVista = useMemo(() => conGruposPersonalizados(tipo, def.gruposPersonalizados), [tipo, def.gruposPersonalizados]);
+  const col = (clave: string) => tipoVista.columnas.find((c) => c.clave === clave)!;
+  const esTabla = def.formato === 'TABLA_CRUZADA';
 
   // El formato sale solo: con grupos es "Agrupado".
-  const cambiar = (d: Definicion) => setDef({ ...d, formato: d.agrupaciones.length > 0 ? 'AGRUPADO' : 'LISTA' });
+  const cambiar = (d: Definicion) =>
+    setDef({ ...d, formato: d.formato === 'TABLA_CRUZADA' ? 'TABLA_CRUZADA' : d.agrupaciones.length > 0 ? 'AGRUPADO' : 'LISTA' });
 
   // ---- Vista previa en vivo
   const definicionPrevia = useDebounce(def, 500);
@@ -68,12 +76,12 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
   const grupos = useMemo(() => {
     const texto = buscar.trim().toLowerCase();
     const mapa = new Map<string, typeof tipo.columnas>();
-    for (const c of tipo.columnas) {
+    for (const c of tipoVista.columnas) {
       if (texto && !c.nombre.toLowerCase().includes(texto) && !c.grupo.toLowerCase().includes(texto)) continue;
       mapa.set(c.grupo, [...(mapa.get(c.grupo) ?? []), c]);
     }
     return [...mapa.entries()];
-  }, [tipo, buscar]);
+  }, [tipoVista, buscar]);
 
   const alternarColumna = (clave: string) => {
     if (def.columnas.includes(clave)) {
@@ -109,7 +117,46 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
     onError: (err: Error) => toast({ title: 'No se pudo guardar', description: err.message, variant: 'destructive' }),
   });
 
-  const agrupables = tipo.columnas.filter((c) => c.agrupable);
+  const agrupables = tipoVista.columnas.filter((c) => c.agrupable);
+  const conPeriodo = (c: { clave: string; tipo: string }) => ({ columna: c.clave, ...(c.tipo === 'fecha' || c.tipo === 'fechaHora' ? { granularidad: 'mes' as Granularidad } : {}) });
+
+  // Tabla cruzada (modo experto): filas (1 o 2 grupos) × columnas, un total por casilla.
+  const elegirFormato = (tabla: boolean) => {
+    if (!tabla) {
+      setDef({ ...def, formato: def.agrupaciones.length ? 'AGRUPADO' : 'LISTA', columnaCruzada: undefined, mostrarDetalle: true });
+      return;
+    }
+    const filas = def.agrupaciones.length ? def.agrupaciones.slice(0, 2) : [conPeriodo(agrupables.find((c) => c.tipo !== 'fechaHora' && c.tipo !== 'fecha') ?? agrupables[0])];
+    const fecha = tipoVista.columnas.find((c) => c.clave === tipo.fechaPorDefecto);
+    const propuesta = fecha && !filas.some((f) => f.columna === fecha.clave) ? fecha : agrupables.find((c) => !filas.some((f) => f.columna === c.clave));
+    setDef({ ...def, formato: 'TABLA_CRUZADA', agrupaciones: filas, columnaCruzada: propuesta && conPeriodo(propuesta), totales: def.totales.slice(0, 1), mostrarDetalle: false });
+  };
+
+  // Grupos personalizados: crear, editar y quitar (con todo lo que los usaba).
+  const claveNueva = `gp${Math.max(0, ...(def.gruposPersonalizados ?? []).map((g) => Number(g.clave.slice(2)))) + 1}`;
+  const guardarGrupo = (g: GrupoPersonalizado) => {
+    const otros = (def.gruposPersonalizados ?? []).filter((x) => x.clave !== g.clave);
+    const existe = otros.length !== (def.gruposPersonalizados ?? []).length;
+    cambiar({ ...def, gruposPersonalizados: existe ? (def.gruposPersonalizados ?? []).map((x) => (x.clave === g.clave ? g : x)) : [...otros, g] });
+    setEditandoGrupo(undefined);
+  };
+  const quitarGrupo = (clave: string) => {
+    const queda = (c: string) => c !== clave;
+    cambiar({
+      ...def,
+      gruposPersonalizados: (def.gruposPersonalizados ?? []).filter((g) => g.clave !== clave),
+      columnas: def.columnas.filter(queda),
+      agrupaciones: def.agrupaciones.filter((g) => queda(g.columna)),
+      columnaCruzada: def.columnaCruzada && queda(def.columnaCruzada.columna) ? def.columnaCruzada : undefined,
+      totales: def.totales.filter((t) => queda(t.columna)),
+      orden: def.orden.filter((o) => queda(o.columna)),
+      filtros: {
+        ...def.filtros,
+        campos: def.filtros.campos.filter((f) => queda(f.columna)),
+        logica: def.filtros.campos.some((f) => !queda(f.columna)) ? undefined : def.filtros.logica,
+      },
+    });
+  };
   const ordenables = [...new Set([...def.agrupaciones.map((g) => g.columna), ...def.columnas])];
 
   const pestanas: { valor: Pestana; nombre: string; cuenta?: number }[] = [
@@ -189,6 +236,32 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                 })}
               </div>
             ))}
+            {catalogo.avanzado && (
+              <div className="mt-1 border-t border-slate-200 pt-3 dark:border-slate-800">
+                {(def.gruposPersonalizados ?? []).map((g) => (
+                  <div key={g.clave} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="min-w-0 flex-1 truncate">
+                      {g.nombre} <span className="text-slate-400">· de {tipo.columnas.find((c) => c.clave === g.columna)?.nombre}</span>
+                    </span>
+                    <button type="button" onClick={() => setEditandoGrupo(g)} className="rounded p-1 hover:text-slate-800 dark:hover:text-slate-200" aria-label={`Editar ${g.nombre}`}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => quitarGrupo(g.clave)} className="rounded p-1 hover:text-rose-600" aria-label={`Quitar ${g.nombre}`}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {(def.gruposPersonalizados ?? []).length < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoGrupo(null)}
+                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
+                  >
+                    <Plus className="h-4 w-4" /> Grupo personalizado
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -213,7 +286,12 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
               ))}
             </div>
             <div className="p-4">
-              {pestana === 'columnas' && (
+              {pestana === 'columnas' && esTabla && (
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  La tabla cruzada no muestra filas de detalle: arma sus filas y columnas en la pestaña <strong>Agrupar</strong>.
+                </p>
+              )}
+              {pestana === 'columnas' && !esTabla && (
                 <div className="space-y-4">
                   {def.columnas.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">Elige columnas en el panel de la izquierda.</p>
@@ -261,17 +339,39 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                 </div>
               )}
 
-              {pestana === 'filtros' && <EditorFiltros tipo={tipo} catalogo={catalogo} definicion={def} cambiar={cambiar} />}
+              {pestana === 'filtros' && <EditorFiltros tipo={tipoVista} catalogo={catalogo} definicion={def} cambiar={cambiar} />}
 
               {pestana === 'agrupar' && (
                 <div className="space-y-3">
-                  <p className="text-sm text-slate-600 dark:text-slate-300">Agrupa las filas y ve un subtotal por grupo (hasta 3 niveles).</p>
+                  {catalogo.avanzado && (
+                    <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800" role="group" aria-label="Formato">
+                      {[
+                        { tabla: false, nombre: 'Agrupado' },
+                        { tabla: true, nombre: 'Tabla cruzada' },
+                      ].map((o) => (
+                        <button
+                          key={o.nombre}
+                          type="button"
+                          aria-pressed={esTabla === o.tabla}
+                          onClick={() => elegirFormato(o.tabla)}
+                          className={`rounded-md px-3 py-1 font-medium ${esTabla === o.tabla ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                        >
+                          {o.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {esTabla
+                      ? 'Elige qué va en las filas (hasta 2) y qué en las columnas; cada casilla muestra la cantidad o el total elegido.'
+                      : 'Agrupa las filas y ve un subtotal por grupo (hasta 3 niveles).'}
+                  </p>
                   {def.agrupaciones.map((g, i) => {
                     const c = col(g.columna);
                     const esFecha = c.tipo === 'fecha' || c.tipo === 'fechaHora';
                     return (
                       <div key={i} className="flex flex-wrap items-center gap-2" style={{ paddingLeft: `${i * 1.25}rem` }}>
-                        <span className="text-sm text-slate-500">{i === 0 ? 'Agrupar por' : 'y luego por'}</span>
+                        <span className="text-sm text-slate-500">{i === 0 ? (esTabla ? 'Filas por' : 'Agrupar por') : 'y luego por'}</span>
                         <select
                           className={claseCampo}
                           aria-label={`Agrupar por, nivel ${i + 1}`}
@@ -283,7 +383,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                           }}
                         >
                           {agrupables
-                            .filter((x) => x.clave === g.columna || !def.agrupaciones.some((y) => y.columna === x.clave))
+                            .filter((x) => x.clave === g.columna || (!def.agrupaciones.some((y) => y.columna === x.clave) && x.clave !== def.columnaCruzada?.columna))
                             .map((x) => (
                               <option key={x.clave} value={x.clave}>
                                 {x.nombre}
@@ -315,11 +415,13 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       </div>
                     );
                   })}
-                  {def.agrupaciones.length < 3 && (
+                  {def.agrupaciones.length < (esTabla ? 2 : 3) && (
                     <button
                       type="button"
                       onClick={() => {
-                        const libre = agrupables.find((x) => !def.agrupaciones.some((y) => y.columna === x.clave) && x.tipo !== 'fechaHora') ?? agrupables[0];
+                        const libre =
+                          agrupables.find((x) => !def.agrupaciones.some((y) => y.columna === x.clave) && x.clave !== def.columnaCruzada?.columna && x.tipo !== 'fechaHora') ??
+                          agrupables[0];
                         const fecha = libre.tipo === 'fecha' || libre.tipo === 'fechaHora';
                         cambiar({ ...def, agrupaciones: [...def.agrupaciones, { columna: libre.clave, ...(fecha ? { granularidad: 'mes' as Granularidad } : {}) }] });
                       }}
@@ -328,7 +430,43 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       <Plus className="h-4 w-4" /> {def.agrupaciones.length === 0 ? 'Agrupar' : 'Agregar un nivel'}
                     </button>
                   )}
-                  {def.agrupaciones.length > 0 && (
+                  {esTabla && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                      <span className="text-sm text-slate-500">Columnas por</span>
+                      <select
+                        className={claseCampo}
+                        aria-label="Columnas de la tabla"
+                        value={def.columnaCruzada?.columna ?? ''}
+                        onChange={(e) => cambiar({ ...def, columnaCruzada: conPeriodo(col(e.target.value)) })}
+                      >
+                        <option value="" disabled>
+                          Elige…
+                        </option>
+                        {agrupables
+                          .filter((x) => !def.agrupaciones.some((y) => y.columna === x.clave))
+                          .map((x) => (
+                            <option key={x.clave} value={x.clave}>
+                              {x.nombre}
+                            </option>
+                          ))}
+                      </select>
+                      {def.columnaCruzada && ['fecha', 'fechaHora'].includes(col(def.columnaCruzada.columna).tipo) && (
+                        <select
+                          className={claseCampo}
+                          aria-label="Periodo de las columnas"
+                          value={def.columnaCruzada.granularidad ?? 'mes'}
+                          onChange={(e) => cambiar({ ...def, columnaCruzada: { ...def.columnaCruzada!, granularidad: e.target.value as Granularidad } })}
+                        >
+                          {(Object.keys(NOMBRE_GRANULARIDAD) as Granularidad[]).map((x) => (
+                            <option key={x} value={x}>
+                              {NOMBRE_GRANULARIDAD[x]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+                  {!esTabla && def.agrupaciones.length > 0 && (
                     <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                       <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={def.mostrarDetalle} onChange={(e) => cambiar({ ...def, mostrarDetalle: e.target.checked })} />
                       Mostrar las filas de cada grupo (si no, solo los subtotales)
@@ -339,7 +477,11 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
 
               {pestana === 'totales' && (
                 <div className="space-y-3">
-                  <p className="text-sm text-slate-600 dark:text-slate-300">La cantidad de registros va siempre. Suma otros totales:</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {esTabla
+                      ? 'Cada casilla muestra la cantidad de registros, o el total que elijas aquí (uno solo).'
+                      : 'La cantidad de registros va siempre. Suma otros totales:'}
+                  </p>
                   {def.totales.map((t, i) => {
                     const c = col(t.columna);
                     const numerica = c.tipo === 'numero' || c.tipo === 'moneda';
@@ -372,7 +514,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                             cambiar({ ...def, totales: def.totales.map((x, j) => (j === i ? { columna: nueva.clave, funcion: num ? 'suma' : 'distintos' } : x)) });
                           }}
                         >
-                          {tipo.columnas.map((x) => (
+                          {tipoVista.columnas.map((x) => (
                             <option key={x.clave} value={x.clave}>
                               {x.nombre}
                             </option>
@@ -389,6 +531,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                       </div>
                     );
                   })}
+                  {(!esTabla || def.totales.length === 0) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -406,6 +549,7 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                   >
                     <Plus className="h-4 w-4" /> Agregar un total
                   </button>
+                  )}
                 </div>
               )}
             </div>
@@ -420,6 +564,9 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
                 {previa.data &&
                   (previa.data.totalFilas === 0
                     ? 'Sin filas'
+                    : previa.data.filas === null
+                      ? // Tabla cruzada o agrupado sin detalle: no hay filas que mostrar, solo registros.
+                        `${previa.data.totalFilas.toLocaleString('es-ES')} ${previa.data.totalFilas === 1 ? 'registro' : 'registros'}`
                     : previa.data.totalFilas <= previa.data.porPagina
                       ? `${previa.data.totalFilas.toLocaleString('es-ES')} ${previa.data.totalFilas === 1 ? 'fila' : 'filas'}`
                       : `Primeras ${previa.data.porPagina} de ${previa.data.totalFilas.toLocaleString('es-ES')} filas`)}
@@ -437,6 +584,10 @@ export function Constructor({ catalogo, tipo, inicial, reporte }: Props) {
           </section>
         </div>
       </div>
+
+      {editandoGrupo !== undefined && (
+        <EditorGrupoPersonalizado tipo={tipo} grupo={editandoGrupo} claveNueva={claveNueva} guardar={guardarGrupo} cerrar={() => setEditandoGrupo(undefined)} />
+      )}
 
       <Dialog open={guardando === 'nuevo'} onOpenChange={(a) => !a && setGuardando(null)}>
         <DialogContent className="sm:max-w-[440px]">

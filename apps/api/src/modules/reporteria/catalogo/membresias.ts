@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { NOMBRES, TipoReporte } from './tipos';
+import { entreFechas, NOMBRES, TipoReporte } from './tipos';
 
 // "Hoy" en la hora del gimnasio, como fecha (para días restantes).
 const hoyLocal = (zonaHoraria: string) => Prisma.sql`(now() AT TIME ZONE ${zonaHoraria})::date`;
@@ -50,7 +50,16 @@ export const MEMBRESIAS: TipoReporte = {
     { clave: 'clienteCorreo', nombre: 'Correo del cliente', grupo: 'Cliente', tipo: 'texto', sql: 'c.correo', usa: ['c'] },
     { clave: 'plan', nombre: 'Plan', grupo: 'Plan', tipo: 'texto', sql: 'pl.nombre', usa: ['pl'] },
     { clave: 'tipoPlan', nombre: 'Tipo de plan', grupo: 'Plan', tipo: 'lista', sql: 'pl.tipo_plan::text', usa: ['pl'], opciones: NOMBRES.tipoPlan },
-    { clave: 'sucursal', nombre: 'Sucursal', grupo: 'Dónde', tipo: 'texto', sql: "COALESCE(s.nombre, 'Sin sucursal')", usa: ['s'] },
+    { clave: 'sucursal', nombre: 'Sucursal', grupo: 'Dónde', tipo: 'texto', sql: 's.nombre', usa: ['s'] },
   ],
   columnasIniciales: ['cliente', 'plan', 'fechaInicio', 'fechaFin', 'estado', 'monto'],
+  cruzados: [
+    {
+      clave: 'asistencias',
+      nombre: 'asistencias',
+      conRango: true,
+      existe: (ctx, desde, hasta) =>
+        Prisma.sql`EXISTS (SELECT 1 FROM registros_asistencia ra WHERE ra.membresia_id = m.id AND ra.deleted_at IS NULL${entreFechas('ra.fecha_hora_ingreso', ctx, desde, hasta)})`,
+    },
+  ],
 };

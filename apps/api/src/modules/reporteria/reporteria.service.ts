@@ -11,6 +11,10 @@ import { ModuloTenant } from '../../common/decorators/requiere-modulo.decorator'
 import { TIPOS_REPORTE, tipoReporte, TipoReporte } from './catalogo';
 import { Definicion, FORMATOS, Granularidad, FUNCIONES_TOTAL, GRANULARIDADES, OPERADORES, RANGOS_FECHA, validarDefinicion } from './motor/definicion';
 import { compilarReporte, ContextoEjecucion, MAX_FILAS_EN_PANTALLA, MAX_GRUPOS, ReporteCompilado } from './motor/compilador';
+import { tipoConGrupos } from './motor/avanzado';
+
+// Tabla cruzada: más columnas que esto no se leen; se pide agrupar por algo más general.
+export const MAX_COLUMNAS_TABLA = 50;
 
 // Una consulta de reporte no puede tardar más que esto (decisión R4).
 const TIEMPO_MAXIMO_MS = 15_000;
@@ -30,11 +34,17 @@ export interface ResultadoReporte {
   definicion: Definicion;
   columnas: { clave: string; nombre: string; tipo: string; opciones?: Record<string, string> }[];
   agrupaciones: { clave: string; nombre: string; tipo: string; granularidad?: Granularidad; opciones?: Record<string, string> }[];
+  /** Tabla cruzada: lo que va en las columnas. */
+  columnaCruzada?: { clave: string; nombre: string; tipo: string; granularidad?: Granularidad; opciones?: Record<string, string> };
   totales: { clave: string; funcion: string; nombre: string; tipo: string }[];
   /** Filas de detalle: grupos (g0, g1...) y columnas por su clave. */
   filas: Record<string, unknown>[] | null;
-  /** Por nivel: 0 = total general, 1 = primer grupo, etc. */
-  resumenes: { nivel: number; grupo: unknown[]; cantidad: number; totales: (number | string | null)[] }[];
+  /**
+   * Por nivel: 0 = total general, 1 = primer grupo, etc. En la tabla cruzada,
+   * con `conColumna` cada casilla (y el total de cada columna), y sin él los
+   * totales de cada fila.
+   */
+  resumenes: { nivel: number; grupo: unknown[]; cantidad: number; totales: (number | string | null)[]; columna?: unknown; conColumna?: boolean }[];
   totalFilas: number;
   pagina: number;
   porPagina: number;
@@ -103,7 +113,8 @@ export class ReporteriaService {
     const ctx = await this.contexto();
     return {
       modo: ctx.modo,
-      formatos: ctx.modo === 'simple' ? [] : FORMATOS,
+      formatos: ctx.modo === 'simple' ? [] : ctx.modo === 'experto' ? FORMATOS : FORMATOS.filter((f) => f !== 'TABLA_CRUZADA'),
+      avanzado: ctx.modo === 'experto',
       rangosFecha: RANGOS_FECHA,
       granularidades: GRANULARIDADES,
       funcionesTotal: FUNCIONES_TOTAL,
@@ -118,6 +129,7 @@ export class ReporteriaService {
         rangoPorDefecto: t.rangoPorDefecto ?? 'ultimos_30',
         columnasIniciales: t.columnasIniciales,
         tieneSoloMios: !!t.creadoPor,
+        cruzados: (t.cruzados ?? []).map((c) => ({ clave: c.clave, nombre: c.nombre, conRango: c.conRango })),
         columnas: t.columnas.map((c) => ({
           clave: c.clave,
           nombre: c.nombre,
@@ -144,7 +156,8 @@ export class ReporteriaService {
     const tipo = typeof clave === 'string' ? tipoReporte(clave) : undefined;
     if (!tipo) throw new NotFoundException('Ese tipo de reporte no existe.');
     if (!this.disponible(tipo, ctx)) throw new ForbiddenException(`No tienes acceso al reporte de ${tipo.nombre}.`);
-    const definicion = validarDefinicion(entrada, tipo);
+    // Las funciones avanzadas se arman solo en modo experto.
+    const definicion = validarDefinicion(entrada, tipo, { avanzado: ctx.modo === 'experto' });
     return this.ejecutar(tipo, definicion, ctx, pagina, porPagina);
   }
 
@@ -172,8 +185,20 @@ export class ReporteriaService {
     const compilado = compilarReporte(tipo, definicion, ctx.ejecucion);
     const { filasCrudas, resumenCrudo } = await this.consultar(compilado, pagina, porPagina);
 
-    const col = (clave: string) => tipo.columnas.find((c) => c.clave === clave)!;
+    // Con los grupos personalizados como columnas más.
+    const conGrupos = tipoConGrupos(tipo, definicion.gruposPersonalizados);
+    const col = (clave: string) => conGrupos.columnas.find((c) => c.clave === clave)!;
     const normalizar = (clave: string, valor: unknown) => normalizarValor(col(clave).tipo, valor);
+    const cruzada = compilado.mapa.columnaCruzada;
+    const tipoCruzada = cruzada ? (cruzada.granularidad ? 'fecha' : col(cruzada.clave).tipo) : 'texto';
+    if (cruzada) {
+      const columnasDistintas = new Set(resumenCrudo.filter((r) => Number(r.xc) === 0).map((r) => JSON.stringify(normalizarValor(tipoCruzada, r.gc))));
+      if (columnasDistintas.size > MAX_COLUMNAS_TABLA) {
+        throw new BadRequestException(
+          `La tabla tendría ${columnasDistintas.size} columnas (hasta ${MAX_COLUMNAS_TABLA}). Usa algo más general en las columnas (por ejemplo, por mes en vez de por día) o filtra.`,
+        );
+      }
+    }
     const grupos = compilado.mapa.grupos;
 
     const filas =
@@ -194,9 +219,12 @@ export class ReporteriaService {
         totales: compilado.mapa.totales.map((t) =>
           t.funcion === 'distintos' ? Number(r[t.alias]) : (normalizar(t.clave, r[t.alias]) as number | string | null),
         ),
+        ...(cruzada
+          ? { conColumna: Number(r.xc) === 0, ...(Number(r.xc) === 0 ? { columna: normalizarValor(tipoCruzada, r.gc) } : {}) }
+          : {}),
       };
     });
-    const general = resumenes.find((r) => r.nivel === 0);
+    const general = resumenes.find((r) => r.nivel === 0 && !r.conColumna);
     const totalFilas = general?.cantidad ?? 0;
     const nombreTotal = { suma: 'Suma', promedio: 'Promedio', minimo: 'Mínimo', maximo: 'Máximo', distintos: 'Distintos' } as const;
 
@@ -210,6 +238,17 @@ export class ReporteriaService {
         granularidad: g.granularidad,
         opciones: col(g.columna).opciones,
       })),
+      ...(cruzada
+        ? {
+            columnaCruzada: {
+              clave: cruzada.clave,
+              nombre: col(cruzada.clave).nombre,
+              tipo: tipoCruzada,
+              granularidad: cruzada.granularidad,
+              opciones: col(cruzada.clave).opciones,
+            },
+          }
+        : {}),
       totales: compilado.mapa.totales.map((t) => ({
         clave: t.clave,
         funcion: t.funcion,

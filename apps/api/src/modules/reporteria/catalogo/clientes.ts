@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { NOMBRES, TipoReporte } from './tipos';
+import { entreFechas, NOMBRES, TipoReporte } from './tipos';
 
 // Hoy en la hora del gimnasio, como fecha.
 const hoy = (tz: string) => Prisma.sql`(now() AT TIME ZONE ${tz})::date`;
@@ -32,7 +32,7 @@ export const CLIENTES: TipoReporte = {
     { clave: 'estado', nombre: 'Estado', grupo: 'Cliente', tipo: 'lista', sql: 'c.estado::text', opciones: NOMBRES.estadoCliente },
     { clave: 'alta', nombre: 'Cliente desde', grupo: 'Cliente', tipo: 'fechaHora', sql: 'c.created_at' },
     { clave: 'portal', nombre: 'Tiene acceso al portal', grupo: 'Cliente', tipo: 'booleano', sql: 'c.usuario_id IS NOT NULL' },
-    { clave: 'sucursal', nombre: 'Sucursal base', grupo: 'Cliente', tipo: 'texto', sql: "COALESCE(s.nombre, 'Sin sucursal base')", usa: ['s'] },
+    { clave: 'sucursal', nombre: 'Sucursal base', grupo: 'Cliente', tipo: 'texto', sql: 's.nombre', usa: ['s'] },
     { clave: 'tieneActiva', nombre: 'Tiene membresía activa', grupo: 'Membresía', tipo: 'booleano', sql: `EXISTS (SELECT 1 ${ACTIVA})` },
     { clave: 'planActivo', nombre: 'Plan activo', grupo: 'Membresía', tipo: 'texto', sql: `(SELECT pv.nombre ${ACTIVA} ORDER BY mv.fecha_fin DESC NULLS FIRST LIMIT 1)` },
     { clave: 'vence', nombre: 'Su membresía vence', grupo: 'Membresía', tipo: 'fecha', sql: `(SELECT mv.fecha_fin ${ACTIVA} ORDER BY mv.fecha_fin DESC NULLS FIRST LIMIT 1)` },
@@ -64,4 +64,29 @@ export const CLIENTES: TipoReporte = {
     },
   ],
   columnasIniciales: ['cliente', 'telefono', 'planActivo', 'vence', 'ultimaVisita'],
+  cruzados: [
+    { clave: 'membresiaActiva', nombre: 'membresía activa', conRango: false, existe: () => Prisma.raw(`EXISTS (SELECT 1 ${ACTIVA})`) },
+    {
+      clave: 'asistencias',
+      nombre: 'asistencias',
+      conRango: true,
+      existe: (ctx, desde, hasta) =>
+        Prisma.sql`EXISTS (SELECT 1 FROM registros_asistencia ra WHERE ra.cliente_id = c.id AND ra.deleted_at IS NULL${entreFechas('ra.fecha_hora_ingreso', ctx, desde, hasta)})`,
+    },
+    {
+      clave: 'reservas',
+      nombre: 'reservas de clases',
+      conRango: true,
+      existe: (ctx, desde, hasta) =>
+        Prisma.sql`EXISTS (SELECT 1 FROM reservas_clases rc JOIN clases_programadas kc ON kc.id = rc.clase_id AND kc.deleted_at IS NULL
+          WHERE rc.cliente_id = c.id AND rc.estado IN ('CONFIRMADA', 'ASISTIO')${entreFechas('kc.fecha_hora', ctx, desde, hasta)})`,
+    },
+    {
+      clave: 'compras',
+      nombre: 'compras',
+      conRango: true,
+      existe: (ctx, desde, hasta) =>
+        Prisma.sql`EXISTS (SELECT 1 FROM transacciones tc WHERE tc.cliente_id = c.id AND tc.deleted_at IS NULL AND tc.tipo = 'INGRESO'${entreFechas('tc.fecha_hora', ctx, desde, hasta)})`,
+    },
+  ],
 };

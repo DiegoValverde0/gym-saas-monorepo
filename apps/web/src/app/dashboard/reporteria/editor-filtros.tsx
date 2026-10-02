@@ -14,6 +14,9 @@ interface Props {
   cambiar: (d: Definicion) => void;
 }
 
+// Rangos para los filtros "con / sin" (sin el personalizado).
+const RANGOS_CRUZADO: RangoFecha[] = ['todo', 'ultimos_7', 'ultimos_30', 'ultimos_90', 'este_mes', 'mes_pasado', 'este_anio', 'proximos_7', 'proximos_30'];
+
 /** Filtros rápidos (fecha, sucursal, solo míos) y filtros por columna. */
 export function EditorFiltros({ tipo, catalogo, definicion, cambiar }: Props) {
   const { sucursales, esFija } = useSucursalActiva();
@@ -168,7 +171,8 @@ export function EditorFiltros({ tipo, catalogo, definicion, cambiar }: Props) {
               )}
               <button
                 type="button"
-                onClick={() => set({ campos: f.campos.filter((_, j) => j !== i) })}
+                // Al quitar un filtro cambian los números: la lógica se vuelve a escribir.
+                onClick={() => set({ campos: f.campos.filter((_, j) => j !== i), logica: undefined })}
                 className="ml-auto mt-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
                 aria-label={`Quitar filtro ${i + 1}`}
               >
@@ -186,8 +190,85 @@ export function EditorFiltros({ tipo, catalogo, definicion, cambiar }: Props) {
             <Plus className="h-4 w-4" /> Agregar filtro
           </button>
         )}
-        {f.campos.length > 1 && <p className="text-xs text-slate-500 dark:text-slate-400">Se cumplen todos los filtros a la vez.</p>}
+        {f.campos.length > 1 &&
+          (catalogo.avanzado ? (
+            <label className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              Cómo se combinan
+              <input
+                className={`${claseCampo} w-56`}
+                value={f.logica ?? ''}
+                placeholder={f.campos.map((_, i) => i + 1).join(' Y ')}
+                onChange={(e) => set({ logica: e.target.value || undefined })}
+                aria-label="Lógica de filtros"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">Con números, Y, O, NO y paréntesis: por ejemplo, 1 Y (2 O 3). Vacío: todos a la vez.</span>
+            </label>
+          ) : (
+            <p className="text-xs text-slate-500 dark:text-slate-400">Se cumplen todos los filtros a la vez.</p>
+          ))}
       </section>
+
+      {catalogo.avanzado && tipo.cruzados.length > 0 && (
+        <section className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Con / sin</h4>
+          {(f.cruzados ?? []).map((x, i) => {
+            const c = tipo.cruzados.find((y) => y.clave === x.clave)!;
+            const setCruzado = (nuevo: typeof x) => set({ cruzados: (f.cruzados ?? []).map((y, j) => (j === i ? nuevo : y)) });
+            return (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <select className={claseCampo} value={x.modo} onChange={(e) => setCruzado({ ...x, modo: e.target.value as 'con' | 'sin' })} aria-label={`Con o sin, filtro ${i + 1}`}>
+                  <option value="con">Con</option>
+                  <option value="sin">Sin</option>
+                </select>
+                <select
+                  className={claseCampo}
+                  value={x.clave}
+                  onChange={(e) => setCruzado({ clave: e.target.value, modo: x.modo })}
+                  aria-label={`Qué, filtro con/sin ${i + 1}`}
+                >
+                  {tipo.cruzados.map((y) => (
+                    <option key={y.clave} value={y.clave}>
+                      {y.nombre}
+                    </option>
+                  ))}
+                </select>
+                {c.conRango && (
+                  <select
+                    className={claseCampo}
+                    value={x.rango ?? 'todo'}
+                    onChange={(e) => setCruzado({ ...x, rango: e.target.value === 'todo' ? undefined : (e.target.value as RangoFecha) })}
+                    aria-label={`Cuándo, filtro con/sin ${i + 1}`}
+                  >
+                    {RANGOS_CRUZADO.map((r) => (
+                      <option key={r} value={r}>
+                        {r === 'todo' ? 'alguna vez' : NOMBRE_RANGO[r].toLowerCase()}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={() => set({ cruzados: (f.cruzados ?? []).filter((_, j) => j !== i) })}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                  aria-label={`Quitar el filtro con/sin ${i + 1}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+          {(f.cruzados ?? []).length < 3 && (
+            <button
+              type="button"
+              onClick={() => set({ cruzados: [...(f.cruzados ?? []), { clave: tipo.cruzados[0].clave, modo: 'sin' }] })}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              <Plus className="h-4 w-4" /> Agregar "con / sin"
+            </button>
+          )}
+          <p className="text-xs text-slate-500 dark:text-slate-400">Por ejemplo: clientes con membresía activa y sin asistencias en los últimos 30 días.</p>
+        </section>
+      )}
     </div>
   );
 }
