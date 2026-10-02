@@ -130,6 +130,7 @@ export const NOMBRES = {
   },
   tipoAsistencia: { MIEMBRO: 'Miembro', INVITADO: 'Invitado', VISITA_DIA: 'Visita del día', PRUEBA_GRATIS: 'Prueba gratis' },
   metodoValidacion: { MANUAL: 'Manual', TARJETA: 'Tarjeta', BIOMETRICO: 'Biométrico', QR: 'QR', CODIGO_PIN: 'Código PIN' },
+  mesDelAnio: { '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' },
   diaSemana: { '1': 'Lunes', '2': 'Martes', '3': 'Miércoles', '4': 'Jueves', '5': 'Viernes', '6': 'Sábado', '7': 'Domingo' },
   metodoPago: { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', QR: 'QR', PAGO_MOVIL: 'Pago móvil', OTRO: 'Otro' },
   estadoReserva: { CONFIRMADA: 'Confirmada', CANCELADA: 'Cancelada', ASISTIO: 'Asistió', NO_ASISTIO: 'No asistió', EN_ESPERA: 'En lista de espera' },

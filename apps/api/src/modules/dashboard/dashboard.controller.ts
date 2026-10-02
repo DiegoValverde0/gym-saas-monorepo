@@ -26,13 +26,6 @@ export class DashboardController {
     return this.dashboardService.getKpis(sucursalId, { verIngresos: !!req.permisos?.includes('transacciones:leer') });
   }
 
-  @Get('charts')
-  @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
-  async getCharts(@Req() req: RequestWithUser) {
-    const sucursalId = req.user.sucursalId;
-    return this.dashboardService.getRevenueChart(sucursalId);
-  }
-
   @Get('recent-activity')
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getRecentActivity(@Req() req: RequestWithUser) {

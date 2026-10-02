@@ -128,12 +128,20 @@ Rama sugerida: `inicio`.
   - `RolesGuard` deja `request.permisos` para lo que se muestra según el rol.
   - Prueba e2e `inicio.spec.ts`: el dueño ve los ingresos y el instructor no, ni en la pantalla ni en la respuesta de la API.
 
-### Fase 2: tarjetas de gráficos
+### Fase 2: tarjetas de gráficos (HECHA)
 - Componente de tarjeta (título, rango, "Ver el reporte completo", carga y vacío) que corre una plantilla o un reporte guardado.
 - Formas nuevas en `grafico-reporte.tsx`: mapa de calor, área, barras horizontales y "destacado + gris".
 - Plantillas nuevas: horas pico, asistencias por día, clientes nuevos por mes, ingresos este año contra el pasado y estado de los clientes.
-- Diseño guardado en `configuracion.inicio`.
+- Diseño guardado en `configuracion.tablero`.
 - **Listo cuando:** el Inicio muestra las tarjetas guardadas, cada una con su rango, y respeta los permisos de cada rol.
+- Hecho así:
+  - Reportería: tipos de gráfico `area`, `barrasH` (solo agrupado) y `calor` (solo tabla cruzada), y `destacar` (tabla cruzada en barras o líneas: la última fila en el color principal y las demás en gris). Columna nueva "Mes del año" en ventas. Cuatro plantillas nuevas: ingresos por mes de este año y los anteriores, ¿a qué hora viene la gente?, asistencias por día y clientes nuevos por mes (12 en total). El constructor ofrece cada forma solo donde sirve. La lista de reportes trae `clavePlantilla`.
+  - El estado de los clientes no es una plantilla: es una tarjeta propia (barra apilada con Al día, Por empezar, Vencida y Sin membresía, decisión I6) sobre `/dashboard/segmentacion-clientes`. Se quitó `/dashboard/charts` y los dos gráficos viejos del Inicio.
+  - Diseño: `organizaciones.configuracion.tablero.tarjetas` (sin cambios en la base), validado en `TarjetaTableroDto` (id de plantilla, reporte o tarjeta propia; tamaño chica, mediana o ancha; período sin "personalizado"; hasta 16). Sin diseño guardado se usa `DISENO_SUGERIDO` (`lib/tablero.ts`).
+  - Web: `components/inicio/tablero.tsx`. Cada tarjeta corre su reporte con 6 filas, se le cambia el período ahí mismo, y lleva a "Ver completo". Se muestra según el permiso: `reportes:leer` para las de reportería, `clientes:leer` y `membresias:leer` para las propias. La lista de vencimientos muestra 8 y "Ver las N".
+  - Lo que se corrigió al mirarlo con 200.000 ventas: comparando años, los meses sin datos (y los que no llegaron) quedan vacíos en vez de caer a 0, y el mes en curso va punteado; lo mismo con hoy en las curvas por día. Las descripciones de las plantillas no nombran el período (se puede cambiar en la tarjeta).
+  - Mirado en claro y oscuro, como dueño, recepción (ve todo: tiene reportes y movimientos) e instructor (solo asistencias, clientes y el estado de los clientes). El mapa de calor se desliza de lado en el celular.
+  - e2e: `inicio.spec.ts` suma las tarjetas del dueño (y el cambio de período) y lo que no ve el instructor. 30 pruebas.
 
 ### Fase 3: personalizar
 - "Personalizar el Inicio": galería con vista previa, agregar, quitar, arrastrar o mover con botones, tamaño, y "Volver al diseño sugerido".

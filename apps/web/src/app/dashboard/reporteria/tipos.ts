@@ -23,7 +23,7 @@ export type RangoFecha =
   | 'personalizado';
 export type Granularidad = 'dia' | 'semana' | 'mes' | 'anio';
 export type FuncionTotal = 'suma' | 'promedio' | 'minimo' | 'maximo' | 'distintos';
-export type TipoGrafico = 'barras' | 'lineas' | 'torta';
+export type TipoGrafico = 'barras' | 'lineas' | 'torta' | 'area' | 'barrasH' | 'calor';
 export type Operador =
   | 'igual'
   | 'distinto'
@@ -123,7 +123,7 @@ export interface Definicion {
   };
   orden: { columna: string; direccion: 'asc' | 'desc' }[];
   /** Agrupado o tabla cruzada. valor: "cantidad" o un total, como "suma:monto". */
-  grafico?: { tipo: TipoGrafico; valor: string };
+  grafico?: { tipo: TipoGrafico; valor: string; destacar?: boolean };
 }
 
 export interface Resumen {
@@ -158,6 +158,8 @@ export interface ReporteGuardado {
   tipo: { clave: string; nombre: string };
   formato: 'LISTA' | 'AGRUPADO' | 'TABLA_CRUZADA';
   esPlantilla: boolean;
+  /** La clave de la plantilla del sistema (para el Inicio). */
+  clavePlantilla?: string | null;
   carpeta: { id: string; nombre: string } | null;
   creadoPor: string | null;
   esMio: boolean;
@@ -228,7 +230,7 @@ export const NOMBRE_OPERADOR: Record<Operador, string> = {
 
 export const NOMBRE_GRANULARIDAD: Record<Granularidad, string> = { dia: 'Por día', semana: 'Por semana', mes: 'Por mes', anio: 'Por año' };
 
-export const NOMBRE_GRAFICO: Record<TipoGrafico, string> = { barras: 'Barras', lineas: 'Líneas', torta: 'Torta' };
+export const NOMBRE_GRAFICO: Record<TipoGrafico, string> = { barras: 'Barras', lineas: 'Líneas', torta: 'Torta', area: 'Área', barrasH: 'Barras horizontales', calor: 'Mapa de calor' };
 
 export const NOMBRE_FUNCION: Record<FuncionTotal, string> = {
   suma: 'Suma',

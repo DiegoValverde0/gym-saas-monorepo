@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { nombreRolLegible, registrarAuditoria } from '../../common/utils/auditoria.util';
 import { tipoReporte, TipoReporte } from './catalogo';
 import { Definicion, validarDefinicion } from './motor/definicion';
+import { clavePlantillaDe } from './motor/plantillas';
 import { aCsv, aExcel, NOMBRE_RANGO, nombreArchivo } from './motor/exportador';
 import { Contexto, MAX_FILAS_EXPORTACION, ReporteriaService, ResultadoReporte } from './reporteria.service';
 import {
@@ -111,6 +112,8 @@ export class ReportesGuardadosService {
       tipo: { clave: r.tipoReporte, nombre: tipo?.nombre ?? r.tipoReporte },
       formato: r.formato,
       esPlantilla: r.esPlantilla,
+      // Para pedir una plantilla por su clave (el Inicio, docs/plan-inicio.md).
+      clavePlantilla: r.esPlantilla ? clavePlantillaDe(ctx.ejecucion.organizacionId, r.id) ?? null : null,
       carpeta: r.carpeta && !r.carpeta.deletedAt ? { id: r.carpeta.id, nombre: r.carpeta.nombre } : null,
       creadoPor: r.esPlantilla ? 'Sistema' : r.creadoPor?.nombreCompleto ?? null,
       esMio: r.creadoPorId === ctx.ejecucion.usuarioId,

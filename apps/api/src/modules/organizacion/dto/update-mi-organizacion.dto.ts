@@ -1,4 +1,5 @@
-import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested, IsIn, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsBoolean, ValidateNested, IsIn, IsInt, Min, Max, IsArray, ArrayMaxSize, Matches } from 'class-validator';
+import { RANGOS_FECHA } from '../../reporteria/motor/definicion';
 import { MODOS_USO, ModoUso } from '../../../common/utils/modo.util';
 import { Type } from 'class-transformer';
 
@@ -111,6 +112,28 @@ export class OnboardingConfigDto {
   primerosPasosOcultos?: boolean;
 }
 
+// Una tarjeta del Inicio (docs/plan-inicio.md): una plantilla (por su clave),
+// un reporte guardado (por su id) o una de las propias del Inicio.
+export class TarjetaTableroDto {
+  @Matches(/^(plantilla:[a-z0-9-]{1,60}|reporte:[0-9a-f-]{36}|estado-clientes|por-vencer)$/, { message: 'La tarjeta del Inicio no es válida.' })
+  id: string;
+
+  @IsIn(['chica', 'mediana', 'ancha'], { message: 'El tamaño de la tarjeta tiene que ser chica, mediana o ancha.' })
+  tamano: 'chica' | 'mediana' | 'ancha';
+
+  @IsOptional()
+  @IsIn(RANGOS_FECHA.filter((r) => r !== 'personalizado'), { message: 'Ese período no se puede usar en una tarjeta del Inicio.' })
+  rango?: string;
+}
+
+export class TableroConfigDto {
+  @IsArray()
+  @ArrayMaxSize(16, { message: 'El Inicio puede tener hasta 16 tarjetas.' })
+  @ValidateNested({ each: true })
+  @Type(() => TarjetaTableroDto)
+  tarjetas: TarjetaTableroDto[];
+}
+
 export class ConfiguracionTenantDto {
   @IsOptional()
   @IsIn(MODOS_USO)
@@ -146,6 +169,11 @@ export class ConfiguracionTenantDto {
   @ValidateNested()
   @Type(() => JornadasConfigDto)
   jornadas?: JornadasConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TableroConfigDto)
+  tablero?: TableroConfigDto;
 }
 
 // Asistente de inicio (plan 4.5): aplica modo y módulos elegidos, guarda las

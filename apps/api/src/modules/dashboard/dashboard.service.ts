@@ -4,7 +4,6 @@ import { ClsService } from 'nestjs-cls';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 import { promedioMismoDia, proyeccionDelMes, rangos, ultimosDias, variacion } from './indicadores';
 import { asistenciasPorDia, ventasPorDia } from './series-diarias';
-import { startOfDay, subDays, format } from 'date-fns';
 import { calcularSegmentoCliente, SEGMENTOS_CLIENTE } from '../clientes/segmentacion-cliente.util';
 
 @Injectable()
@@ -103,38 +102,6 @@ export class DashboardService {
       },
       membresiasPorVencer: porVencer as number,
     };
-  }
-
-  async getRevenueChart(sucursalId?: string) {
-    const filterTransaccion = sucursalId ? { sucursalId } : {};
-    const desde = startOfDay(subDays(new Date(), 6));
-
-    // Una sola consulta trae los ingresos de los últimos 7 días; el
-    // agrupamiento por día se hace en memoria en vez de 7 aggregate()
-    // separados (uno por día).
-    const transacciones = await this.prisma.extendedClient.transaccion.findMany({
-      where: { ...filterTransaccion, tipo: 'INGRESO', createdAt: { gte: desde } },
-      select: { createdAt: true, montoTotal: true },
-    });
-
-    const totalesPorDia = new Map<string, number>();
-    for (const t of transacciones) {
-      const key = format(startOfDay(t.createdAt), 'yyyy-MM-dd');
-      totalesPorDia.set(key, (totalesPorDia.get(key) || 0) + Number(t.montoTotal));
-    }
-
-    const chartData = [];
-    for (let i = 6; i >= 0; i--) {
-        const dateStart = startOfDay(subDays(new Date(), i));
-        const key = format(dateStart, 'yyyy-MM-dd');
-
-        chartData.push({
-            name: format(dateStart, 'dd MMM'),
-            Ingresos: totalesPorDia.get(key) || 0
-        });
-    }
-
-    return chartData;
   }
 
   // Reporte agregado para el Objetivo 1 de segmentación (ver

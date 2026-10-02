@@ -30,6 +30,16 @@ export const VENTAS: TipoReporte = {
   columnas: [
     { clave: 'fecha', nombre: 'Fecha y hora', grupo: 'Venta', tipo: 'fechaHora', sql: 't.fecha_hora', usa: ['t'] },
     { clave: 'dia', nombre: 'Día', grupo: 'Venta', tipo: 'fecha', sql: (ctx) => Prisma.sql`${enHoraLocal('t.fecha_hora')(ctx)}::date`, usa: ['t'], ayuda: 'La fecha de la venta, sin la hora (sirve para agrupar por día, semana o mes).' },
+    {
+      clave: 'mesDelAnio',
+      nombre: 'Mes del año',
+      grupo: 'Venta',
+      tipo: 'lista',
+      sql: (ctx) => Prisma.sql`to_char(${enHoraLocal('t.fecha_hora')(ctx)}, 'MM')`,
+      usa: ['t'],
+      opciones: NOMBRES.mesDelAnio,
+      ayuda: 'Enero, febrero…, sin el año: para comparar el mismo mes de cada año.',
+    },
     { clave: 'concepto', nombre: 'Qué se vendió', grupo: 'Venta', tipo: 'lista', sql: 'd.tipo_concepto::text', opciones: NOMBRES.concepto },
     {
       clave: 'detalle',
