@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
-import { aHoraLocal } from '../../common/utils/zona-horaria.util';
-import { startOfDay, startOfMonth, subDays, format } from 'date-fns';
+import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
+import { promedioMismoDia, proyeccionDelMes, rangos, ultimosDias, variacion } from './indicadores';
+import { asistenciasPorDia, ventasPorDia } from './series-diarias';
+import { startOfDay, subDays, format } from 'date-fns';
 import { calcularSegmentoCliente, SEGMENTOS_CLIENTE } from '../clientes/segmentacion-cliente.util';
 
 @Injectable()
@@ -12,62 +14,94 @@ export class DashboardService {
     private cls: ClsService,
   ) {}
 
-  async getKpis(sucursalId?: string) {
-    const today = startOfDay(new Date());
-    const thisMonth = startOfMonth(new Date());
-    
-    // Filtro de sucursal
-    const filterTransaccion = sucursalId ? { sucursalId } : {};
-    const filterCliente = sucursalId ? { sucursalBaseId: sucursalId } : {};
-    const filterAsistencia = sucursalId ? { sucursalId } : {};
+  private async zonaHoraria(): Promise<string | null> {
+    const organizacionId = this.cls.get('organizacionId');
+    if (!organizacionId) return null;
+    const org = await this.prisma.extendedClient.organizacion.findUnique({ where: { id: organizacionId }, select: { zonaHoraria: true } });
+    return org?.zonaHoraria ?? null;
+  }
 
-    // 1. Ingresos
-    const ingresosHoy = await this.prisma.extendedClient.transaccion.aggregate({
-      where: { ...filterTransaccion, tipo: 'INGRESO', createdAt: { gte: today } },
-      _sum: { montoTotal: true }
-    });
+  /**
+   * Indicadores del Inicio (docs/plan-inicio.md, fase 1): cada número con su
+   * comparación "a la misma altura" y una serie chica para la tendencia. Las
+   * fechas son las del gimnasio (antes "hoy" y "este mes" eran los del
+   * servidor, y se contaba la fecha de carga de la venta, no la de la venta).
+   */
+  async getKpis(sucursalId?: string, { verIngresos = true }: { verIngresos?: boolean } = {}) {
+    const zona = await this.zonaHoraria();
+    const r = rangos(new Date(), zona);
+    const db = this.prisma.extendedClient;
+    const filtroVenta = { tipo: 'INGRESO' as const, ...(sucursalId ? { sucursalId } : {}) };
+    const filtroCliente = sucursalId ? { sucursalBaseId: sucursalId } : {};
+    const suma = async (desde: Date, hasta: Date) =>
+      !verIngresos ? 0 : Number((await db.transaccion.aggregate({ where: { ...filtroVenta, fechaHora: { gte: desde, lt: hasta } }, _sum: { montoTotal: true } }))._sum.montoTotal ?? 0);
 
-    const ingresosMes = await this.prisma.extendedClient.transaccion.aggregate({
-      where: { ...filterTransaccion, tipo: 'INGRESO', createdAt: { gte: thisMonth } },
-      _sum: { montoTotal: true }
-    });
+    const DIAS_SERIE_INGRESOS = 30;
+    const DIAS_SERIE_ASISTENCIAS = 14;
+    // Las tendencias terminan ayer: hoy va a medias y parecía una caída.
+    const dias30 = ultimosDias(r, DIAS_SERIE_INGRESOS + 1).slice(0, -1);
+    const desdeSerie = desdeHoraLocal(new Date(`${dias30[0]}T00:00:00Z`), 0, zona);
+    // Asistencias: 4 semanas atrás para el promedio del mismo día de la semana.
+    const desdeAsistencias = new Date(r.hoy.getTime() - 28 * 86_400_000);
 
-    // 2. Clientes
-    const clientesTotales = await this.prisma.extendedClient.cliente.count({
-      where: filterCliente
-    });
+    const organizacionId: string = this.cls.get('organizacionId');
+    const filtroSerie = { organizacionId, sucursalId, zona };
+    const fechaHoy = r.fechaHoy;
+    const limiteVencer = new Date(fechaHoy.getTime() + 7 * 86_400_000);
 
-    const clientesActivos = await this.prisma.extendedClient.cliente.count({
-      where: {
-        ...filterCliente,
-        membresias: {
-          some: {
-            estado: 'ACTIVA'
-          }
-        }
-      }
-    });
+    const [hoy, ayer, mes, mesPasado, mesPasadoCompleto, ventasPorDiaMapa, clientesTotales, clientesActivos, altasMes, altasMesPasado, asistenciasMapa, porVencer] =
+      await Promise.all([
+        suma(r.hoy, r.ahora),
+        suma(r.ayer, r.ayerMismaHora),
+        suma(r.mes, r.ahora),
+        suma(r.mesPasado, r.mesPasadoMismaAltura),
+        suma(r.mesPasado, r.mes),
+        verIngresos ? ventasPorDia(db, { ...filtroSerie, desde: desdeSerie, hasta: r.ahora }) : new Map<string, number>(),
+        db.cliente.count({ where: filtroCliente }),
+        db.cliente.count({ where: { ...filtroCliente, membresias: { some: { estado: 'ACTIVA' } } } }),
+        db.cliente.count({ where: { ...filtroCliente, createdAt: { gte: r.mes, lt: r.ahora } } }),
+        db.cliente.count({ where: { ...filtroCliente, createdAt: { gte: r.mesPasado, lt: r.mesPasadoMismaAltura } } }),
+        asistenciasPorDia(db, { ...filtroSerie, desde: desdeAsistencias, hasta: r.ahora, minutosDelDia: r.minutosDelDia }),
+        // Membresías por vencer: el mismo criterio que la lista del Inicio
+        // (getPorVencer: 7 días en la hora local, sin contar a quien ya renovó).
+        db.membresia.count({
+          where: {
+            estado: 'ACTIVA',
+            fechaFin: { gte: fechaHoy, lte: limiteVencer },
+            cliente: { membresias: { none: { estado: 'EN_ESPERA' } }, ...(sucursalId ? { sucursalBaseId: sucursalId } : {}) },
+          },
+        }),
+      ]);
 
-    // 3. Asistencias Hoy
-    const asistenciasHoy = await this.prisma.extendedClient.registroAsistencia.count({
-      where: {
-        ...filterAsistencia,
-        fechaHoraIngreso: { gte: today }
-      }
-    });
-
-    // 4. Membresías por vencer: el mismo cálculo que la lista del Inicio
-    // (7 días en la hora local, sin contar a quien ya renovó). Antes la
-    // tarjeta contaba 5 días y la lista 7, y no coincidían.
-    const membresiasPorVencer = (await this.getPorVencer(sucursalId)).length;
+    const asistencias = asistenciasMapa as Map<string, { total: number; hastaLaHora: number }>;
+    const hastaLaHora = new Map([...asistencias].map(([dia, x]) => [dia, x.hastaLaHora]));
+    const claveHoy = fechaHoy.toISOString().slice(0, 10);
+    const redondear = (n: number) => Math.round(n * 100) / 100;
 
     return {
-      ingresosHoy: ingresosHoy._sum.montoTotal || 0,
-      ingresosMes: ingresosMes._sum.montoTotal || 0,
-      clientesTotales,
-      clientesActivos,
-      asistenciasHoy,
-      membresiasPorVencer
+      ingresos: !verIngresos ? null : {
+        hoy: redondear(hoy),
+        ayerMismaHora: redondear(ayer),
+        mes: redondear(mes),
+        mesPasadoMismaAltura: redondear(mesPasado),
+        mesPasado: redondear(mesPasadoCompleto),
+        variacionMes: variacion(mes, mesPasado),
+        variacionHoy: variacion(hoy, ayer),
+        proyeccionMes: proyeccionDelMes(mes, r),
+        serie: dias30.map((fecha) => ({ fecha, valor: redondear((ventasPorDiaMapa as Map<string, number>).get(fecha) ?? 0) })),
+      },
+      asistencias: {
+        hoy: asistencias.get(claveHoy)?.total ?? 0,
+        promedioMismoDia: promedioMismoDia(hastaLaHora, r),
+        serie: ultimosDias(r, DIAS_SERIE_ASISTENCIAS + 1).slice(0, -1).map((fecha) => ({ fecha, valor: asistencias.get(fecha)?.total ?? 0 })),
+      },
+      clientes: {
+        activos: clientesActivos,
+        totales: clientesTotales,
+        altasMes,
+        altasMesPasadoMismaAltura: altasMesPasado,
+      },
+      membresiasPorVencer: porVencer as number,
     };
   }
 

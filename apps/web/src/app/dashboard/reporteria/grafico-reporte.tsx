@@ -2,14 +2,13 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { bs } from '@/lib/formato';
+import { MAX_SERIES, useColoresGraficos } from '@/lib/colores-graficos';
 import { formatearValor, Granularidad, Resultado, Resumen, TipoDato } from './tipos';
 
-const COLORES = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#84cc16'];
-const COLOR_OTROS = '#94a3b8';
 // Más que esto no se lee en un gráfico: se muestran los primeros (o los más grandes).
 const MAX_PUNTOS = 30;
-const MAX_SERIES = 8;
-const MAX_PORCIONES = 8;
+// Una porción por color de la paleta, contando "Otros".
+const MAX_PORCIONES = MAX_SERIES - 1;
 
 const clave = (v: unknown) => JSON.stringify(v ?? null);
 const etiqueta = (v: unknown, g: { tipo: TipoDato; opciones?: Record<string, string>; granularidad?: Granularidad }) =>
@@ -94,6 +93,7 @@ function Ayuda({ active, payload, label, formato }: { active?: boolean; payload?
  * fase 7): barras, líneas o torta sobre el primer nivel de grupos.
  */
 export function GraficoReporte({ resultado }: { resultado: Resultado }) {
+  const colores = useColoresGraficos();
   const datos = datosDelGrafico(resultado);
   if (!datos || datos.puntos.length === 0) return null;
   const tipo = resultado.definicion.grafico!.tipo;
@@ -101,7 +101,7 @@ export function GraficoReporte({ resultado }: { resultado: Resultado }) {
   const corto = (n: number) => (Math.abs(n) >= 1000 ? n.toLocaleString('es-ES', { notation: 'compact', maximumFractionDigits: 1 }) : n.toLocaleString('es-ES', { maximumFractionDigits: 1 }));
   const ejes = (
     <>
-      <CartesianGrid stroke="currentColor" className="text-slate-200 dark:text-slate-800" strokeDasharray="4 4" vertical={false} />
+      <CartesianGrid stroke={colores.grilla} vertical={false} />
       <XAxis dataKey="nombre" stroke="currentColor" className="text-slate-500 dark:text-slate-400" fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" />
       <YAxis stroke="currentColor" className="text-slate-500 dark:text-slate-400" fontSize={12} tickLine={false} axisLine={false} tickFormatter={corto} width={64} />
       <Tooltip content={<Ayuda formato={formato} />} cursor={{ fill: 'currentColor', className: 'text-slate-100 dark:text-slate-800' }} />
@@ -116,9 +116,10 @@ export function GraficoReporte({ resultado }: { resultado: Resultado }) {
         <ResponsiveContainer width="100%" height="100%">
           {tipo === 'torta' ? (
             <PieChart>
-              <Pie data={puntos} dataKey="s0" nameKey="nombre" innerRadius="45%" outerRadius="80%" paddingAngle={1} stroke="none" isAnimationActive={false}>
+              {/* Un borde del color del fondo separa las porciones (2 px). */}
+              <Pie data={puntos} dataKey="s0" nameKey="nombre" innerRadius="45%" outerRadius="80%" stroke={colores.superficie} strokeWidth={2} isAnimationActive={false}>
                 {puntos.map((p, i) => (
-                  <Cell key={i} fill={p.nombre === 'Otros' ? COLOR_OTROS : COLORES[i % COLORES.length]} />
+                  <Cell key={i} fill={p.nombre === 'Otros' ? colores.gris : colores.series[i]} />
                 ))}
               </Pie>
               <Tooltip content={<Ayuda formato={formato} />} />
@@ -128,14 +129,14 @@ export function GraficoReporte({ resultado }: { resultado: Resultado }) {
             <LineChart data={puntos} margin={{ top: 5, right: 12, bottom: 5, left: 0 }}>
               {ejes}
               {series.map((s, i) => (
-                <Line key={s.clave} type="monotone" dataKey={s.clave} name={s.nombre} stroke={COLORES[i % COLORES.length]} strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} />
+                <Line key={s.clave} type="monotone" dataKey={s.clave} name={s.nombre} stroke={colores.series[i]} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} isAnimationActive={false} />
               ))}
             </LineChart>
           ) : (
-            <BarChart data={puntos} margin={{ top: 5, right: 12, bottom: 5, left: 0 }}>
+            <BarChart data={puntos} margin={{ top: 5, right: 12, bottom: 5, left: 0 }} barGap={2}>
               {ejes}
               {series.map((s, i) => (
-                <Bar key={s.clave} dataKey={s.clave} name={s.nombre} fill={COLORES[i % COLORES.length]} radius={[3, 3, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+                <Bar key={s.clave} dataKey={s.clave} name={s.nombre} fill={colores.series[i]} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
               ))}
             </BarChart>
           )}

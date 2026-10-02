@@ -9,6 +9,8 @@ interface RequestWithUser extends ExpressRequest {
   user: {
     sucursalId?: string;
   };
+  /** Los deja RolesGuard. */
+  permisos?: string[];
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,7 +22,8 @@ export class DashboardController {
   @RequirePermissions({ accion: 'leer', modulo: 'dashboard' })
   async getKpis(@Req() req: RequestWithUser) {
     const sucursalId = req.user.sucursalId;
-    return this.dashboardService.getKpis(sucursalId);
+    // Los ingresos solo para quien puede ver los movimientos (el instructor no).
+    return this.dashboardService.getKpis(sucursalId, { verIngresos: !!req.permisos?.includes('transacciones:leer') });
   }
 
   @Get('charts')
