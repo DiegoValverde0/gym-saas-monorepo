@@ -62,6 +62,11 @@ export interface TipoReporte {
   creadoPor?: { sql: string; usa?: string[] };
   /** Columna de fecha del filtro rápido por defecto. */
   fechaPorDefecto: string;
+  /**
+   * Rango con el que arranca un reporte nuevo (por defecto, los últimos 30
+   * días). Inventario arranca con "Todas las fechas": es una foto de hoy.
+   */
+  rangoPorDefecto?: 'todo' | 'este_mes' | 'ultimos_30' | 'ultimos_90' | 'proximos_7' | 'proximos_30';
   columnas: ColumnaCatalogo[];
   /** Columnas que se proponen al crear un reporte nuevo. */
   columnasIniciales: string[];
@@ -95,6 +100,14 @@ export const NOMBRES = {
   tipoAsistencia: { MIEMBRO: 'Miembro', INVITADO: 'Invitado', VISITA_DIA: 'Visita del día', PRUEBA_GRATIS: 'Prueba gratis' },
   metodoValidacion: { MANUAL: 'Manual', TARJETA: 'Tarjeta', BIOMETRICO: 'Biométrico', QR: 'QR', CODIGO_PIN: 'Código PIN' },
   diaSemana: { '1': 'Lunes', '2': 'Martes', '3': 'Miércoles', '4': 'Jueves', '5': 'Viernes', '6': 'Sábado', '7': 'Domingo' },
+  metodoPago: { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', QR: 'QR', PAGO_MOVIL: 'Pago móvil', OTRO: 'Otro' },
+  estadoReserva: { CONFIRMADA: 'Confirmada', CANCELADA: 'Cancelada', ASISTIO: 'Asistió', NO_ASISTIO: 'No asistió', EN_ESPERA: 'En lista de espera' },
+  estadoTurno: { PROGRAMADO: 'Programada', COMPLETADO: 'Completada', AUSENTE: 'Ausente', CANCELADO: 'Cancelada' },
+  estadoApertura: { ABIERTA: 'Abierta', CERRADA: 'Cerrada' },
+  estadoClase: { ACTIVO: 'Programada', INACTIVO: 'Cancelada' },
+  genero: { MASCULINO: 'Masculino', FEMENINO: 'Femenino', OTRO: 'Otro', PREFIERE_NO_INFORMAR: 'Prefiere no decir' },
+  estadoCliente: { ACTIVO: 'Activo', INACTIVO: 'Inactivo', MOROSO: 'Con deuda', SUSPENDIDO: 'Suspendido' },
+  contratacion: { PLANILLA: 'En planilla', INDEPENDIENTE: 'Independiente', VOLUNTARIO: 'Voluntario' },
 } as const;
 
 // Hora local del gimnasio de un timestamptz, para columnas calculadas.

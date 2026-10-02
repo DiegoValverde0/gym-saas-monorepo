@@ -115,6 +115,7 @@ export class ReporteriaService {
         descripcion: t.descripcion,
         fila: t.fila,
         fechaPorDefecto: t.fechaPorDefecto,
+        rangoPorDefecto: t.rangoPorDefecto ?? 'ultimos_30',
         columnasIniciales: t.columnasIniciales,
         tieneSoloMios: !!t.creadoPor,
         columnas: t.columnas.map((c) => ({

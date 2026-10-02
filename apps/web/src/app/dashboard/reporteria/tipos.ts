@@ -59,6 +59,7 @@ export interface TipoCatalogo {
   descripcion: string;
   fila: string;
   fechaPorDefecto: string;
+  rangoPorDefecto: RangoFecha;
   columnasIniciales: string[];
   tieneSoloMios: boolean;
   columnas: ColumnaCatalogo[];
@@ -249,8 +250,9 @@ export function definicionInicial(tipo: TipoCatalogo): Definicion {
     agrupaciones: [],
     totales: [],
     mostrarDetalle: true,
-    // Últimos 30 días: "este mes" sale vacío a principio de mes.
-    filtros: { fecha: { columna: tipo.fechaPorDefecto, rango: 'ultimos_30' }, soloMios: false, campos: [] },
+    // Por lo general los últimos 30 días ("este mes" sale vacío a principio
+    // de mes); Clientes e Inventario arrancan con todas las fechas.
+    filtros: { fecha: { columna: tipo.fechaPorDefecto, rango: tipo.rangoPorDefecto }, soloMios: false, campos: [] },
     orden: [],
   };
 }
