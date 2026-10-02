@@ -87,6 +87,27 @@ async function main() {
     }
   });
 
+  // Un instructor (rol ENTRENADOR, con su perfil de equipo): para ver el
+  // panel como lo ve un instructor y para las pruebas e2e (docs/plan-pruebas-e2e.md).
+  const instructorUser = await prisma.usuario.create({
+    data: {
+      nombreCompleto: 'Carlos Instructor',
+      correo: 'carlos@gymtitan.com',
+      contrasenaHash: hashPassword('carlos123'),
+    }
+  });
+  await prisma.asignacionAcceso.create({
+    data: {
+      usuarioId: instructorUser.id,
+      organizacionId: orgTitan.id,
+      rolId: roles.ENTRENADOR,
+      sucursalId: sucursalTitan.id,
+    }
+  });
+  await prisma.perfilStaff.create({
+    data: { usuarioId: instructorUser.id, organizacionId: orgTitan.id, tipoContratacion: 'INDEPENDIENTE' }
+  });
+
   // =======================================================
   // 5. FLUJO BÁSICO (CAJA, PLAN, CLIENTE, VENTA)
   // =======================================================
@@ -150,6 +171,8 @@ async function main() {
     where: { id: aperturaTitan.id },
     data: { estado: EstadoAperturaCaja.CERRADA, fechaCierre: new Date(), montoCierreEsperado: 400.00, montoCierreReal: 400.00 }
   });
+  // Y la caja queda con lo contado, como al cerrar desde Cajas (apertura-caja.service.ts).
+  await prisma.cajaRegistradora.update({ where: { id: cajaTitan.id }, data: { saldoActual: 400.00 } });
 
   // =======================================================
   // 6. PORTAL DEL CLIENTE (docs/plan-portal-cliente.md)

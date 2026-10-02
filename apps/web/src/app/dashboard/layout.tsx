@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { activeTenantId, setActiveTenantId } = useTenantStore();
-  const { permisos } = usePermissions();
+  const { permisos, isFetched: permisosCargados } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
   useAvisoCambioAcceso(userData);
   // Las cuentas de clientes usan su portal, no el panel.
@@ -87,10 +87,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
-  const { modo, esSimple } = useModoUso();
+  const { modo, esSimple, cargado: configuracionCargada } = useModoUso();
 
   // Qué ve esta persona (docs/plan-menu-lateral.md): permisos, módulos y modo.
-  const filteredNavigationGroups = useMemo(() => menuVisible({ permisos, modulos, modo }), [permisos, modulos, modo]);
+  // Hasta tener los permisos y la configuración del gimnasio no se arma: con
+  // los valores por defecto aparecían por un instante pantallas que no le tocan.
+  const menuListo = permisosCargados && configuracionCargada;
+  const filteredNavigationGroups = useMemo(
+    () => (menuListo ? menuVisible({ permisos, modulos, modo }) : []),
+    [menuListo, permisos, modulos, modo],
+  );
 
   // Ajustes va separado, abajo del todo.
   const gruposArriba = filteredNavigationGroups.filter((g) => !g.alFondo);
@@ -171,12 +177,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Menú (docs/plan-menu-lateral.md): todos los grupos abiertos, lo de
           todos los días arriba y Ajustes al fondo. */}
-      <nav aria-label="Menú principal" className={`flex flex-1 flex-col overflow-y-auto pb-4 ${achicado ? 'px-2' : 'px-3'}`}>
+      <nav aria-label="Menú principal" aria-busy={!menuListo} className={`flex flex-1 flex-col overflow-y-auto pb-4 ${achicado ? 'px-2' : 'px-3'}`}>
         <Enlace href={INICIO.href} nombre={INICIO.nombre} icono={LayoutDashboard} actual={pathname === INICIO.href} compacto={achicado} />
         {isSuperAdmin && (
           <div className="pt-4">
             <p className={achicado ? 'sr-only' : 'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500'}>Sistema</p>
             <Enlace href="/dashboard/organizaciones" nombre="Organizaciones" icono={Globe} actual={pathname === '/dashboard/organizaciones'} compacto={achicado} />
+          </div>
+        )}
+        {!menuListo && (
+          <div aria-hidden className="space-y-2 pt-6">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className={`h-6 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-800 ${achicado ? 'mx-1' : 'mx-3'}`} />
+            ))}
           </div>
         )}
         {gruposArriba.map((grupo) => (

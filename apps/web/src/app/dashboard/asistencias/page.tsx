@@ -316,7 +316,9 @@ export default function AsistenciasPage() {
                               onChange={(e) => setSearchTerm(e.target.value)}
                             />
                           </div>
-                          {debouncedSearch.length >= 2 && (
+                          {/* Con la búsqueda borrada (por ejemplo, al confirmar un ingreso) la
+                              lista se va enseguida, sin esperar la pausa de la búsqueda. */}
+                          {searchTerm.trim().length >= 2 && debouncedSearch.length >= 2 && (
                             <div className="divide-y border rounded-lg overflow-hidden bg-white dark:bg-slate-900">
                               {buscando && !resultados ? (
                                 <div className="p-4 text-center text-zinc-500 dark:text-zinc-400">Buscando...</div>

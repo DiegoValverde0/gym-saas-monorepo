@@ -54,7 +54,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
     // Límite global generoso (protege toda la API de abuso); rutas
     // sensibles como /auth/login aplican un límite más estricto vía @Throttle.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
+    // THROTTLE_LIMIT solo lo sube la tanda de pruebas e2e (docs/plan-pruebas-e2e.md,
+    // E4): cada pantalla hace varios pedidos. Sin la variable, 100 por minuto.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: Number(process.env.THROTTLE_LIMIT) || 100 }]),
     RedisModule,
     PrismaModule,
     OrganizacionModule, 

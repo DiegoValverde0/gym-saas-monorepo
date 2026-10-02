@@ -10,7 +10,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSoftDelete } from '@/hooks/use-soft-delete';
-import { fechaISO } from '@/lib/formato';
+import { bs, fechaISO } from '@/lib/formato';
 import { useListaPaginada } from '@/hooks/use-lista-paginada';
 import { Paginacion } from '@/components/ui/paginacion';
 import { Button } from '@/components/ui/button';
@@ -474,6 +474,10 @@ export default function GastosPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-xs text-slate-600 dark:text-slate-400">{labelCategoria(g.detalles?.[0]?.tipoConcepto || '')}</span>
+                        {/* Lo que se escribió al registrarlo ("Arreglo de la caminadora"). */}
+                        {g.detalles?.[0]?.descripcionLibre && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{g.detalles[0].descripcionLibre}</p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className="text-xs text-slate-600 dark:text-slate-400">{g.sucursal?.nombre}</span>
@@ -482,7 +486,7 @@ export default function GastosPage() {
                         <span className="text-xs text-slate-600 dark:text-slate-400">{new Date(g.fechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">- ${Number(g.montoTotal).toFixed(2)}</span>
+                        <span className="font-bold text-rose-600 dark:text-rose-400">- {bs(Number(g.montoTotal))}</span>
                       </TableCell>
                       <TableCell className="text-right">
                         <Protect permission="transacciones:eliminar" fallbackType="hide">

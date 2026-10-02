@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useCatalogo } from '../datos';
 import { Constructor } from '../constructor';
@@ -12,13 +13,29 @@ import { definicionInicial, TipoCatalogo } from '../tipos';
 export default function NuevoReportePage() {
   const { data: catalogo, isLoading } = useCatalogo();
   const [tipo, setTipo] = useState<TipoCatalogo | null>(null);
+  const { data: permisos, hasPermission } = usePermissions();
 
-  if (isLoading || !catalogo) return <div className="h-64 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />;
+  if (isLoading || !catalogo || !permisos) return <div className="h-64 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />;
 
   if (catalogo.modo === 'simple') {
     return (
       <div className="mx-auto max-w-lg space-y-4 py-10 text-center">
         <p className="text-slate-600 dark:text-slate-300">En modo simple se usan los reportes listos. Para armar los tuyos, cambia a modo intermedio en Configuración.</p>
+        <Link href="/dashboard/reporteria" className={buttonVariants({ variant: 'outline' })}>
+          Volver a la reportería
+        </Link>
+      </div>
+    );
+  }
+
+  // Recepción ve y exporta los reportes compartidos, pero no los arma (decisión
+  // R2 del plan de reportería): si llega por la dirección, se lo explica.
+  if (!hasPermission('reportes:crear')) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 py-10 text-center">
+        <p className="text-slate-600 dark:text-slate-300">
+          Tu rol puede ver y exportar los reportes que te comparten, pero no armar reportes nuevos. Si lo necesitas, pídele al dueño del gimnasio.
+        </p>
         <Link href="/dashboard/reporteria" className={buttonVariants({ variant: 'outline' })}>
           Volver a la reportería
         </Link>
