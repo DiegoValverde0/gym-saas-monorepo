@@ -212,9 +212,13 @@ Dependencia nueva: **`exceljs`** en la API, para el Excel con formato. El CSV se
   - Atrasos del equipo del mes
 - Visibilidad por modo (decisión R2).
 
-### Fase 8: rendimiento, pruebas completas y cierre
+### Fase 8: rendimiento, pruebas completas y cierre (HECHA)
 - Datos de prueba grandes (un script con unas 200.000 ventas y 500.000 asistencias en la base local), `EXPLAIN` de los reportes más pesados e índices **DB-8** solo si hacen falta.
+  - Resultado: con 200.000 ventas, 500.000 asistencias y 3.000 clientes, todo responde en menos de 1 s (lo más lento, una tabla cruzada de asistencias: 0,7 s). **DB-8 no se hizo: no hizo falta.**
+  - Lo lento era exportar (44.000 filas: CSV 7,5 s, Excel 9,8 s) y se arregló en el exportador (1,1 s y 2,9 s).
 - Recorrido completo en el navegador (dueño, recepción e instructor; claro y oscuro; celular para ver y exportar), `pnpm db:reset` y documentación de cómo agregar un tipo de reporte nuevo al catálogo.
+  - Recepción ve plantillas y compartidos de su sucursal, corre y exporta, no arma. El instructor no ve Reportería; si entra por la dirección, ve un aviso en lugar de una página vacía. En celular la vista no se desborda.
+  - Documentación: [reporteria.md](reporteria.md).
 
 ---
 

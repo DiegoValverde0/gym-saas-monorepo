@@ -103,7 +103,7 @@ export function GraficoReporte({ resultado }: { resultado: Resultado }) {
     <>
       <CartesianGrid stroke="currentColor" className="text-slate-200 dark:text-slate-800" strokeDasharray="4 4" vertical={false} />
       <XAxis dataKey="nombre" stroke="currentColor" className="text-slate-500 dark:text-slate-400" fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-      <YAxis stroke="currentColor" className="text-slate-500 dark:text-slate-400" fontSize={12} tickLine={false} axisLine={false} tickFormatter={corto} width={48} />
+      <YAxis stroke="currentColor" className="text-slate-500 dark:text-slate-400" fontSize={12} tickLine={false} axisLine={false} tickFormatter={corto} width={64} />
       <Tooltip content={<Ayuda formato={formato} />} cursor={{ fill: 'currentColor', className: 'text-slate-100 dark:text-slate-800' }} />
       {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
     </>

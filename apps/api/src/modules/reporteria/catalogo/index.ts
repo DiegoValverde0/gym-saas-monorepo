@@ -8,8 +8,8 @@ import { TipoReporte } from './tipos';
 import { VENTAS } from './ventas';
 
 // Tipos de reporte disponibles, en el orden en que se ofrecen. Para agregar
-// uno: un archivo con su TipoReporte y sumarlo aquí (docs/plan-reporteria.md,
-// sección 4). compilador.spec.ts prueba el filtro de organización de todos.
+// uno: un archivo con su TipoReporte y sumarlo aquí (paso a paso en
+// docs/reporteria.md). compilador.spec.ts prueba el filtro de organización de todos.
 export const TIPOS_REPORTE: TipoReporte[] = [
   VENTAS,
   PAGOS,
