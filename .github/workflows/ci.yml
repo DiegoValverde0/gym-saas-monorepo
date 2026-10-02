@@ -104,7 +104,7 @@ jobs:
       # El navegador se guarda entre corridas: solo se descarga al cambiar de versión de Playwright.
       - name: Navegador en caché
         id: cache-navegador
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -123,7 +123,7 @@ jobs:
       # Si algo falla: el reporte con capturas, videos y trazas paso a paso.
       - name: Guardar el reporte
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reporte-e2e
           path: |

@@ -15,7 +15,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // En el CI, además, cada prueba que falla queda marcada en la corrida de GitHub (y en el PR).
+  reporter: process.env.CI ? [['github'], ['list'], ['html', { open: 'never' }]] : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: URL_WEB,
     locale: 'es-BO',
