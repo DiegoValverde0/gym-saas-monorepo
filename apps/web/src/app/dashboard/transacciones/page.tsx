@@ -134,7 +134,7 @@ export default function TransaccionesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Transacciones</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Movimientos</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Todos los cobros y gastos del gimnasio, uno por uno.</p>
           </div>
           {puedeElegir && (

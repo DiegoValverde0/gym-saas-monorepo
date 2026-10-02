@@ -51,7 +51,7 @@ export function PinDialog({ persona, onClose }: { persona: { id: string; nombre:
         <DialogHeader>
           <DialogTitle>PIN de marcaje de {persona?.nombre}</DialogTitle>
           <DialogDescription>
-            Con este PIN marca su entrada y su salida en la tablet de recepción (Jornadas → Tablet de marcaje).
+            Con este PIN marca su entrada y su salida en la tablet de recepción (Equipo → Tablet de marcaje).
             {persona?.tienePin ? ' Ya tiene uno: guardar uno nuevo lo reemplaza.' : ''}
           </DialogDescription>
         </DialogHeader>

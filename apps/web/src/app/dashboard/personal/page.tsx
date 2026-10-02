@@ -598,7 +598,7 @@ export default function PersonalPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Equipo</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Personal</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Entrenadores y personal: su acceso al sistema, disciplinas y horario semanal.</p>
           </div>
 

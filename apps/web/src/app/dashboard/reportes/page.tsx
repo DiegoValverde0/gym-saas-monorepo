@@ -46,7 +46,7 @@ export default function ReportesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Reportes</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Resumen del negocio</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Cuánto entró, cuánto salió y cómo se mueve tu gimnasio.</p>
           </div>
           {puedeElegir && (

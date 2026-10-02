@@ -127,11 +127,17 @@ Rama sugerida: `menu-lateral`.
 - **Listo cuando:** en 390 px se llega a todo, no hay desbordes y la barra no tapa nada.
 - Hecho así: `ACCESOS_CELULAR` y `accesosCelular()` en lib/navegacion.ts (con prueba). Mientras se ve la barra, `<html data-barra-inferior>` define `--barra-inferior` (solo por debajo de 48rem, en globals.css) y la usan el contenido (espacio abajo), los avisos (toast) y la tarjeta de los recorridos. El modo kiosco (/kiosco) está fuera del panel y no la tiene; la tablet de marcaje la oculta.
 
-### Fase 5: recorrido completo y cierre
+### Fase 5: recorrido completo y cierre (HECHA)
 - Recorrido en el navegador con dueño (simple, intermedio y experto), recepción e instructor; claro y oscuro; escritorio, tablet y celular.
 - Revisar los textos que nombran el menú viejo. Por ejemplo, `personal/PinDialog.tsx` dice "Jornadas → Tablet de marcaje", y la guía de inicio nombra los módulos.
 - Actualizar la documentación de la interfaz (`docs/Guia_Arquitectura_Frontend.md`).
 - **Listo cuando:** `pnpm test` pasa y el recorrido no deja pantallas huérfanas ni textos viejos.
+- Hecho así:
+  - Recorrido en el navegador: dueño en simple, intermedio y experto; recepción; instructor (cuenta temporal, ya borrada); escritorio, tablet de 820 px y celular de 390 px; claro y oscuro.
+  - Títulos iguales al menú: Movimientos, Personal, Resumen del negocio, Reportería avanzada (o Reportes listos) y Roles y permisos. "Control de Acceso" se queda (M1).
+  - Textos con rutas viejas corregidos (tablet de marcaje, PIN, punto de venta y Configuración).
+  - En tablet (menos de 1024 px), si la persona nunca eligió, el menú arranca achicado: con 240 px el contenido quedaba en 580 px y se cortaban botones.
+  - Guía del frontend con la sección "Navegación del panel".
 
 ---
 

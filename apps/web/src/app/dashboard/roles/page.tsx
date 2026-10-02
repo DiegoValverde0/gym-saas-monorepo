@@ -183,7 +183,7 @@ export default function RolesPage() {
       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roles</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roles y permisos</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Qué puede ver y hacer cada persona del equipo según su rol.</p>
           </div>
 

@@ -125,7 +125,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!claveCompacto) return;
     try {
-      setCompacto(localStorage.getItem(claveCompacto) === '1');
+      // Sin preferencia guardada: achicado en tablets (menos de 1024 px), para
+      // que el contenido tenga lugar; abierto en pantallas grandes.
+      const guardado = localStorage.getItem(claveCompacto);
+      setCompacto(guardado === null ? window.matchMedia('(max-width: 1023px)').matches : guardado === '1');
     } catch {
       // Sin almacenamiento (ventana privada): queda abierto.
     }

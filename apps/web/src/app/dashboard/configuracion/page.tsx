@@ -697,7 +697,7 @@ function PinKiosco({ tienePin }: { tienePin: boolean }) {
           Kiosco de la entrada
         </CardTitle>
         <CardDescription>
-          En Control de acceso, &quot;Modo kiosco&quot; deja una tablet donde cada cliente marca su ingreso con su documento. Este PIN se pide
+          En Asistencias, &quot;Modo kiosco&quot; deja una tablet donde cada cliente marca su ingreso con su documento. Este PIN se pide
           para salir del kiosco, así nadie más usa la sesión de recepción.
         </CardDescription>
       </CardHeader>
