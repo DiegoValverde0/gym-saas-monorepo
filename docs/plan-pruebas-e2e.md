@@ -78,9 +78,11 @@ Rama sugerida: `pruebas-e2e`.
   - Seed: Carlos Instructor (`carlos@gymtitan.com`, rol ENTRENADOR, con perfil de equipo).
   - Comprobado: la base de desarrollo queda intacta, dos corridas seguidas dan verde y una prueba con un error a propósito falla con "Error en la página".
 
-### Fase 2: pantallas, menú y búsqueda
+### Fase 2: pantallas, menú y búsqueda (HECHA)
 - Recorridos 2, 3, 8 y 9.
 - **Listo cuando:** todas las pantallas del menú de cada rol abren sin errores. Si alguna falla, se corrige la pantalla, no la prueba.
+- Hecho así: `menu.spec.ts` (dueño 22 pantallas, recepción 19, instructor 6, y el dueño en experto), `busqueda.spec.ts`, `celular.spec.ts` y `modo.spec.ts`; ayudas compartidas en `ayudas.ts`. La preparación enciende todos los módulos y marca la guía de inicio como hecha (con el pedido de Configuración).
+- Encontrado y corregido en la web: mientras cargaban los permisos y la configuración, el menú mostraba por un instante pantallas que no le tocaban (por ejemplo, Accesos avanzados). Ahora espera esos datos, muestra barras de carga y queda con `aria-busy` hasta tenerlos.
 
 ### Fase 3: el día a día de recepción
 - Recorridos 4 y 5.
