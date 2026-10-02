@@ -8,6 +8,10 @@ out/
 
 # nest.js y build
 dist/
+# copias compiladas para las pruebas e2e (apps/e2e)
+dist-e2e/
+.next-e2e/
+apps/e2e/.sesiones/
 
 # turborepo
 .turbo

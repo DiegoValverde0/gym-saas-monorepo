@@ -87,6 +87,27 @@ async function main() {
     }
   });
 
+  // Un instructor (rol ENTRENADOR, con su perfil de equipo): para ver el
+  // panel como lo ve un instructor y para las pruebas e2e (docs/plan-pruebas-e2e.md).
+  const instructorUser = await prisma.usuario.create({
+    data: {
+      nombreCompleto: 'Carlos Instructor',
+      correo: 'carlos@gymtitan.com',
+      contrasenaHash: hashPassword('carlos123'),
+    }
+  });
+  await prisma.asignacionAcceso.create({
+    data: {
+      usuarioId: instructorUser.id,
+      organizacionId: orgTitan.id,
+      rolId: roles.ENTRENADOR,
+      sucursalId: sucursalTitan.id,
+    }
+  });
+  await prisma.perfilStaff.create({
+    data: { usuarioId: instructorUser.id, organizacionId: orgTitan.id, tipoContratacion: 'INDEPENDIENTE' }
+  });
+
   // =======================================================
   // 5. FLUJO BÁSICO (CAJA, PLAN, CLIENTE, VENTA)
   // =======================================================
