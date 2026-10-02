@@ -106,12 +106,13 @@ Rama sugerida: `menu-lateral`.
 - **Listo cuando:** las pruebas cubren los casos y el menú actual (todavía con sus pantallas en la barra de arriba) lee la definición nueva.
 - Hecho así: `lib/navegacion.ts` (`GRUPOS_MENU`, `menuVisible`, `esPantallaActual`) y `navegacion.test.ts` (8 pruebas: dueño en los tres modos, recepción, instructor, módulos apagados). El layout ya usa los grupos y nombres nuevos; el sidebar agrupado llega en la fase 2.
 
-### Fase 2: el sidebar agrupado
+### Fase 2: el sidebar agrupado (HECHA)
 - El sidebar muestra todos los grupos abiertos, con títulos que no se clican y la pantalla actual marcada (`aria-current="page"`). Ajustes va abajo del todo.
 - Se quita la fila de pantallas de la barra de arriba. En su lugar va el botón "Buscar… Ctrl K" (M5).
 - El menú del celular usa el mismo sidebar, sin el desglose especial que tiene hoy.
 - Los nombres nuevos: Inicio, Asistencias, Personal, Movimientos, Caja, Roles y permisos, Resumen del negocio y Reportería avanzada (o "Reportes listos" en simple).
 - **Listo cuando:** dueño, recepción e instructor ven su menú, en los tres modos, en claro y oscuro, y cada pantalla queda a un clic.
+- Además: la paleta de comandos se caía al abrirse (a `CommandDialog` le faltaba la raíz `Command` de cmdk; pasaba también con Ctrl+K). El sidebar ya no se vuelve a montar en cada render: conserva su scroll y trae a la vista la pantalla actual.
 
 ### Fase 3: sidebar achicable y paleta de comandos
 - Botón para achicar el sidebar a íconos, con el nombre al pasar el mouse. Se recuerda por persona en el navegador.

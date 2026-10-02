@@ -10,12 +10,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
 import { esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
-import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { AvisosParaEnviar } from '@/components/ui/avisos-para-enviar';
-import { CommandPalette } from '@/components/ui/command-palette';
+import { abrirPaleta, CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
 import { Recorrido, reiniciarRecorridos } from '@/components/ui/recorrido';
 import { AsistenteInicio } from '@/components/ui/asistente-inicio';
@@ -23,9 +23,42 @@ import { useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
-const SUPERADMIN_GROUP = 'SuperAdmin' as const;
-const DASHBOARD_GROUP = 'Dashboard' as const;
-type ActiveGroup = GrupoVisible | typeof SUPERADMIN_GROUP | typeof DASHBOARD_GROUP;
+type Icono = React.ComponentType<{ className?: string }>;
+
+// Un enlace del menú. La pantalla actual se marca aquí y solo aquí.
+function Enlace({ href, nombre, icono: Icono, actual }: { href: string; nombre: string; icono: Icono; actual: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={actual ? 'page' : undefined}
+      className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+        actual
+          ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
+      }`}
+    >
+      <Icono className={`h-4 w-4 shrink-0 ${actual ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
+      <span className="truncate">{nombre}</span>
+    </Link>
+  );
+}
+
+// Un grupo del menú: título (no se clica) y todas sus pantallas a la vista.
+function Grupo({ grupo, pathname }: { grupo: GrupoVisible; pathname: string }) {
+  const id = `menu-${grupo.titulo.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+  return (
+    <div role="group" aria-labelledby={id} className="pt-4">
+      <p id={id} className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        {grupo.titulo}
+      </p>
+      <div className="space-y-0.5">
+        {grupo.pantallas.map((p) => (
+          <Enlace key={p.href} href={p.href} nombre={p.nombre} icono={p.icono} actual={esPantallaActual(pathname, p.href)} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -55,17 +88,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Qué ve esta persona (docs/plan-menu-lateral.md): permisos, módulos y modo.
   const filteredNavigationGroups = useMemo(() => menuVisible({ permisos, modulos, modo }), [permisos, modulos, modo]);
 
-  // Active Group logic
-  const activeGroup: ActiveGroup = useMemo(() => {
-    if (pathname === '/dashboard/organizaciones') return SUPERADMIN_GROUP;
-    if (pathname === '/dashboard') return DASHBOARD_GROUP;
-    for (const group of filteredNavigationGroups) {
-      if (group.pantallas.some((p) => esPantallaActual(pathname, p.href))) {
-        return group;
-      }
-    }
-    return filteredNavigationGroups[0] ?? DASHBOARD_GROUP;
-  }, [pathname, filteredNavigationGroups]);
+  // Ajustes va separado, abajo del todo.
+  const gruposArriba = filteredNavigationGroups.filter((g) => !g.alFondo);
+  const gruposAlFondo = filteredNavigationGroups.filter((g) => g.alFondo);
+
+  // En el celular, el menú se cierra al ir a otra pantalla.
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  useEffect(() => setMenuAbierto(false), [pathname]);
+
+  // La pantalla actual siempre a la vista en el menú (el del dueño en experto
+  // no entra entero en una pantalla baja).
+  useEffect(() => {
+    document.querySelector('nav[aria-label="Menú principal"] [aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+  }, [pathname]);
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -74,7 +109,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  const SidebarContent = () => (
+  // Un elemento, no un componente: así no se vuelve a montar en cada render
+  // y el menú conserva su scroll al cambiar de pantalla.
+  const contenidoSidebar = (
     <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
       <div className="flex h-16 shrink-0 items-center px-6">
         <div className="flex items-center gap-3">
@@ -87,85 +124,29 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6 space-y-1">
-        <Link
-          href="/dashboard"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-4 ${
-            activeGroup === DASHBOARD_GROUP
-              ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <LayoutDashboard className={`h-4 w-4 ${activeGroup === DASHBOARD_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-          {INICIO.nombre}
-        </Link>
-
+      {/* Menú (docs/plan-menu-lateral.md): todos los grupos abiertos, lo de
+          todos los días arriba y Ajustes al fondo. */}
+      <nav aria-label="Menú principal" className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
+        <Enlace href={INICIO.href} nombre={INICIO.nombre} icono={LayoutDashboard} actual={pathname === INICIO.href} />
         {isSuperAdmin && (
-          <div className="mb-4">
-            <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Sistema</p>
-            <Link
-              href="/dashboard/organizaciones"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                activeGroup === SUPERADMIN_GROUP
-                  ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Globe className={`h-4 w-4 ${activeGroup === SUPERADMIN_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-              Organizaciones
-            </Link>
+          <div className="pt-4">
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Sistema</p>
+            <Enlace href="/dashboard/organizaciones" nombre="Organizaciones" icono={Globe} actual={pathname === '/dashboard/organizaciones'} />
           </div>
         )}
-
-        <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
-        
-        {filteredNavigationGroups.map((group) => {
-          // El grupo lleva a su primera página visible (menuVisible ya quitó las demás).
-          const primeraVisible = group.pantallas[0];
-          const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.titulo === group.titulo;
-
-          return (
-            <div key={group.titulo}>
-              <Link
-                href={primeraVisible.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <group.icono className={`h-4 w-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                {group.titulo}
-              </Link>
-
-              {/* Desglose del grupo activo: en escritorio ya se ve en el topbar
-                  (hidden md:flex más abajo), pero el topbar no existe en móvil,
-                  así que lo repetimos aquí para no dejar ese menú sin salida. */}
-              {isActive && (
-                <div className="md:hidden mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-800 space-y-0.5">
-                  {group.pantallas.map((item) => {
-                    const isItemActive = esPantallaActual(pathname, item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isItemActive
-                            ? 'text-indigo-700 dark:text-indigo-300 font-semibold'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <item.icono className="h-3.5 w-3.5" />
-                        {item.nombre}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+        {gruposArriba.map((grupo) => (
+          <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} />
+        ))}
+        {gruposAlFondo.length > 0 && (
+          <div className="mt-auto pt-4">
+            <div className="border-t border-slate-200 dark:border-slate-800">
+              {gruposAlFondo.map((grupo) => (
+                <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} />
+              ))}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        )}
+      </nav>
     </div>
   );
 
@@ -177,54 +158,37 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900 print:block print:h-auto print:bg-white">
       {/* Sidebar Desktop */}
       <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden">
-        <SidebarContent />
+        {contenidoSidebar}
       </div>
 
       <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0">
         {/* Top App Bar */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs print:hidden">
           <div className="flex items-center gap-4 flex-1">
-            <Sheet>
+            <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400">
+                <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400" aria-label="Abrir el menú">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-[260px]">
-                <SidebarContent />
+                {contenidoSidebar}
               </SheetContent>
             </Sheet>
 
-            {/* Sub-module Tabs */}
-            <div className="hidden md:flex items-center gap-1">
-              {activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.pantallas.map((item) => {
-                const isActive = esPantallaActual(pathname, item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-                      isActive
-                        ? 'text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
-                    }`}
-                  >
-                    {item.nombre}
-                  </Link>
-                );
-              })}
-              {activeGroup === SUPERADMIN_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                  SuperAdmin / Organizaciones
-                </span>
-              )}
-              {activeGroup === DASHBOARD_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                  {INICIO.nombre}
-                </span>
-              )}
-            </div>
+            {/* Buscar: abre la paleta de comandos (también con Ctrl+K). */}
+            <button
+              type="button"
+              onClick={abrirPaleta}
+              className="hidden w-full max-w-xs items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200 md:flex"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="flex-1 truncate text-left">Buscar…</span>
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">Ctrl K</kbd>
+            </button>
+            <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400" onClick={abrirPaleta} aria-label="Buscar">
+              <Search className="h-5 w-5" />
+            </Button>
           </div>
 
           {/* Right Actions */}

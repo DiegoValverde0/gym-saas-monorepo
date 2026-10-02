@@ -29,6 +29,10 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { useModulosActivos } from "@/hooks/use-modulos-activos";
 
+// Para abrir la paleta desde un botón (el "Buscar…" de la barra de arriba).
+const EVENTO_ABRIR = 'gym:abrir-paleta';
+export const abrirPaleta = () => window.dispatchEvent(new Event(EVENTO_ABRIR));
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -42,8 +46,13 @@ export function CommandPalette() {
         setOpen((open) => !open);
       }
     };
+    const abrir = () => setOpen(true);
     document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    window.addEventListener(EVENTO_ABRIR, abrir);
+    return () => {
+      document.removeEventListener("keydown", down);
+      window.removeEventListener(EVENTO_ABRIR, abrir);
+    };
   }, []);
 
   const navigateTo = (path: string) => {
