@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { bs } from '@/lib/formato';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
@@ -331,7 +332,7 @@ export default function PromocionesPage() {
                     </TableCell>
                     <TableCell>
                       <span className="font-bold text-slate-900 dark:text-white text-lg">
-                        {promocion.porcentajeDescuento ? `-${Number(promocion.porcentajeDescuento)}%` : `-$${Number(promocion.montoDescuentoFijo).toFixed(2)}`}
+                        {promocion.porcentajeDescuento ? `-${Number(promocion.porcentajeDescuento)}%` : `-${bs(Number(promocion.montoDescuentoFijo))}`}
                       </span>
                     </TableCell>
                     <TableCell>

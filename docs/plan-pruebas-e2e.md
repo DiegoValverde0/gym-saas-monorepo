@@ -95,9 +95,13 @@ Rama sugerida: `pruebas-e2e`.
   - **Asistencias:** al confirmar un ingreso, la lista de resultados volvía a aparecer un instante con el cliente anterior.
   - **Arqueo:** los campos de billetes y monedas, el dinero a retirar y las observaciones no tenían su etiqueta asociada (lectores de pantalla y pruebas no los podían nombrar).
 
-### Fase 4: dueño y reportería
+### Fase 4: dueño y reportería (HECHA)
 - Recorridos 6 y 7, con la revisión del CSV y del Excel descargados.
 - **Listo cuando:** pasan, y el archivo exportado tiene los mismos totales que la pantalla.
+- Hecho así: `gasto.spec.ts` (el dueño registra un gasto desde "Buscar…" → "Registrar gasto" y lo ve en Gastos y en Movimientos) y `reporteria.spec.ts` (abre "Ventas de este mes por plan", descarga el CSV y el Excel y compara la cantidad de registros y la suma con la pantalla; recepción la ve y la exporta, sin Duplicar ni Editar, y no puede armar reportes). `exceljs` en las dependencias de `apps/e2e` para leer el Excel. 27 pruebas, tres corridas seguidas en verde.
+- Encontrado y corregido:
+  - **Gastos:** los montos se mostraban con signo de dólar ("- $75.00") y el detalle escrito al registrar el gasto no aparecía en la lista. Ahora en bolivianos (`bs()`) y con el detalle bajo la categoría. Lo mismo en Promociones (descuento fijo).
+  - **Nuevo reporte:** quien solo puede ver reportes (recepción) entraba por la dirección al constructor y la vista previa daba error. Ahora se le explica que su rol ve y exporta, pero no arma.
 
 ### Fase 5: CI y documentación
 - Un trabajo `e2e` en `ci.yml` con Postgres y Redis, que instala Chromium, migra, siembra, compila y corre las pruebas. Si falla, sube el reporte, los videos y las trazas.
