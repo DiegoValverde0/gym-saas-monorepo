@@ -4,6 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Barra inferior del celular (docs/plan-menu-lateral.md, fase 4): mientras
+   se ve, lo que está fijo abajo (avisos, guías) se corre hacia arriba. */
+@media (width < 48rem) {
+  html[data-barra-inferior] {
+    --barra-inferior: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
+
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {

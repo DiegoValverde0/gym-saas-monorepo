@@ -44,6 +44,16 @@ El frontend (`apps/web`) está construido con **Next.js 14 (App Router)**, **Rea
 - `/hooks` y `/store`: Lógica de estado global y peticiones a la API.
 - `middleware.ts`: Archivo clave que se ejecuta en el servidor antes de cargar una página para verificar si el usuario tiene una sesión válida, redirigiendo al login si no la tiene.
 
+### Navegación del panel
+El menú del panel está definido en un solo lugar, `apps/web/src/lib/navegacion.ts` (el plan y sus decisiones están en `docs/plan-menu-lateral.md`):
+- **`GRUPOS_MENU`:** los grupos (Día a día, Clases, Lo que vendes, Finanzas, Equipo, Reportes y Ajustes, este último abajo del todo) y sus pantallas. Cada pantalla declara su ruta, ícono, permiso, módulo del gimnasio, modo mínimo y otros nombres con los que se busca (`alias`).
+- **`menuVisible()`:** decide qué ve cada persona según sus permisos, los módulos encendidos y el modo de uso. Lo usan el sidebar, el menú del celular y la paleta de comandos, así que una pantalla nueva se agrega solo ahí. Las pruebas están en `navegacion.test.ts`.
+- **Sidebar** (`app/dashboard/layout.tsx`): todos los grupos abiertos y la pantalla actual marcada. Se puede achicar a íconos, y eso se recuerda para cada persona.
+- **Barra de arriba:** solo lo global (buscar, gimnasio y sucursal, marcaje, avisos, tema y usuario). No lleva navegación de módulos.
+- **Paleta de comandos** (Ctrl+K o "Buscar…", `components/ui/command-palette.tsx`): las mismas pantallas y las acciones rápidas del Inicio.
+- **Celular:** el mismo sidebar en un panel lateral, y una barra inferior con Inicio, Asistencias, Clientes, Membresías y "Menú". Mientras se ve esa barra, lo que está fijo abajo usa la variable CSS `--barra-inferior` para no quedar tapado.
+- **Títulos:** el título de cada página debe coincidir con su nombre en el menú.
+
 ### Cómo se conecta el Frontend con el Backend
 1. **Autenticación (JWT):** Cuando un usuario ingresa sus credenciales en el Login, el backend devuelve un Token (JWT). El frontend lo guarda y lo utiliza como "llave" para el resto del uso de la app.
 2. **Peticiones HTTP:** Para pintar la lista de clientes o cobrar una membresía, el frontend envía peticiones HTTP (mediante `fetch` o clientes como Axios/React Query) a la API, adjuntando siempre el JWT en las cabeceras (`Authorization: Bearer <token>`).

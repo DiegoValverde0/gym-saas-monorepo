@@ -122,7 +122,7 @@ export default function MarcajePage() {
           ))}
         </div>
         <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-          ¿No tienes PIN? Pídelo a quien administra el equipo (Equipo → ícono #).
+          ¿No tienes PIN? Pídelo a quien administra el equipo (Equipo → Personal, ícono #).
         </p>
       </div>
     </Protect>

@@ -60,7 +60,9 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/* cmdk necesita su raíz (Command) alrededor del buscador y la lista;
+            sin ella la paleta se caía al abrirse. */}
+        <Command>{children}</Command>
       </DialogContent>
     </Dialog>
   )

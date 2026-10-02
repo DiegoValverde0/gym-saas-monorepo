@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { useAuth } from '@/hooks/use-auth';
@@ -45,7 +45,7 @@ const NOMBRE_DOCUMENTO: Record<string, string> = { CI: 'CI', PASAPORTE: 'Pasapor
 export default function ClientesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token, user, isSuperAdmin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   // Ficha 360 del cliente (plan 11.1): se abre tocando el nombre.
   const [fichaId, setFichaId] = useState<string | null>(null);
@@ -215,6 +215,23 @@ export default function ClientesPage() {
     });
     setIsDialogOpen(true);
   };
+
+  // "Nuevo cliente" desde la paleta de comandos: llega con ?nuevo=1 o, si ya
+  // estaba en esta página, con el evento gym:nuevo-cliente. Se lee
+  // window.location (no useSearchParams) para no exigir un Suspense.
+  useEffect(() => {
+    // El superadmin necesita elegir un gimnasio antes (como el botón de la página).
+    const abrir = () => {
+      if (!(isSuperAdmin && !activeTenantId)) handleAddNew();
+    };
+    if (new URLSearchParams(window.location.search).get('nuevo') === '1') {
+      window.history.replaceState(null, '', window.location.pathname);
+      abrir();
+    }
+    window.addEventListener('gym:nuevo-cliente', abrir);
+    return () => window.removeEventListener('gym:nuevo-cliente', abrir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin, activeTenantId]);
 
   const handleDelete = (id: string) => {
     setConfirmConfig({

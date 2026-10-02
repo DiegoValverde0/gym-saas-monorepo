@@ -174,7 +174,7 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
         {(estadoApertura as any) && !(estadoApertura as any).abierta && (
             <div className="bg-red-50 text-red-700 p-4 rounded-md flex items-center gap-3 border border-red-200">
                 <AlertCircle className="w-5 h-5 shrink-0" />
-                <p className="font-bold text-sm">NO TIENES UN TURNO DE CAJA ABIERTO. Ve al módulo de Cajas y abre tu turno antes de procesar ventas.</p>
+                <p className="font-bold text-sm">NO TIENES UN TURNO DE CAJA ABIERTO. Ve a Día a día → Caja y abre tu turno antes de procesar ventas.</p>
             </div>
         )}
 

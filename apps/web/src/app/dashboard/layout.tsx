@@ -9,140 +9,59 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
-import {
-  LayoutDashboard,
-  Building2,
-  ShieldCheck,
-  Settings,
-  Users,
-  LogOut,
-  Wallet,
-  Menu,
-  Dumbbell,
-  Globe,
-  Briefcase,
-  Tag,
-  IdCard,
-  ScanFace,
-  Landmark,
-  ChevronDown,
-  Banknote,
-  FileText,
-  Activity,
-  Package,
-  ClipboardList,
-  UserCog,
-  Clock,
-  CalendarDays,
-  CalendarRange,
-  Receipt,
-  Truck,
-  Lightbulb,
-  BarChart3
-} from 'lucide-react';
+import { accesosCelular, esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
+import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { AvisosParaEnviar } from '@/components/ui/avisos-para-enviar';
-import { CommandPalette } from '@/components/ui/command-palette';
+import { abrirPaleta, CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
 import { Recorrido, reiniciarRecorridos } from '@/components/ui/recorrido';
 import { AsistenteInicio } from '@/components/ui/asistente-inicio';
-import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  permission?: string;
-  // Modo de uso mínimo para mostrarlo (plan de simplificación, 4.4). Sin
-  // valor: se muestra en todos los modos.
-  modoMinimo?: ModoUso;
+type Icono = React.ComponentType<{ className?: string }>;
+
+// Un enlace del menú. La pantalla actual se marca aquí y solo aquí. Con el
+// menú achicado solo se ve el ícono y el nombre aparece al pasar el mouse.
+function Enlace({ href, nombre, icono: Icono, actual, compacto = false }: { href: string; nombre: string; icono: Icono; actual: boolean; compacto?: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={actual ? 'page' : undefined}
+      title={compacto ? nombre : undefined}
+      className={`flex items-center gap-3 rounded-lg py-1.5 text-sm font-medium transition-colors ${compacto ? 'justify-center px-0' : 'px-3'} ${
+        actual
+          ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
+      }`}
+    >
+      <Icono className={`h-4 w-4 shrink-0 ${actual ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
+      <span className={compacto ? 'sr-only' : 'truncate'}>{nombre}</span>
+    </Link>
+  );
 }
 
-interface NavGroup {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  items: NavItem[];
-}
-
-const navigationGroups: NavGroup[] = [
-  {
-    title: 'Operaciones',
-    icon: Activity,
-    items: [
-      { name: 'Clientes', href: '/dashboard/clientes', icon: Users, permission: 'clientes:leer' },
-      { name: 'Control de acceso', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
-    ]
-  },
-  {
-    title: 'Comercial',
-    icon: Tag,
-    items: [
-      { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
-      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer', modoMinimo: 'intermedio' },
-      { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
-      { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
-    ]
-  },
-  {
-    title: 'Equipo',
-    icon: Dumbbell,
-    items: [
-      // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
-      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
-      // En simple no aparece: se crean desde el asistente de clase (plan 11.11).
-      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer', modoMinimo: 'intermedio' },
-      { name: 'Equipo', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
-      { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
-      // Tablet de recepción para marcar con PIN (fase 6, DB-4).
-      { name: 'Tablet de marcaje', href: '/dashboard/marcaje', icon: Clock, permission: 'asistencias:crear', modoMinimo: 'intermedio' },
-      { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
-    ]
-  },
-  {
-    title: 'Finanzas',
-    icon: Wallet,
-    items: [
-      { name: 'Reportes', href: '/dashboard/reportes', icon: FileText, permission: 'transacciones:leer' },
-      { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
-      { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
-      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer', modoMinimo: 'intermedio' },
-      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer', modoMinimo: 'intermedio' },
-      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer', modoMinimo: 'intermedio' }
-    ]
-  },
-  {
-    title: 'Administración',
-    icon: Settings,
-    items: [
-      // D5: cuentas que no son empleados (contador, portal). Solo en experto,
-      // o cuando no hay Equipo (módulo de personal apagado) para dar accesos.
-      { name: 'Accesos avanzados', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
-      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
-      { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
-      // Reportería (docs/plan-reporteria.md): separada del tablero de Reportes.
-      { name: 'Reportería', href: '/dashboard/reporteria', icon: BarChart3, permission: 'reportes:leer' },
-      // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
-      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
-    ]
-  }
-];
-
-const SUPERADMIN_GROUP = 'SuperAdmin' as const;
-const DASHBOARD_GROUP = 'Dashboard' as const;
-type ActiveGroup = NavGroup | typeof SUPERADMIN_GROUP | typeof DASHBOARD_GROUP;
-
-// El item "Dashboard" vive en '/dashboard', que es prefijo de TODAS las
-// rutas del panel -- un match por prefijo ingenuo (`pathname.startsWith(href + '/')`)
-// haría que ese item (y por lo tanto el grupo Operaciones) "ganara" en cualquier
-// página del sistema. Se excluye ese caso especial del match por prefijo.
-function isNavItemActive(pathname: string, item: NavItem): boolean {
-  if (pathname === item.href) return true;
-  if (item.href === '/dashboard') return false;
-  return pathname.startsWith(`${item.href}/`);
+// Un grupo del menú: título (no se clica) y todas sus pantallas a la vista.
+// Achicado, el título se cambia por una línea (y queda para los lectores de pantalla).
+function Grupo({ grupo, pathname, compacto = false }: { grupo: GrupoVisible; pathname: string; compacto?: boolean }) {
+  const id = `menu-${grupo.titulo.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+  return (
+    <div role="group" aria-labelledby={id} className={compacto ? 'pt-2' : 'pt-4'}>
+      {compacto && <div className="mx-2 mb-2 border-t border-slate-200 dark:border-slate-800" />}
+      <p id={id} className={compacto ? 'sr-only' : 'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500'}>
+        {grupo.titulo}
+      </p>
+      <div className="space-y-0.5">
+        {grupo.pantallas.map((p) => (
+          <Enlace key={p.href} href={p.href} nombre={p.nombre} icono={p.icono} actual={esPantallaActual(pathname, p.href)} compacto={compacto} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -150,7 +69,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { activeTenantId, setActiveTenantId } = useTenantStore();
-  const { hasPermission } = usePermissions();
+  const { permisos } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
   useAvisoCambioAcceso(userData);
   // Las cuentas de clientes usan su portal, no el panel.
@@ -168,43 +87,63 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
-  const { alMenos, esSimple } = useModoUso();
+  const { modo, esSimple } = useModoUso();
 
-  // Filter groups based on tenant configuration
-  const filteredNavigationGroups = useMemo(() => {
-    return navigationGroups.map(group => {
-      return {
-        ...group,
-        items: group.items.filter(item => {
-          if (item.modoMinimo && !alMenos(item.modoMinimo)) return false;
-          if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
-          if (item.name === 'Agenda') {
-            return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
-          }
-          if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Equipo', 'Jornadas', 'Tablet de marcaje'].includes(item.name)) return modulos.controlPersonal;
-          if (item.name === 'Control de acceso') return modulos.controlAcceso;
-          if (item.name === 'Accesos avanzados') return alMenos('experto') || !modulos.controlPersonal;
-          // Reportes: el resumen de hoy y del mes está en todos los modos; el
-          // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
-          if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
-          return true;
-        })
-      };
-    }).filter(group => group.items.length > 0);
-  }, [modulos, hasPermission, alMenos]);
+  // Qué ve esta persona (docs/plan-menu-lateral.md): permisos, módulos y modo.
+  const filteredNavigationGroups = useMemo(() => menuVisible({ permisos, modulos, modo }), [permisos, modulos, modo]);
 
-  // Active Group logic
-  const activeGroup: ActiveGroup = useMemo(() => {
-    if (pathname === '/dashboard/organizaciones') return SUPERADMIN_GROUP;
-    if (pathname === '/dashboard') return DASHBOARD_GROUP;
-    for (const group of filteredNavigationGroups) {
-      if (group.items.some(item => isNavItemActive(pathname, item))) {
-        return group;
-      }
+  // Ajustes va separado, abajo del todo.
+  const gruposArriba = filteredNavigationGroups.filter((g) => !g.alFondo);
+  const gruposAlFondo = filteredNavigationGroups.filter((g) => g.alFondo);
+
+  // En el celular, el menú se cierra al ir a otra pantalla.
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  useEffect(() => setMenuAbierto(false), [pathname]);
+
+  // Barra inferior del celular (fase 4): Inicio, lo de recepción y "Menú".
+  // No va en la tablet de marcaje, que queda abierta en recepción para el equipo.
+  const accesos = useMemo(() => accesosCelular(filteredNavigationGroups), [filteredNavigationGroups]);
+  const conBarraInferior = !esCliente && !pathname.startsWith('/dashboard/marcaje');
+  // Avisa a lo que está fijo abajo (avisos, guías) para correrse hacia arriba (ver globals.css).
+  useEffect(() => {
+    if (!conBarraInferior) return;
+    document.documentElement.setAttribute('data-barra-inferior', '');
+    return () => document.documentElement.removeAttribute('data-barra-inferior');
+  }, [conBarraInferior]);
+
+  // La pantalla actual siempre a la vista en el menú (el del dueño en experto
+  // no entra entero en una pantalla baja).
+  useEffect(() => {
+    document.querySelector('nav[aria-label="Menú principal"] [aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+  }, [pathname]);
+
+  // Menú achicado a íconos (escritorio): se recuerda para cada persona en este navegador.
+  const claveCompacto = userData?.sub ? `gym_menu_compacto:${userData.sub}` : null;
+  const [compacto, setCompacto] = useState(false);
+  // Se anima solo al apretar el botón, no al cargar la preferencia guardada.
+  const [animar, setAnimar] = useState(false);
+  useEffect(() => {
+    if (!claveCompacto) return;
+    try {
+      // Sin preferencia guardada: achicado en tablets (menos de 1024 px), para
+      // que el contenido tenga lugar; abierto en pantallas grandes.
+      const guardado = localStorage.getItem(claveCompacto);
+      setCompacto(guardado === null ? window.matchMedia('(max-width: 1023px)').matches : guardado === '1');
+    } catch {
+      // Sin almacenamiento (ventana privada): queda abierto.
     }
-    return filteredNavigationGroups.length > 0 ? filteredNavigationGroups[0] : navigationGroups[0];
-  }, [pathname, filteredNavigationGroups]);
+  }, [claveCompacto]);
+  const alternarCompacto = () => {
+    setAnimar(true);
+    setCompacto((antes) => {
+      try {
+        if (claveCompacto) localStorage.setItem(claveCompacto, antes ? '0' : '1');
+      } catch {
+        // Sin almacenamiento: vale solo para esta visita.
+      }
+      return !antes;
+    });
+  };
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -213,102 +152,61 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  const SidebarContent = () => (
+  // Se llama como función y no como componente (<Sidebar />): así no se
+  // vuelve a montar en cada render y el menú conserva su scroll.
+  const sidebar = (achicado: boolean, escritorio: boolean) => (
     <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-      <div className="flex h-16 shrink-0 items-center px-6">
+      <div className={`flex h-16 shrink-0 items-center ${achicado ? 'justify-center' : 'px-6'}`}>
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-1.5 rounded-lg shadow-sm">
             <Dumbbell className="h-5 w-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-            Gym<span className="text-indigo-600 dark:text-indigo-400 font-normal">Manager</span>
-          </span>
+          {!achicado && (
+            <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+              Gym<span className="text-indigo-600 dark:text-indigo-400 font-normal">Manager</span>
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6 space-y-1">
-        <Link
-          href="/dashboard"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-4 ${
-            activeGroup === DASHBOARD_GROUP
-              ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <LayoutDashboard className={`h-4 w-4 ${activeGroup === DASHBOARD_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-          Dashboard
-        </Link>
-
+      {/* Menú (docs/plan-menu-lateral.md): todos los grupos abiertos, lo de
+          todos los días arriba y Ajustes al fondo. */}
+      <nav aria-label="Menú principal" className={`flex flex-1 flex-col overflow-y-auto pb-4 ${achicado ? 'px-2' : 'px-3'}`}>
+        <Enlace href={INICIO.href} nombre={INICIO.nombre} icono={LayoutDashboard} actual={pathname === INICIO.href} compacto={achicado} />
         {isSuperAdmin && (
-          <div className="mb-4">
-            <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Sistema</p>
-            <Link
-              href="/dashboard/organizaciones"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                activeGroup === SUPERADMIN_GROUP
-                  ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Globe className={`h-4 w-4 ${activeGroup === SUPERADMIN_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-              Organizaciones
-            </Link>
+          <div className="pt-4">
+            <p className={achicado ? 'sr-only' : 'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500'}>Sistema</p>
+            <Enlace href="/dashboard/organizaciones" nombre="Organizaciones" icono={Globe} actual={pathname === '/dashboard/organizaciones'} compacto={achicado} />
           </div>
         )}
-
-        <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
-        
-        {filteredNavigationGroups.map((group) => {
-          // El grupo lleva a su primera página visible: la primera de la lista
-          // puede estar oculta por el modo, un módulo apagado o falta de permiso.
-          const primeraVisible = group.items.find(item => !item.permission || hasPermission(item.permission));
-          if (!primeraVisible) return null;
-
-          const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.title === group.title;
-
-          return (
-            <div key={group.title}>
-              <Link
-                href={primeraVisible.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <group.icon className={`h-4 w-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                {group.title}
-              </Link>
-
-              {/* Desglose del grupo activo: en escritorio ya se ve en el topbar
-                  (hidden md:flex más abajo), pero el topbar no existe en móvil,
-                  así que lo repetimos aquí para no dejar ese menú sin salida. */}
-              {isActive && (
-                <div className="md:hidden mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-800 space-y-0.5">
-                  {group.items.map((item) => {
-                    if (item.permission && !hasPermission(item.permission)) return null;
-                    const isItemActive = isNavItemActive(pathname, item);
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isItemActive
-                            ? 'text-indigo-700 dark:text-indigo-300 font-semibold'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <item.icon className="h-3.5 w-3.5" />
-                        {item.name}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+        {gruposArriba.map((grupo) => (
+          <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} compacto={achicado} />
+        ))}
+        {gruposAlFondo.length > 0 && (
+          <div className="mt-auto pt-4">
+            <div className={achicado ? '' : 'border-t border-slate-200 dark:border-slate-800'}>
+              {gruposAlFondo.map((grupo) => (
+                <Grupo key={grupo.titulo} grupo={grupo} pathname={pathname} compacto={achicado} />
+              ))}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        )}
+      </nav>
+
+      {escritorio && (
+        <div className={`shrink-0 border-t border-slate-200 p-2 dark:border-slate-800 ${achicado ? 'flex justify-center' : ''}`}>
+          <button
+            type="button"
+            onClick={alternarCompacto}
+            title={achicado ? 'Agrandar el menú' : undefined}
+            aria-label={achicado ? 'Agrandar el menú' : 'Achicar el menú'}
+            className={`flex items-center gap-3 rounded-lg py-1.5 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white ${achicado ? 'px-2' : 'w-full px-3'}`}
+          >
+            {achicado ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {!achicado && 'Achicar el menú'}
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -319,56 +217,38 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-900 print:block print:h-auto print:bg-white">
       {/* Sidebar Desktop */}
-      <div className="hidden md:flex md:w-[240px] md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden">
-        <SidebarContent />
+      <div className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 z-40 print:!hidden ${animar ? 'transition-[width]' : ''} ${compacto ? 'md:w-[64px]' : 'md:w-[240px]'}`}>
+        {sidebar(compacto, true)}
       </div>
 
-      <div className="flex flex-col flex-1 md:pl-[240px] h-full overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0">
+      <div className={`flex flex-col flex-1 h-full ${animar ? 'transition-[padding]' : ''} ${compacto ? 'md:pl-[64px]' : 'md:pl-[240px]'} overflow-hidden print:block print:h-auto print:overflow-visible print:pl-0`}>
         {/* Top App Bar */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 shadow-xs print:hidden">
           <div className="flex items-center gap-4 flex-1">
-            <Sheet>
+            <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400">
+                <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400" aria-label="Abrir el menú">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-[260px]">
-                <SidebarContent />
+                {sidebar(false, false)}
               </SheetContent>
             </Sheet>
 
-            {/* Sub-module Tabs */}
-            <div className="hidden md:flex items-center gap-1">
-              {activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.items.map((item) => {
-                if (item.permission && !hasPermission(item.permission)) return null;
-                const isActive = isNavItemActive(pathname, item);
-
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-                      isActive
-                        ? 'text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
-                    }`}
-                  >
-                    {item.name}
-                  </Link>
-                );
-              })}
-              {activeGroup === SUPERADMIN_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                  SuperAdmin / Organizaciones
-                </span>
-              )}
-              {activeGroup === DASHBOARD_GROUP && (
-                <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                  Dashboard
-                </span>
-              )}
-            </div>
+            {/* Buscar: abre la paleta de comandos (también con Ctrl+K). */}
+            <button
+              type="button"
+              onClick={abrirPaleta}
+              className="hidden w-full max-w-xs items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200 md:flex"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="flex-1 truncate text-left">Buscar…</span>
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">Ctrl K</kbd>
+            </button>
+            <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400" onClick={abrirPaleta} aria-label="Buscar">
+              <Search className="h-5 w-5" />
+            </Button>
           </div>
 
           {/* Right Actions */}
@@ -467,7 +347,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8 print:overflow-visible print:bg-white print:p-0">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 p-4 sm:p-6 lg:p-8 max-md:pb-[calc(1.5rem+var(--barra-inferior,0px))] print:overflow-visible print:bg-white print:p-0">
           <div className="mx-auto max-w-7xl h-full">
             {children}
           </div>
@@ -476,6 +356,41 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <Recorrido />
         </main>
       </div>
+
+      {conBarraInferior && (
+        <nav
+          aria-label="Accesos rápidos"
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:hidden print:hidden"
+        >
+          <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${accesos.length + 2}, minmax(0, 1fr))` }}>
+            {[{ href: INICIO.href, nombre: INICIO.nombre, icono: LayoutDashboard }, ...accesos].map((p) => {
+              const actual = p.href === INICIO.href ? pathname === INICIO.href : esPantallaActual(pathname, p.href);
+              return (
+                <Link
+                  key={p.href}
+                  href={p.href}
+                  aria-current={actual ? 'page' : undefined}
+                  className={`flex flex-col items-center justify-center gap-1 text-[11px] font-medium ${
+                    actual ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  <p.icono className={`h-5 w-5 ${actual ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
+                  <span className="max-w-full truncate px-1">{p.nombre}</span>
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMenuAbierto(true)}
+              aria-label="Abrir el menú completo"
+              className="flex flex-col items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400"
+            >
+              <Menu className="h-5 w-5" />
+              <span>Menú</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

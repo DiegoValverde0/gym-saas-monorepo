@@ -166,7 +166,7 @@ export default function ReporteriaPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Reportería</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{simple ? 'Reportes listos' : 'Reportería avanzada'}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {simple ? 'Reportes listos para usar. Para armar los tuyos, cambia a modo intermedio.' : 'Arma, guarda y repite tus reportes.'}
           </p>

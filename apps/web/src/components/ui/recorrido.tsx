@@ -132,7 +132,7 @@ export function Recorrido() {
     <div
       role="dialog"
       aria-label={`Guía de la pantalla, paso ${paso + 1} de ${pasos.length}`}
-      className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 p-4 shadow-2xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-96 animate-in fade-in slide-in-from-bottom-4"
+      className="fixed inset-x-3 bottom-[calc(0.75rem+var(--barra-inferior,0px))] z-50 rounded-2xl border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 p-4 shadow-2xl sm:inset-x-auto sm:right-6 sm:bottom-[calc(1.5rem+var(--barra-inferior,0px))] sm:w-96 animate-in fade-in slide-in-from-bottom-4"
     >
       <div className="flex items-start gap-3">
         <div className="rounded-full bg-indigo-100 dark:bg-indigo-500/20 p-2 text-indigo-600 dark:text-indigo-300">
