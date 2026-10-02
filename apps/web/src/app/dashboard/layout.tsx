@@ -9,37 +9,8 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
 import { useModulosActivos } from '@/hooks/use-modulos-activos';
 import { apiGet, unwrapList } from '@/lib/api-client';
-import {
-  LayoutDashboard,
-  Building2,
-  ShieldCheck,
-  Settings,
-  Users,
-  LogOut,
-  Wallet,
-  Menu,
-  Dumbbell,
-  Globe,
-  Briefcase,
-  Tag,
-  IdCard,
-  ScanFace,
-  Landmark,
-  ChevronDown,
-  Banknote,
-  FileText,
-  Activity,
-  Package,
-  ClipboardList,
-  UserCog,
-  Clock,
-  CalendarDays,
-  CalendarRange,
-  Receipt,
-  Truck,
-  Lightbulb,
-  BarChart3
-} from 'lucide-react';
+import { esPantallaActual, GrupoVisible, INICIO, menuVisible } from '@/lib/navegacion';
+import { LayoutDashboard, LogOut, Menu, Dumbbell, Globe, ChevronDown, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -48,109 +19,20 @@ import { CommandPalette } from '@/components/ui/command-palette';
 import { nombreRol } from '@/lib/roles';
 import { Recorrido, reiniciarRecorridos } from '@/components/ui/recorrido';
 import { AsistenteInicio } from '@/components/ui/asistente-inicio';
-import { ModoUso, useModoUso } from '@/hooks/use-modo-uso';
+import { useModoUso } from '@/hooks/use-modo-uso';
 import { IndicadorAlcance, SelectorSucursal, useAvisoCambioAcceso } from '@/components/ui/indicador-alcance';
 import { MarcajeTurno } from '@/components/ui/marcaje-turno';
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  permission?: string;
-  // Modo de uso mínimo para mostrarlo (plan de simplificación, 4.4). Sin
-  // valor: se muestra en todos los modos.
-  modoMinimo?: ModoUso;
-}
-
-interface NavGroup {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  items: NavItem[];
-}
-
-const navigationGroups: NavGroup[] = [
-  {
-    title: 'Operaciones',
-    icon: Activity,
-    items: [
-      { name: 'Clientes', href: '/dashboard/clientes', icon: Users, permission: 'clientes:leer' },
-      { name: 'Control de acceso', href: '/dashboard/asistencias', icon: ScanFace, permission: 'asistencias:leer' }
-    ]
-  },
-  {
-    title: 'Comercial',
-    icon: Tag,
-    items: [
-      { name: 'Planes', href: '/dashboard/planes', icon: Briefcase, permission: 'planes:leer' },
-      { name: 'Promociones', href: '/dashboard/promociones', icon: Tag, permission: 'promociones:leer', modoMinimo: 'intermedio' },
-      { name: 'Membresías', href: '/dashboard/membresias', icon: IdCard, permission: 'membresias:leer' },
-      { name: 'Productos', href: '/dashboard/productos', icon: Package, permission: 'productos:leer' }
-    ]
-  },
-  {
-    title: 'Equipo',
-    icon: Dumbbell,
-    items: [
-      // Sin `permission`: se muestra si puede ver clases O turnos (ver filtro de módulos abajo).
-      { name: 'Agenda', href: '/dashboard/agenda', icon: CalendarRange, modoMinimo: 'intermedio' },
-      // En simple no aparece: se crean desde el asistente de clase (plan 11.11).
-      { name: 'Disciplinas', href: '/dashboard/disciplinas', icon: ClipboardList, permission: 'disciplinas:leer', modoMinimo: 'intermedio' },
-      { name: 'Equipo', href: '/dashboard/personal', icon: UserCog, permission: 'staff:leer' },
-      { name: 'Jornadas', href: '/dashboard/turnos', icon: Clock, permission: 'turnos:leer', modoMinimo: 'intermedio' },
-      // Tablet de recepción para marcar con PIN (fase 6, DB-4).
-      { name: 'Tablet de marcaje', href: '/dashboard/marcaje', icon: Clock, permission: 'asistencias:crear', modoMinimo: 'intermedio' },
-      { name: 'Clases', href: '/dashboard/clases', icon: CalendarDays, permission: 'clases:leer' }
-    ]
-  },
-  {
-    title: 'Finanzas',
-    icon: Wallet,
-    items: [
-      { name: 'Reportes', href: '/dashboard/reportes', icon: FileText, permission: 'transacciones:leer' },
-      { name: 'Transacciones', href: '/dashboard/transacciones', icon: Banknote, permission: 'transacciones:leer' },
-      { name: 'Gastos', href: '/dashboard/gastos', icon: Receipt, permission: 'transacciones:leer' },
-      { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, permission: 'transacciones:leer', modoMinimo: 'intermedio' },
-      { name: 'Cajas', href: '/dashboard/cajas', icon: Wallet, permission: 'cajas_registradoras:leer', modoMinimo: 'intermedio' },
-      { name: 'Cuentas', href: '/dashboard/cuentas-bancarias', icon: Landmark, permission: 'cuentas_bancarias:leer', modoMinimo: 'intermedio' }
-    ]
-  },
-  {
-    title: 'Administración',
-    icon: Settings,
-    items: [
-      // D5: cuentas que no son empleados (contador, portal). Solo en experto,
-      // o cuando no hay Equipo (módulo de personal apagado) para dar accesos.
-      { name: 'Accesos avanzados', href: '/dashboard/usuarios', icon: Users, permission: 'usuarios:leer' },
-      { name: 'Roles', href: '/dashboard/roles', icon: ShieldCheck, permission: 'roles:leer', modoMinimo: 'intermedio' },
-      { name: 'Sucursales', href: '/dashboard/sucursales', icon: Building2, permission: 'sucursales:leer' },
-      // Reportería (docs/plan-reporteria.md): separada del tablero de Reportes.
-      { name: 'Reportería', href: '/dashboard/reporteria', icon: BarChart3, permission: 'reportes:leer' },
-      // Mismo permiso que exige el backend para guardarla (PUT /organizaciones/me/info).
-      { name: 'Configuración', href: '/dashboard/configuracion', icon: Settings, permission: 'organizaciones:actualizar' }
-    ]
-  }
-];
-
 const SUPERADMIN_GROUP = 'SuperAdmin' as const;
 const DASHBOARD_GROUP = 'Dashboard' as const;
-type ActiveGroup = NavGroup | typeof SUPERADMIN_GROUP | typeof DASHBOARD_GROUP;
-
-// El item "Dashboard" vive en '/dashboard', que es prefijo de TODAS las
-// rutas del panel -- un match por prefijo ingenuo (`pathname.startsWith(href + '/')`)
-// haría que ese item (y por lo tanto el grupo Operaciones) "ganara" en cualquier
-// página del sistema. Se excluye ese caso especial del match por prefijo.
-function isNavItemActive(pathname: string, item: NavItem): boolean {
-  if (pathname === item.href) return true;
-  if (item.href === '/dashboard') return false;
-  return pathname.startsWith(`${item.href}/`);
-}
+type ActiveGroup = GrupoVisible | typeof SUPERADMIN_GROUP | typeof DASHBOARD_GROUP;
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { activeTenantId, setActiveTenantId } = useTenantStore();
-  const { hasPermission } = usePermissions();
+  const { permisos } = usePermissions();
   const { token, user: userData, isSuperAdmin, logout } = useAuth();
   useAvisoCambioAcceso(userData);
   // Las cuentas de clientes usan su portal, no el panel.
@@ -168,42 +50,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   const modulos = useModulosActivos();
-  const { alMenos, esSimple } = useModoUso();
+  const { modo, esSimple } = useModoUso();
 
-  // Filter groups based on tenant configuration
-  const filteredNavigationGroups = useMemo(() => {
-    return navigationGroups.map(group => {
-      return {
-        ...group,
-        items: group.items.filter(item => {
-          if (item.modoMinimo && !alMenos(item.modoMinimo)) return false;
-          if (['Cajas', 'Productos', 'Transacciones'].includes(item.name)) return modulos.puntoVenta;
-          if (item.name === 'Agenda') {
-            return (modulos.clasesGrupales && hasPermission('clases:leer')) || (modulos.controlPersonal && hasPermission('turnos:leer'));
-          }
-          if (['Clases', 'Disciplinas'].includes(item.name)) return modulos.clasesGrupales;
-          if (['Equipo', 'Jornadas', 'Tablet de marcaje'].includes(item.name)) return modulos.controlPersonal;
-          if (item.name === 'Control de acceso') return modulos.controlAcceso;
-          if (item.name === 'Accesos avanzados') return alMenos('experto') || !modulos.controlPersonal;
-          // Reportes: el resumen de hoy y del mes está en todos los modos; el
-          // módulo "Reportes avanzados" solo agrega pestañas (plan 11.8).
-          if (['Gastos', 'Proveedores'].includes(item.name)) return modulos.controlGastos;
-          return true;
-        })
-      };
-    }).filter(group => group.items.length > 0);
-  }, [modulos, hasPermission, alMenos]);
+  // Qué ve esta persona (docs/plan-menu-lateral.md): permisos, módulos y modo.
+  const filteredNavigationGroups = useMemo(() => menuVisible({ permisos, modulos, modo }), [permisos, modulos, modo]);
 
   // Active Group logic
   const activeGroup: ActiveGroup = useMemo(() => {
     if (pathname === '/dashboard/organizaciones') return SUPERADMIN_GROUP;
     if (pathname === '/dashboard') return DASHBOARD_GROUP;
     for (const group of filteredNavigationGroups) {
-      if (group.items.some(item => isNavItemActive(pathname, item))) {
+      if (group.pantallas.some((p) => esPantallaActual(pathname, p.href))) {
         return group;
       }
     }
-    return filteredNavigationGroups.length > 0 ? filteredNavigationGroups[0] : navigationGroups[0];
+    return filteredNavigationGroups[0] ?? DASHBOARD_GROUP;
   }, [pathname, filteredNavigationGroups]);
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -236,7 +97,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           }`}
         >
           <LayoutDashboard className={`h-4 w-4 ${activeGroup === DASHBOARD_GROUP ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-          Dashboard
+          {INICIO.nombre}
         </Link>
 
         {isSuperAdmin && (
@@ -259,15 +120,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <p className="px-3 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 mt-4">Módulos</p>
         
         {filteredNavigationGroups.map((group) => {
-          // El grupo lleva a su primera página visible: la primera de la lista
-          // puede estar oculta por el modo, un módulo apagado o falta de permiso.
-          const primeraVisible = group.items.find(item => !item.permission || hasPermission(item.permission));
-          if (!primeraVisible) return null;
-
-          const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.title === group.title;
+          // El grupo lleva a su primera página visible (menuVisible ya quitó las demás).
+          const primeraVisible = group.pantallas[0];
+          const isActive = activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.titulo === group.titulo;
 
           return (
-            <div key={group.title}>
+            <div key={group.titulo}>
               <Link
                 href={primeraVisible.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -276,8 +134,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <group.icon className={`h-4 w-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                {group.title}
+                <group.icono className={`h-4 w-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                {group.titulo}
               </Link>
 
               {/* Desglose del grupo activo: en escritorio ya se ve en el topbar
@@ -285,12 +143,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   así que lo repetimos aquí para no dejar ese menú sin salida. */}
               {isActive && (
                 <div className="md:hidden mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-800 space-y-0.5">
-                  {group.items.map((item) => {
-                    if (item.permission && !hasPermission(item.permission)) return null;
-                    const isItemActive = isNavItemActive(pathname, item);
+                  {group.pantallas.map((item) => {
+                    const isItemActive = esPantallaActual(pathname, item.href);
                     return (
                       <Link
-                        key={item.name}
+                        key={item.href}
                         href={item.href}
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                           isItemActive
@@ -298,8 +155,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        <item.icon className="h-3.5 w-3.5" />
-                        {item.name}
+                        <item.icono className="h-3.5 w-3.5" />
+                        {item.nombre}
                       </Link>
                     );
                   })}
@@ -340,13 +197,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
             {/* Sub-module Tabs */}
             <div className="hidden md:flex items-center gap-1">
-              {activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.items.map((item) => {
-                if (item.permission && !hasPermission(item.permission)) return null;
-                const isActive = isNavItemActive(pathname, item);
+              {activeGroup !== SUPERADMIN_GROUP && activeGroup !== DASHBOARD_GROUP && activeGroup.pantallas.map((item) => {
+                const isActive = esPantallaActual(pathname, item.href);
 
                 return (
                   <Link
-                    key={item.name}
+                    key={item.href}
                     href={item.href}
                     className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
                       isActive
@@ -354,7 +210,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
                     }`}
                   >
-                    {item.name}
+                    {item.nombre}
                   </Link>
                 );
               })}
@@ -365,7 +221,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               )}
               {activeGroup === DASHBOARD_GROUP && (
                 <span className="px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                  Dashboard
+                  {INICIO.nombre}
                 </span>
               )}
             </div>
