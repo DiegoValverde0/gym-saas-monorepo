@@ -84,10 +84,22 @@ export const NOMBRE_RANGO: Record<RangoFecha, string> = {
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const ddmmaaaa = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
 
+// Crear un Intl.DateTimeFormat es caro: uno por zona, no uno por celda
+// (con 50.000 filas era la mayor parte del tiempo de exportar).
+const formatos = new Map<string, Intl.DateTimeFormat>();
+const formatoDe = (zonaHoraria: string) => {
+  let f = formatos.get(zonaHoraria);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-CA', { timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    formatos.set(zonaHoraria, f);
+  }
+  return f;
+};
+
 /** Hora "de reloj" del gimnasio de un instante, como fecha UTC (así Excel la muestra tal cual). */
 function relojLocal(instante: Date, zonaHoraria: string): Date {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', { timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    formatoDe(zonaHoraria)
       .formatToParts(instante)
       .map((x) => [x.type, x.value]),
   );
@@ -125,6 +137,9 @@ export function textoValor(v: unknown, c: Pick<ColumnaExportable, 'tipo' | 'opci
       return String(v);
   }
 }
+
+// Formato de Excel de cada tipo de dato (el mismo que pone `celda`).
+const FORMATO_COLUMNA: Record<string, string | undefined> = { moneda: '#,##0.00', numero: '#,##0.##', fecha: 'dd/mm/yyyy', fechaHora: 'dd/mm/yyyy hh:mm' };
 
 /** Valor tipado para una celda de Excel, con su formato. */
 function celda(v: unknown, c: Pick<ColumnaExportable, 'tipo' | 'opciones' | 'granularidad'>, zonaHoraria: string): { valor: ExcelJS.CellValue; formato?: string } {
@@ -222,14 +237,19 @@ function filaTitulos(hoja: ExcelJS.Worksheet, titulos: string[]) {
   return fila.number;
 }
 
+// Para el ancho de cada columna alcanza con mirar las primeras filas.
+const FILAS_PARA_ANCHO = 1000;
+
 function anchos(hoja: ExcelJS.Worksheet, desdeFila: number) {
-  hoja.columns.forEach((col) => {
+  const hasta = Math.min(hoja.rowCount, desdeFila + FILAS_PARA_ANCHO);
+  hoja.columns.forEach((col, j) => {
     let maximo = 10;
-    col.eachCell?.({ includeEmpty: false }, (c, n) => {
-      if (n < desdeFila) return;
-      const largo = c.value instanceof Date ? 16 : String(c.value ?? '').length;
+    for (let n = desdeFila; n <= hasta; n++) {
+      const valor = hoja.getRow(n).getCell(j + 1).value;
+      if (valor === null || valor === undefined) continue;
+      const largo = valor instanceof Date ? 16 : String(valor).length;
       maximo = Math.max(maximo, Math.min(largo + 2, 50));
-    });
+    }
     col.width = maximo;
   });
 }
@@ -265,11 +285,14 @@ export async function aExcel(d: DatosExportacion): Promise<Buffer> {
     encabezado(hoja, d, d.titulo);
     const cols = [...d.grupos.map((g, i) => ({ ...g, clave: `g${i}` })), ...d.columnas];
     const primera = filaTitulos(hoja, cols.map((c) => c.nombre));
-    for (const f of d.filas) {
-      const valores = cols.map((c) => celda(f[c.clave], c, d.zonaHoraria));
-      const fila = hoja.addRow(valores.map((v) => v.valor));
-      valores.forEach((v, i) => v.formato && (fila.getCell(i + 1).numFmt = v.formato));
-    }
+    // El formato (moneda, fecha...) depende solo de la columna: se pone una
+    // vez por columna y no en cada celda (mucho más rápido con 50.000 filas).
+    // Las filas que se agregan después lo toman de su columna.
+    cols.forEach((c, i) => {
+      const formato = FORMATO_COLUMNA[c.granularidad ? 'texto' : c.tipo];
+      if (formato) hoja.getColumn(i + 1).numFmt = formato;
+    });
+    for (const f of d.filas) hoja.addRow(cols.map((c) => celda(f[c.clave], c, d.zonaHoraria).valor));
     anchos(hoja, primera);
   }
 
