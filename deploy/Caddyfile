@@ -1,8 +1,42 @@
 # Un solo dominio para la web y la API: la cookie de sesión es del mismo
 # sitio y la web la puede validar (apps/web/src/middleware.ts). Caddy obtiene
 # y renueva solo el certificado HTTPS de Let's Encrypt para {$DOMINIO}.
+#
+# Seguridad (docs/plan-seguridad.md, fase 3): las cabeceras de la web las pone
+# Next y las de la API, helmet; aquí va lo que es de la entrada al servidor.
+{
+	servers {
+		# La IP real de quien pide. Si hay un proxy delante (Cloudflare), sus
+		# rangos van en PROXIES_CONFIABLES (ver docs/despliegue.md) y la IP se
+		# toma de CF-Connecting-IP. Sin proxy no se le cree esa cabecera a nadie
+		# (127.0.0.1: nada de afuera llega desde ahí); si no, cualquiera podría
+		# inventar su IP y saltarse los límites.
+		trusted_proxies static {$PROXIES_CONFIABLES:127.0.0.1/32}
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+
+		# Conexiones lentas a propósito no quedan abiertas para siempre.
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
+}
+
 {$DOMINIO} {
 	encode zstd gzip
+
+	# Nada de lo que recibe el sistema pasa de 1 MB (no se suben archivos).
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		# Solo HTTPS en este dominio durante un año (no toca otros subdominios).
+		Strict-Transport-Security "max-age=31536000"
+		# No anunciar el servidor.
+		-Server
+	}
 
 	# El optimizador de imágenes de Next no se usa y tuvo una vulnerabilidad
 	# grave (docs/plan-seguridad.md): no se deja llegar a la web.
@@ -10,12 +44,17 @@
 		respond 404
 	}
 
-	# /api/clientes -> API /clientes
+	# /api/clientes -> API /clientes. La API cuenta los límites por IP con
+	# X-Forwarded-For: se reemplaza por la IP real, así nadie la inventa.
 	handle_path /api/* {
-		reverse_proxy api:3001
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 }

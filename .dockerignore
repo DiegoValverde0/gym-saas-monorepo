@@ -1,6 +1,13 @@
 **/node_modules
 **/dist
 **/.next
+# Lo que dejan las pruebas e2e (apps/e2e): compilaciones aparte, reportes y
+# las sesiones de las cuentas de prueba (tokens): nada de eso va a la imagen.
+**/.next-e2e
+**/dist-e2e
+apps/e2e/.sesiones
+apps/e2e/test-results
+apps/e2e/playwright-report
 **/.turbo
 **/*.tsbuildinfo
 .git

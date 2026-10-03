@@ -3,13 +3,9 @@
 // lo de abajo. Se leen una vez, al arrancar. Los pedidos se cuentan por persona
 // si traen una sesión válida, y por IP si no (ver limite.guard.ts).
 
-const MINUTO = 60_000;
+import { enteroDeEntorno } from '../utils/entorno.util';
 
-/** Un número entero positivo de una variable de entorno, o el valor por defecto. */
-export function enteroDeEntorno(entorno: NodeJS.ProcessEnv, variable: string, porDefecto: number): number {
-  const valor = Number(entorno[variable]);
-  return Number.isInteger(valor) && valor > 0 ? valor : porDefecto;
-}
+const MINUTO = 60_000;
 
 export function leerLimites(entorno: NodeJS.ProcessEnv = process.env) {
   const n = (variable: string, porDefecto: number) => enteroDeEntorno(entorno, variable, porDefecto);

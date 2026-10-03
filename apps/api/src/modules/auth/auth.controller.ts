@@ -2,6 +2,7 @@ import { Controller, Post, Body, HttpCode, HttpStatus, Get, Put, Request, UseGua
 import { Response, Request as ExpressRequest } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { LIMITES } from '../../common/limites/limites';
+import { DURACION_SESION_MS } from './sesion';
 import { AuthService } from './auth.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SucursalPreferidaDto } from './dto/sucursal-preferida.dto';
@@ -42,7 +43,8 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
+        // Lo mismo que el token (sesion.ts).
+        maxAge: DURACION_SESION_MS,
       });
       // El token vive solo en la cookie HttpOnly -- no se devuelve en el
       // body para que ningún script en el navegador (ni siquiera el propio

@@ -19,6 +19,8 @@ x-app-env: &app-env
   LOGIN_FALLOS_MAX: ${LOGIN_FALLOS_MAX:-}
   LOGIN_FALLOS_VENTANA_MIN: ${LOGIN_FALLOS_VENTANA_MIN:-}
   LOGIN_BLOQUEO_MIN: ${LOGIN_BLOQUEO_MIN:-}
+  # Cuánto dura una sesión (horas; vacío, 24).
+  SESION_HORAS: ${SESION_HORAS:-}
 
 services:
   db:
@@ -85,6 +87,8 @@ services:
       - "443:443"
     environment:
       DOMINIO: ${DOMINIO:?Falta DOMINIO}
+      # Rangos de Cloudflare si está delante (docs/despliegue.md); vacío, ninguno.
+      PROXIES_CONFIABLES: ${PROXIES_CONFIABLES:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

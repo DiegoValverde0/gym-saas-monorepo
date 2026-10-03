@@ -15,7 +15,9 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   
-  // Confiar en proxy para que Throttler y rate limits funcionen con IPs reales
+  // Delante está Caddy, que pone en X-Forwarded-For solo la IP real de quien
+  // pide (deploy/Caddyfile): con 1 salto de confianza, req.ip es esa IP y los
+  // límites cuentan bien. La API no se publica afuera sin Caddy.
   app.set('trust proxy', 1);
   
   // Seguridad HTTP

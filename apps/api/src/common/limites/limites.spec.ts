@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { enteroDeEntorno, leerLimites } from './limites';
+import { leerLimites } from './limites';
+import { enteroDeEntorno } from '../utils/entorno.util';
 import { aQuienSeCuenta } from './limite.guard';
 import { cuentaDeCorreo } from '../../modules/auth/auth.service';
 

@@ -127,11 +127,19 @@ Rama: `seguridad`.
   - Pruebas: `limites.spec.ts` (valores, a quién se cuenta, el correo normalizado) e `intentos.spec.ts` (bloqueo, fin del bloqueo, acierto, ventana), con un Redis en memoria compartido (`src/pruebas/redis-en-memoria.ts`, fuera de la compilación); el kiosco usa el mismo. e2e `seguridad.spec.ts`: el bloqueo por cuenta contra Redis de verdad (con un correo nuevo en cada tanda: el bloqueo de la anterior dura 15 minutos). API 110 pruebas, e2e 39.
   - Pendiente para la fase 3: con Cloudflare delante, la IP real llega en `CF-Connecting-IP`; hay que configurar Caddy y `trust proxy` para que el límite por IP no cuente a Cloudflare.
 
-### Fase 3: cabeceras, borde y sesión
+### Fase 3: cabeceras, borde y sesión (HECHA)
 - Caddy: HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP base (S6), límite de tamaño de lo que recibe y tiempos de espera.
 - La cookie dura lo mismo que el token.
 - `docs/despliegue.md`: Cloudflare delante (S4).
 - **Listo cuando:** las cabeceras aparecen en la web y en la API (probado con `curl` contra Caddy en local) y la app funciona igual (e2e).
+- Hecho así:
+  - **Las cabeceras de la web las pone Next** (`apps/web/cabeceras.js`, desde `next.config.js`), no Caddy: así valen en cualquier despliegue, en desarrollo y en las pruebas. CSP base: solo lo propio (`default-src 'self'`), sin `object`, sin iframes de otros sitios (`frame-ancestors 'none'` y `X-Frame-Options: DENY`), `connect-src` con la API (en producción, el mismo dominio); `'unsafe-inline'` en scripts porque Next y el tema escriben scripts en la página, y `'unsafe-eval'` y `ws:` solo en desarrollo. Además `nosniff`, `Referrer-Policy`, `Permissions-Policy` (sin cámara, micrófono, ubicación ni pagos) y sin `X-Powered-By`. La API ya tenía helmet.
+  - **Caddy** (`deploy/Caddyfile`): HSTS de un año (sin subdominios), sin cabecera `Server`, cuerpos de hasta 1 MB (413 si no) y tiempos de espera para conexiones lentas. **La IP real:** Caddy reemplaza `X-Forwarded-For` por la IP de quien pide (`{client_ip}`); solo les cree a los proxies de `PROXIES_CONFIABLES` (Cloudflare) y, sin ellos, a nadie (por defecto `127.0.0.1/32`, no `private_ranges`: si una conexión llegara desde una IP privada, cualquiera podría inventar su IP). Probado con Caddy y dos servidores de eco en una red de Docker: cabeceras, IP inventada ignorada, `/api` a la API, 413 con 2 MB, 404 en `/_next/image`, y con un proxy de confianza la IP sale de `CF-Connecting-IP`. Valida con los 22 rangos reales de Cloudflare y con la variable vacía.
+  - **Sesión:** `SESION_HORAS` (24) para el token y la cookie (`modules/auth/sesion.ts`); antes la cookie duraba 7 días y el token 1. `enteroDeEntorno` pasó a `common/utils/entorno.util.ts`.
+  - `docs/despliegue.md`: Cloudflare paso a paso (primero sin Cloudflare para que Caddy saque el certificado, "Full (strict)", sin "Always Use HTTPS", los rangos en `PROXIES_CONFIABLES` con un comando probado, firewall opcional, modo "Under Attack") y la tabla de variables de seguridad.
+  - Pruebas: `cabeceras.test.ts` (web, 3) y en `seguridad.spec.ts` las cabeceras de la web y la API y cinco pantallas sin violaciones de la CSP en la consola. **Comprobado que detecta:** sin `'unsafe-inline'` la tanda falla en muchas pruebas. e2e 42.
+  - `.dockerignore`: no excluía lo que dejan las pruebas e2e, y la imagen de la API copia toda la carpeta: iban adentro `dist-e2e`, `.next-e2e` y `apps/e2e/.sesiones` (tokens de las cuentas de prueba; no servían en producción, que firma con otro `JWT_SECRET`, pero no tienen que estar). Ahora se excluyen; comprobado construyendo una imagen con el mismo contexto: no entra ninguno ni un `.env`.
+  - Visto en el camino: el servidor de desarrollo sin `NEXT_PUBLIC_API_URL` usa la API de `localhost:3001`; la CSP toma el mismo valor por defecto (si no, en desarrollo el navegador bloqueaba la API). Probado contra el servidor de desarrollo: el Inicio carga sin violaciones.
 
 ### Fase 4: configuración y datos fijos
 - Validación de las variables de entorno al arrancar (largo mínimo de `JWT_SECRET`, URLs válidas), con un mensaje claro de qué falta.
