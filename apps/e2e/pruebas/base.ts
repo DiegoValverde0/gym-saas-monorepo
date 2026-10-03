@@ -1,16 +1,17 @@
 import path from 'node:path';
 import { test as base, expect } from '@playwright/test';
 import { URL_API } from '../entorno';
+import { CUENTAS_PRUEBA } from '../../../packages/database/prisma/cuentas-prueba';
 
 export { expect };
 
 export type Rol = 'dueno' | 'recepcion' | 'instructor';
 
-// Cuentas del seed (packages/database/prisma/seed.ts).
+// Cuentas del seed (packages/database/prisma/cuentas-prueba.ts).
 export const CUENTAS: Record<Rol, { correo: string; contrasena: string; nombre: string }> = {
-  dueno: { correo: 'dueno@gymtitan.com', contrasena: 'admin123', nombre: 'Dueño Gym Titan' },
-  recepcion: { correo: 'ana@gymtitan.com', contrasena: 'ana123', nombre: 'Ana Recepción' },
-  instructor: { correo: 'carlos@gymtitan.com', contrasena: 'carlos123', nombre: 'Carlos Instructor' },
+  dueno: CUENTAS_PRUEBA.dueno,
+  recepcion: CUENTAS_PRUEBA.recepcion,
+  instructor: CUENTAS_PRUEBA.instructor,
 };
 
 /** Sesión guardada de un rol (la inicia pruebas/sesiones.setup.ts). */

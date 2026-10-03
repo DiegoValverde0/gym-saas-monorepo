@@ -1,9 +1,13 @@
 import { PrismaClient, EstadoOrganizacion, MetodoPago, TipoConceptoVenta, TipoTransaccion, TipoPlan, Genero, EstadoMembresia, EstadoAperturaCaja } from '@prisma/client';
 import { asegurarSuperadmin, hashPassword, sembrarPermisosYRoles } from './base';
+import { CUENTAS_PRUEBA } from './cuentas-prueba';
+import { asegurarBaseDePruebas } from './solo-pruebas';
 
 // Seed de DESARROLLO: borra todo y crea el gimnasio de ejemplo (Gym Titan)
 // con cuentas de prueba. En producción se usa prisma/inicial.ts.
+asegurarBaseDePruebas();
 const prisma = new PrismaClient();
+const { superadmin, dueno, recepcion, instructor, cliente } = CUENTAS_PRUEBA;
 
 async function main() {
   console.log('🌱 Iniciando la siembra de datos (Seed)...');
@@ -23,9 +27,9 @@ async function main() {
   console.log('🛡️ Creando permisos, los 5 roles base y el SuperAdmin global...');
   const roles = await sembrarPermisosYRoles(prisma);
   await asegurarSuperadmin(prisma, roles.SUPERADMIN, {
-    nombreCompleto: 'Super Admin',
-    correo: 'admin@gymmanager.com',
-    contrasena: 'admin123',
+    nombreCompleto: superadmin.nombre,
+    correo: superadmin.correo,
+    contrasena: superadmin.contrasena,
     telefono: '12345678',
   });
 
@@ -56,9 +60,9 @@ async function main() {
   // Crear un usuario DUEÑO (Admin Gym) para la organización Titan
   const duenoUser = await prisma.usuario.create({
     data: {
-      nombreCompleto: 'Dueño Gym Titan',
-      correo: 'dueno@gymtitan.com',
-      contrasenaHash: hashPassword('admin123'),
+      nombreCompleto: dueno.nombre,
+      correo: dueno.correo,
+      contrasenaHash: hashPassword(dueno.contrasena),
     }
   });
   await prisma.asignacionAcceso.create({
@@ -73,9 +77,9 @@ async function main() {
   // Crear un usuario Recepcionista de prueba
   const recepcionistaUser = await prisma.usuario.create({
     data: {
-      nombreCompleto: 'Ana Recepción',
-      correo: 'ana@gymtitan.com',
-      contrasenaHash: hashPassword('ana123'),
+      nombreCompleto: recepcion.nombre,
+      correo: recepcion.correo,
+      contrasenaHash: hashPassword(recepcion.contrasena),
     }
   });
   await prisma.asignacionAcceso.create({
@@ -91,9 +95,9 @@ async function main() {
   // panel como lo ve un instructor y para las pruebas e2e (docs/plan-pruebas-e2e.md).
   const instructorUser = await prisma.usuario.create({
     data: {
-      nombreCompleto: 'Carlos Instructor',
-      correo: 'carlos@gymtitan.com',
-      contrasenaHash: hashPassword('carlos123'),
+      nombreCompleto: instructor.nombre,
+      correo: instructor.correo,
+      contrasenaHash: hashPassword(instructor.contrasena),
     }
   });
   await prisma.asignacionAcceso.create({
@@ -131,7 +135,7 @@ async function main() {
 
   const clienteTitan = await prisma.cliente.create({
     data: {
-      organizacionId: orgTitan.id, sucursalBaseId: sucursalTitan.id, nombre: 'Juan Perez (Titan)', correo: 'juan.titan@ejemplo.com',
+      organizacionId: orgTitan.id, sucursalBaseId: sucursalTitan.id, nombre: cliente.nombre, correo: cliente.correo,
       telefono: '70000001', tipoDocumento: 'CI', numeroDocumento: '1234567', genero: Genero.MASCULINO,
     }
   });
@@ -177,10 +181,10 @@ async function main() {
   // =======================================================
   // 6. PORTAL DEL CLIENTE (docs/plan-portal-cliente.md)
   // =======================================================
-  // Juan entra a su portal con el correo de su ficha (juan123), como si
-  // recepción le hubiera dado acceso desde la ficha.
+  // Juan entra a su portal con el correo de su ficha, como si recepción le
+  // hubiera dado acceso desde la ficha.
   const juanUser = await prisma.usuario.create({
-    data: { nombreCompleto: clienteTitan.nombre, correo: 'juan.titan@ejemplo.com', telefono: '70000001', contrasenaHash: hashPassword('juan123') }
+    data: { nombreCompleto: clienteTitan.nombre, correo: cliente.correo, telefono: '70000001', contrasenaHash: hashPassword(cliente.contrasena) }
   });
   await prisma.asignacionAcceso.create({
     data: { usuarioId: juanUser.id, organizacionId: orgTitan.id, rolId: roles.CLIENTE, sucursalId: null }

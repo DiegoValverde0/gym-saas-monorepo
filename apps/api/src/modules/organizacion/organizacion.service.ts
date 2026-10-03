@@ -3,21 +3,13 @@ import { RedisClientType } from 'redis';
 import { invalidarAccesoVigente } from '../../common/utils/acceso-vigente.util';
 import { ROL_ADMINISTRADOR } from '../../common/utils/rol.util';
 import { combinarConfiguracion } from '../../common/utils/configuracion.util';
-import { promisify } from 'util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClsService } from 'nestjs-cls';
 import { Prisma } from '@prisma/client';
-import * as crypto from 'crypto';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
 import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
 import { registrarAuditoria, seccionLegible } from '../../common/utils/auditoria.util';
-
-async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const scryptAsync = promisify(crypto.scrypt);
-  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${salt}:${derivedKey.toString('hex')}`;
-}
+import { hashContrasena } from '../../common/utils/contrasena.util';
 
 @Injectable()
 export class OrganizacionService {
@@ -99,7 +91,7 @@ export class OrganizacionService {
   }
 
   async crearOrganizacionConAdmin(datos: CrearOrganizacionDto) {
-    const contrasenaHash = await hashPassword(datos.contrasena);
+    const contrasenaHash = await hashContrasena(datos.contrasena);
 
     try {
       return await this.prisma.$transaction(async (tx) => {

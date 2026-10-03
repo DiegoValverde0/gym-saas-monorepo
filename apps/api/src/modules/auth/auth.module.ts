@@ -4,12 +4,9 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { HORAS_SESION } from './sesion';
 
+// JWT_SECRET ya se revisó al arrancar (main.ts, revisarEntorno): está y, en
+// producción, es largo y no es el de muestra.
 const jwtSecret = process.env.JWT_SECRET;
-if (!jwtSecret) {
-  throw new Error(
-    'JWT_SECRET no está configurado. Define la variable de entorno JWT_SECRET antes de iniciar la aplicación.',
-  );
-}
 
 @Module({
   imports: [

@@ -7,10 +7,11 @@
     "db:generate": "dotenv -e ../../.env -- prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
+    "db:reset": "dotenv -e ../../.env -- tsx prisma/revisar-base.ts && dotenv -e ../../.env -- prisma migrate reset --force",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "db:inicial": "dotenv -e ../../.env -- tsx prisma/inicial.ts",
-    "lint": "eslint \"src/**/*.ts\" --fix"
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "test": "vitest run"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
@@ -18,7 +19,8 @@
   "devDependencies": {
     "prisma": "^5.0.0",
     "tsx": "^4.23.12",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^5.0.2"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

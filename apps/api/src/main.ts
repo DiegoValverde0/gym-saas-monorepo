@@ -2,6 +2,18 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 config({ path: resolve(process.cwd(), '../../.env') });
 
+// La configuración se revisa antes de cargar nada más (docs/plan-seguridad.md,
+// fase 4): con una variable que falta o es insegura, la API no arranca y dice
+// cuál. Va antes de importar AppModule, que ya lee las variables.
+import { revisarEntorno } from './common/utils/entorno.util';
+const { errores, avisos } = revisarEntorno(process.env);
+for (const aviso of avisos) console.warn(`⚠️  ${aviso}`);
+if (errores.length > 0) {
+  const lista = errores.map((e) => `   - ${e}`).join('\n');
+  console.error(`\n✋ La API no arranca: hay que corregir la configuración (.env):\n${lista}\n`);
+  process.exit(1);
+}
+
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';

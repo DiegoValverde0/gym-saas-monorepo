@@ -141,11 +141,17 @@ Rama: `seguridad`.
   - `.dockerignore`: no excluía lo que dejan las pruebas e2e, y la imagen de la API copia toda la carpeta: iban adentro `dist-e2e`, `.next-e2e` y `apps/e2e/.sesiones` (tokens de las cuentas de prueba; no servían en producción, que firma con otro `JWT_SECRET`, pero no tienen que estar). Ahora se excluyen; comprobado construyendo una imagen con el mismo contexto: no entra ninguno ni un `.env`.
   - Visto en el camino: el servidor de desarrollo sin `NEXT_PUBLIC_API_URL` usa la API de `localhost:3001`; la CSP toma el mismo valor por defecto (si no, en desarrollo el navegador bloqueaba la API). Probado contra el servidor de desarrollo: el Inicio carga sin violaciones.
 
-### Fase 4: configuración y datos fijos
+### Fase 4: configuración y datos fijos (HECHA)
 - Validación de las variables de entorno al arrancar (largo mínimo de `JWT_SECRET`, URLs válidas), con un mensaje claro de qué falta.
 - El seed se niega a correr en producción (S7) y las cuentas de prueba en un solo archivo.
 - Un solo lugar para el hash de contraseñas.
 - **Listo cuando:** la API no arranca con una configuración insegura y lo dice; el seed se niega con `NODE_ENV=production`.
+- Hecho así:
+  - `revisarEntorno` (`apps/api/src/common/utils/entorno.util.ts`), en `main.ts` antes de cargar la app: faltan `DATABASE_URL` o `JWT_SECRET`, direcciones mal escritas (`DATABASE_URL`, `REDIS_URL`, `FRONTEND_URL`), `PORT`, `NODE_ENV` y los números de límites y sesión (antes, un valor mal escrito se ignoraba en silencio). En producción además no arranca con un `JWT_SECRET` de menos de 32 caracteres o el de muestra de los `.env.example`, ni sin `FRONTEND_URL` con https; en desarrollo eso es un aviso. Probado: con una configuración de producción insegura la API sale y nombra cada problema; en desarrollo avisa y arranca. El `.env` de esta computadora pasa sin avisos.
+  - **El seed y `db:reset` solo contra bases de prueba** (`packages/database/prisma/solo-pruebas.ts`): solo una base de esta computadora y nunca con `NODE_ENV=production`; `SEED_PERMITIDO=si` para un servidor de pruebas a propósito. `db:reset` revisa antes del reset (`revisar-base.ts`), porque el reset borra antes de llamar al seed. Probado contra una base en otro servidor y con `NODE_ENV=production` (solo el script que revisa: nunca el seed de verdad).
+  - **Cuentas de prueba en un solo archivo** (`packages/database/prisma/cuentas-prueba.ts`): las usan el seed, las pruebas e2e y la caja del login de desarrollo (la web ahora depende de `@repo/database`, que ya transpilaba, e importa solo ese archivo). Comprobado en la web compilada para producción: ni las contraseñas ni los correos de prueba llegan al navegador. El ejemplo del campo de correo del login dice `tu@correo.com`.
+  - **Contraseñas:** la API usa solo `contrasena.util.ts` (se borró la copia de `organizacion.service.ts`). La carga inicial y el seed guardan con `base.ts`, en otro paquete: importar TypeScript de `@repo/database` cambiaría la raíz de compilación de la API. `contrasena.util.spec.ts` las ata: la API tiene que reconocer las que guarda `base.ts`.
+  - `packages/database` tiene pruebas (Vitest): las del freno del seed. API 118 pruebas, base de datos 3, web 27, e2e 42.
 
 ### Fase 5: NestJS 11
 - Subir NestJS (y Express 5); ajustar lo que cambie.
