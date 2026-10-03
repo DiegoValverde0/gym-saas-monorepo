@@ -10,7 +10,7 @@ import { NOMBRE_TAMANO, TamanoTarjeta, TARJETAS_PROPIAS, TarjetaTablero } from '
 // tarjetas propias, las plantillas y los reportes guardados con gráfico. Al
 // elegir una se ve de verdad (con los datos del gimnasio) antes de agregarla.
 
-export interface OpcionGaleria {
+interface OpcionGaleria {
   id: string;
   nombre: string;
   descripcion: string;

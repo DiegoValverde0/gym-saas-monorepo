@@ -37,7 +37,7 @@ export interface ColumnaCatalogo {
 }
 
 /** Contexto de un filtro "con / sin": la zona horaria y las fechas del gimnasio como instantes. */
-export interface ContextoCruzado extends ContextoSql {
+interface ContextoCruzado extends ContextoSql {
   inicioDelDia: (fecha: string) => Date;
 }
 
@@ -47,7 +47,7 @@ export interface ContextoCruzado extends ContextoSql {
  * EXISTS (...) correlacionado con la fila; desde/hasta son fechas locales
  * ("hasta" excluido) cuando el filtro usa un rango.
  */
-export interface CruzadoCatalogo {
+interface CruzadoCatalogo {
   clave: string;
   /** "asistencias", "membresía activa"... (se lee "con ..." / "sin ..."). */
   nombre: string;
@@ -63,7 +63,7 @@ export function entreFechas(columna: string, ctx: ContextoCruzado, desde?: strin
   return partes.length ? Prisma.join(partes, '') : Prisma.empty;
 }
 
-export interface RelacionCatalogo {
+interface RelacionCatalogo {
   alias: string;
   /** JOIN fijo, por ejemplo "LEFT JOIN clientes c ON c.id = t.cliente_id". */
   sql: string;

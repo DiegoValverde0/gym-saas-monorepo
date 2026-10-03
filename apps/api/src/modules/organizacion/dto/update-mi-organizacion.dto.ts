@@ -3,7 +3,7 @@ import { RANGOS_FECHA } from '../../reporteria/motor/definicion';
 import { MODOS_USO, ModoUso } from '../../../common/utils/modo.util';
 import { Type } from 'class-transformer';
 
-export class ModulosConfigDto {
+class ModulosConfigDto {
   @IsOptional()
   @IsBoolean()
   puntoVenta?: boolean;
@@ -29,7 +29,7 @@ export class ModulosConfigDto {
   controlAcceso?: boolean;
 }
 
-export class RequerimientosClienteConfigDto {
+class RequerimientosClienteConfigDto {
   @IsOptional()
   @IsBoolean()
   exigirDni?: boolean;
@@ -47,7 +47,7 @@ export class RequerimientosClienteConfigDto {
   exigirHuella?: boolean;
 }
 
-export class RequerimientosClaseConfigDto {
+class RequerimientosClaseConfigDto {
   // false/undefined (default): si el entrenador no tiene turno registrado en
   // el horario de la clase, se avisa pero se deja guardar. true: se bloquea
   // el guardado hasta que haya un turno que cubra ese horario.
@@ -57,7 +57,7 @@ export class RequerimientosClaseConfigDto {
 }
 
 // Reglas de clases que se editan desde Configuración (modo experto).
-export class ClasesConfigDto {
+class ClasesConfigDto {
   // Decisión D4: asistir a una clase descuenta una sesión a los planes por
   // sesiones (por defecto no: solo el ingreso al gimnasio descuenta).
   @IsOptional()
@@ -75,7 +75,7 @@ export class ClasesConfigDto {
 
 // Jornadas del equipo (plan 7.2): minutos de gracia antes de mostrar a
 // alguien como atrasado. Por defecto 10.
-export class JornadasConfigDto {
+class JornadasConfigDto {
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -83,12 +83,12 @@ export class JornadasConfigDto {
   toleranciaAtrasoMinutos?: number;
 }
 
-export const TIPOS_GIMNASIO = ['musculacion', 'box', 'estudio', 'artes_marciales', 'otro'] as const;
-export const TAMANOS_EQUIPO = ['solo', 'pequeno', 'grande'] as const;
+const TIPOS_GIMNASIO = ['musculacion', 'box', 'estudio', 'artes_marciales', 'otro'] as const;
+const TAMANOS_EQUIPO = ['solo', 'pequeno', 'grande'] as const;
 
 // Respuestas del asistente de inicio (plan 4.5). Solo informativas: el modo y
 // los módulos que se eligieron se guardan aparte.
-export class OnboardingConfigDto {
+class OnboardingConfigDto {
   @IsOptional()
   @IsIn(TIPOS_GIMNASIO)
   tipoGimnasio?: (typeof TIPOS_GIMNASIO)[number];
@@ -126,7 +126,7 @@ export class TarjetaTableroDto {
   rango?: string;
 }
 
-export class TableroConfigDto {
+class TableroConfigDto {
   // null: "Volver al diseño sugerido" (el Inicio se arma solo otra vez).
   @IsOptional()
   @IsArray()
@@ -136,7 +136,7 @@ export class TableroConfigDto {
   tarjetas?: TarjetaTableroDto[] | null;
 }
 
-export class ConfiguracionTenantDto {
+class ConfiguracionTenantDto {
   @IsOptional()
   @IsIn(MODOS_USO)
   modoUso?: ModoUso;

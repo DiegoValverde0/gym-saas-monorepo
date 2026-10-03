@@ -12,7 +12,7 @@ import { esRolCliente } from './rol.util';
 // así un cambio de acceso aplica en la siguiente acción sin cerrar sesión
 // (antes la sucursal y el rol viajaban en el JWT y quedaban congelados hasta
 // el siguiente login -- ver plan de simplificación, 13.2).
-export interface AccesoVigente {
+interface AccesoVigente {
   rolNombre: string;
   sucursalId: string | null; // null = todas las sucursales
   sucursalNombre: string | null;
@@ -24,7 +24,7 @@ export interface AccesoVigente {
 
 // Misma clave que usaban antes solo los permisos: todo el código que ya la
 // invalida al cambiar un acceso (Equipo, Usuarios, Roles) sigue sirviendo.
-export const claveAccesoVigente = (usuarioId: string, organizacionId: string | null | undefined) =>
+const claveAccesoVigente = (usuarioId: string, organizacionId: string | null | undefined) =>
   `rbac:${usuarioId}:${organizacionId ?? 'global'}`;
 
 const TTL_SEGUNDOS = 900;

@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsEnum, ValidateNes
 import { Type } from 'class-transformer';
 import { TipoTransaccion, MetodoPago, TipoConceptoVenta } from '@prisma/client';
 
-export class DetalleTransaccionDto {
+class DetalleTransaccionDto {
   @IsEnum(TipoConceptoVenta)
   @IsNotEmpty()
   tipoConcepto: TipoConceptoVenta;
@@ -36,7 +36,7 @@ export class DetalleTransaccionDto {
   subtotal: number;
 }
 
-export class PagoDto {
+class PagoDto {
   @IsEnum(MetodoPago)
   @IsNotEmpty()
   metodoPago: MetodoPago;

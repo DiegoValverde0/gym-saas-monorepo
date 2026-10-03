@@ -14,7 +14,7 @@ export function idDePlantilla(organizacionId: string, clave: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variante}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-export interface PlantillaLista {
+interface PlantillaLista {
   clave: string;
   nombre: string;
   descripcion: string;

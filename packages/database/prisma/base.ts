@@ -127,7 +127,7 @@ const ROLES_BASE: { nombre: string; descripcion: string; permisos: Filtro }[] = 
   },
 ];
 
-export type NombreRolBase = 'SUPERADMIN' | 'ADMIN_GYM' | 'ENTRENADOR' | 'RECEPCIONISTA' | 'CLIENTE';
+type NombreRolBase = 'SUPERADMIN' | 'ADMIN_GYM' | 'ENTRENADOR' | 'RECEPCIONISTA' | 'CLIENTE';
 
 /** Crea los permisos y los roles base que falten. Devuelve el id de cada rol base. */
 export async function sembrarPermisosYRoles(prisma: PrismaClient): Promise<Record<NombreRolBase, string>> {

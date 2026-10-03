@@ -4,7 +4,7 @@ import { OperacionAuditoria, Prisma } from '@prisma/client';
 
 const logger = new Logger('Auditoria');
 
-export interface EventoAuditoria {
+interface EventoAuditoria {
   tabla: string;
   operacion: OperacionAuditoria;
   /** Clave estable para filtrar (ej. 'eliminar', 'cambiar_precio'). */

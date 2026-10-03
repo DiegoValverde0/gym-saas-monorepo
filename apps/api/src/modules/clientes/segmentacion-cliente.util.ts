@@ -31,7 +31,7 @@
 //    todo inactivo con historial pagado que no cae en 1 ni en 3+ (ej.
 //    exactamente 2, o un estado de la última membresía que no sea
 //    exactamente VENCIDA/AGOTADA, como una CANCELADA ya pagada).
-export type SegmentoCliente =
+type SegmentoCliente =
   | 'PROSPECTO'
   | 'ACTIVO_VIGENTE'
   | 'ACTIVO_ENCOLADO'
@@ -39,7 +39,7 @@ export type SegmentoCliente =
   | 'INACTIVO_ABANDONO_TEMPRANO'
   | 'INACTIVO_CHURN';
 
-export interface MembresiaParaSegmento {
+interface MembresiaParaSegmento {
   estado: string;
   fechaInicio: Date;
   fechaFin: Date | null;

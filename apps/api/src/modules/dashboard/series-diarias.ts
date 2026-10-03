@@ -11,7 +11,7 @@ interface ConsultaCruda {
   $queryRaw<T = unknown>(query: Prisma.Sql): Promise<T>;
 }
 
-export interface FiltroSerie {
+interface FiltroSerie {
   organizacionId: string;
   sucursalId?: string;
   zona: string | null;

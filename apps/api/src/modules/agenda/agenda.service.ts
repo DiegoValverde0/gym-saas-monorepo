@@ -10,7 +10,7 @@ const DIA_MS = 24 * 60 * 60_000;
 const minutosDe = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes();
 const fechaISO = (d: Date) => d.toISOString().slice(0, 10);
 
-export type CoberturaClase = 'cubierta' | 'sin_turno' | 'sin_entrenador';
+type CoberturaClase = 'cubierta' | 'sin_turno' | 'sin_entrenador';
 
 // Vista consolidada de una semana en una sucursal: turnos del equipo y clases
 // en un mismo lugar, con todo ya expresado en la hora local de la

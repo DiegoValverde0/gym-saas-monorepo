@@ -113,7 +113,7 @@ export class EjecutarGuardadoDto {
   contar?: boolean;
 }
 
-export const VISTAS_REPORTES = ['todos', 'recientes', 'mios', 'compartidos', 'plantillas'] as const;
+const VISTAS_REPORTES = ['todos', 'recientes', 'mios', 'compartidos', 'plantillas'] as const;
 
 export class ListarReportesDto {
   @IsOptional()

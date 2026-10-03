@@ -16,7 +16,7 @@ import { useTenantStore } from '@/store/use-tenant-store';
 import { apiGet, apiPost, unwrapList } from '@/lib/api-client';
 import { Search, CheckCircle2, UserPlus, AlertTriangle, Clock } from 'lucide-react';
 
-export interface ClienteVenta { id: string; nombre: string; numeroDocumento?: string | null; telefono?: string | null }
+interface ClienteVenta { id: string; nombre: string; numeroDocumento?: string | null; telefono?: string | null }
 interface Plan { id: string; nombre: string; precio: string | number; tipoPlan: string; estado?: string; duracionDias?: number | null; cantidadSesiones?: number | null }
 interface Promocion { id: string; nombre: string; estado?: string; porcentajeDescuento?: string | number | null; montoDescuentoFijo?: string | number | null; fechaInicio: string; fechaFin: string }
 interface MembresiaCreada { id: string; montoFinal: string | number }

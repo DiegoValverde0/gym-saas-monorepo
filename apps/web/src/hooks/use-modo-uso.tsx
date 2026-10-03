@@ -37,7 +37,7 @@ export const MODOS_USO: { valor: ModoUso; nombre: string; paraQuien: string; ide
   },
 ];
 
-export interface OnboardingConfig {
+interface OnboardingConfig {
   tipoGimnasio?: string;
   tamanoEquipo?: string;
   clasesGrupales?: boolean;

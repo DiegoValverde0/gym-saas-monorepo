@@ -8,7 +8,7 @@ import { useTenantStore } from '@/store/use-tenant-store';
 import { apiGet, apiPut, unwrapList } from '@/lib/api-client';
 import { AuthUser, useAuth } from './use-auth';
 
-export interface SucursalBasica {
+interface SucursalBasica {
   id: string;
   nombre: string;
   esPrincipal?: boolean;

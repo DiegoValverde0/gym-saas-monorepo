@@ -17,7 +17,7 @@ export interface MembresiaPortal {
   sesionesRestantes: number | null;
 }
 
-export interface ProximaClase {
+interface ProximaClase {
   reservaId: string;
   estado: 'CONFIRMADA' | 'EN_ESPERA';
   claseId: string;

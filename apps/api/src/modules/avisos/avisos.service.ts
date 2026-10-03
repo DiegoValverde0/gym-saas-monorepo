@@ -23,7 +23,7 @@ const TTL_HECHO = 60 * 24 * 60 * 60;
 const TTL_EVENTOS = 15 * 24 * 60 * 60;
 
 // Clave de un aviso de la lista de WhatsApp.
-export const CLAVE_AVISO_WHATSAPP = /^(por_vencer|vencida|lugar):[0-9a-f-]{36}$|^cancelada:[0-9a-f-]{36}:[0-9a-f-]{36}$/;
+const CLAVE_AVISO_WHATSAPP = /^(por_vencer|vencida|lugar):[0-9a-f-]{36}$|^cancelada:[0-9a-f-]{36}:[0-9a-f-]{36}$/;
 
 interface EventoClase {
   tipo: 'LUGAR' | 'CANCELADA';
