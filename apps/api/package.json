@@ -16,7 +16,7 @@
     "@nestjs/platform-express": "^11.2.7",
     "@nestjs/schedule": "^12.0.2",
     "@nestjs/throttler": "^6.7.1",
-    "@prisma/client": "^5.0.0",
+    "@prisma/client": "^7.10.0",
     "@repo/database": "workspace:*",
     "@types/express": "^5.0.6",
     "class-transformer": "^0.5.1",
