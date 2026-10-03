@@ -82,7 +82,6 @@ export function POSModal({ open, onOpenChange, item }: { open: boolean, onOpenCh
           setPagos([{ id: Date.now(), metodoPago: 'EFECTIVO', monto: String(montoTotal), cuentaBancariaId: cuentaDefault }]);
           setEfectivoRecibido(String(montoTotal));
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, item, montoTotal, cuentasData]);
 
   const cobrarMutation = useMutation({

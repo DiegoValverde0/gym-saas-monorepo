@@ -28,3 +28,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Node saca una versión mayor cada seis meses; se pasa a mano cuando es de
+    # soporte largo (LTS), por fases (docs/plan-actualizaciones.md, A8).
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]

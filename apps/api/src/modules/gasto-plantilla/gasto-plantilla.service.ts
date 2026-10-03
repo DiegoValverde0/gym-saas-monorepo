@@ -112,8 +112,8 @@ export class GastoPlantillaService {
   // (que proyectan varias semanas hacia adelante), esto SOLO actúa si hoy es
   // el día que le toca a la plantilla -- no tiene sentido pre-asentar en los
   // libros un gasto de un mes que todavía no llegó. Usa `this.prisma` crudo
-  // a propósito (cron sin contexto de tenant en el CLS, ver excludedFiles en
-  // .eslintrc.js), igual que turno-plantilla.service.ts.
+  // a propósito (cron sin contexto de tenant en el CLS, ver las excepciones en
+  // eslint.config.mjs), igual que turno-plantilla.service.ts.
   async generarParaOrganizacion(organizacionId: string) {
     // Hoy en la hora local de la organización (en un servidor UTC, el gasto
     // "del día 5" se generaba a las 23:00 del día 4 en La Paz).

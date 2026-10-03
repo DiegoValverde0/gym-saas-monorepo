@@ -78,7 +78,6 @@ export function AsistenteInicio() {
   const propuesta = proponer(tamano, !!clases);
   useEffect(() => {
     if (paso === 3) setModo(propuesta.modo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paso]);
 
   const terminar = useMutation({

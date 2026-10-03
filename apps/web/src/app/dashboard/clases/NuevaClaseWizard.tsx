@@ -172,7 +172,6 @@ export function NuevaClaseWizard({
     } else {
       setSelecciones([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editarSerie, inicio]);
 
   // Regla de quién reserva de la disciplina elegida.

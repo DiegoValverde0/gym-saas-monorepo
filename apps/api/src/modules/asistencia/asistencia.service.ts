@@ -356,8 +356,8 @@ export class AsistenciaService {
 
   // Corre todos los días a las 2 AM, sin contexto CLS (los crons no pasan por
   // ClsMiddleware) y recorre TODAS las organizaciones por diseño, así que usa
-  // el cliente crudo de Prisma a propósito -- ver excludedFiles en
-  // .eslintrc.js. Nunca se fuerza un organizacionId falso sobre extendedClient.
+  // el cliente crudo de Prisma a propósito -- ver las excepciones en
+  // eslint.config.mjs. Nunca se fuerza un organizacionId falso sobre extendedClient.
   // Cada hora y por organización, con su medianoche local: cierra los
   // ingresos de días anteriores que no marcaron salida. Antes corría a las
   // 2 AM del servidor con su "hoy": en un servidor UTC eran las 22:00 de La

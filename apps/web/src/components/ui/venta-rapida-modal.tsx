@@ -148,7 +148,6 @@ export function VentaRapidaModal({
     if (!open) return;
     if (planIdInicial && planes.some((p) => p.id === planIdInicial)) setPlanId(planIdInicial);
     else setPlanId(planes.length === 1 ? planes[0].id : '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, planIdInicial, planesData]);
 
   useEffect(() => {
@@ -223,7 +222,7 @@ export function VentaRapidaModal({
           pagos,
         });
       } catch (err) {
-        throw new Error(`La membresía quedó registrada pero no se pudo cobrar: ${(err as Error).message} Puedes cobrarla desde Membresías.`);
+        throw new Error(`La membresía quedó registrada pero no se pudo cobrar: ${(err as Error).message} Puedes cobrarla desde Membresías.`, { cause: err });
       }
       return { monto, cliente: elegido, cobrada: true };
     },

@@ -195,7 +195,6 @@ export default function AsistenciasPage() {
       .then((c) => handleSelectCliente(c))
       .catch(() => undefined);
     window.history.replaceState(null, '', window.location.pathname);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Venta o renovación sin salir de Control de acceso (plan 10.2): desde el

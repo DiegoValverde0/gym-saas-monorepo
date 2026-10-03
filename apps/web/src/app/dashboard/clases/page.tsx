@@ -146,7 +146,6 @@ export default function ClasesPage() {
     if (claseId) setSesionId(claseId);
     window.history.replaceState(null, '', window.location.pathname);
     // Solo al montar: es la lectura de los parámetros con los que se llegó.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!token) return null;

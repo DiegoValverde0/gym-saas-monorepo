@@ -230,7 +230,6 @@ export default function ClientesPage() {
     }
     window.addEventListener('gym:nuevo-cliente', abrir);
     return () => window.removeEventListener('gym:nuevo-cliente', abrir);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdmin, activeTenantId]);
 
   const handleDelete = (id: string) => {

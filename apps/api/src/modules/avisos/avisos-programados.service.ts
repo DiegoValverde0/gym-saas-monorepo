@@ -31,7 +31,7 @@ interface NuevoAviso {
  * reserva a la que se refiere, y no se vuelve a crear si ya existe.
  *
  * Recorre todas las organizaciones sin contexto de tenant, así que usa el
- * cliente crudo de Prisma a propósito (ver excludedFiles en .eslintrc.js) y
+ * cliente crudo de Prisma a propósito (ver las excepciones en eslint.config.mjs) y
  * filtra organizacionId y deletedAt a mano en cada consulta.
  */
 @Injectable()

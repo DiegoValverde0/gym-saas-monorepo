@@ -91,7 +91,6 @@ export function PlanWizardModal({ isOpen, onClose, onSubmit, initialData, isPend
       const regla = reglaDe(d.id);
       return regla.modo !== 'PLANES' || (!!initialData?.id && (regla.planIds ?? []).includes(initialData.id));
     }).map((d) => d.id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, acceso, disciplinas, initialData]);
   const [incluidasTocadas, setIncluidasTocadas] = useState(false);
   useEffect(() => {

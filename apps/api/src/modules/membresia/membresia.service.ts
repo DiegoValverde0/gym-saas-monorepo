@@ -225,7 +225,6 @@ export class MembresiaService {
   // un tenant ya resuelto) o this.prisma crudo (llamadas desde los cron jobs
   // cross-tenant de abajo, que no tienen organizacionId de request).
   private async promoverSiguienteEnEspera(clienteId: string, clientParams?: unknown) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const client = (clientParams || this.prisma.extendedClient) as any;
     const siguiente = await client.membresia.findFirst({
       where: { clienteId, estado: 'EN_ESPERA' },
@@ -278,7 +277,7 @@ export class MembresiaService {
   // procesada en la primera hora después de su medianoche.
   //
   // Recorre todas las organizaciones sin contexto de tenant, así que usa el
-  // cliente crudo de Prisma a propósito (ver excludedFiles en .eslintrc.js).
+  // cliente crudo de Prisma a propósito (ver las excepciones en eslint.config.mjs).
   @Cron(CronExpression.EVERY_HOUR)
   async handleCierreDiarioMembresias() {
     const organizaciones = await this.prisma.organizacion.findMany({

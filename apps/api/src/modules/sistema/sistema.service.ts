@@ -24,7 +24,6 @@ export class SistemaService {
 
     // Construimos el query usando el cliente base de Prisma para saltarnos la extensión
     // que automáticamente inyecta "deletedAt = null" en las búsquedas.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = { id };
     
     if (!isSuperAdmin) {
@@ -36,7 +35,6 @@ export class SistemaService {
 
     try {
       // Verificamos si existe (incluso borrado)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const target = await (this.prisma as any)[modelo].findFirst({ where });
       
       if (!target) {
@@ -48,7 +46,6 @@ export class SistemaService {
       }
 
       // Restauramos
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const restored = await (this.prisma as any)[modelo].update({
         where: { id: target.id },
         data: { deletedAt: null }

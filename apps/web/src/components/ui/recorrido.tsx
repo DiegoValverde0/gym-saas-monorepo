@@ -86,7 +86,7 @@ export function Recorrido() {
   const usuario = user?.sub;
   const mostrarSiNoVisto = useCallback(() => {
     if (!esSimple || !pasos || !usuario) return setPaso(null);
-    let visto = false;
+    let visto: boolean;
     try {
       visto = localStorage.getItem(clave(usuario, ruta)) === '1';
     } catch {

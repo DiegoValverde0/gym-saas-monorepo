@@ -58,8 +58,8 @@ export interface ResultadoReporte {
  * Reportería (docs/plan-reporteria.md): catálogo de tipos y ejecución de
  * definiciones.
  *
- * Usa el cliente crudo de Prisma a propósito (ver excludedFiles en
- * .eslintrc.js): corre SQL generado por el compilador, que agrega él mismo el
+ * Usa el cliente crudo de Prisma a propósito (ver las excepciones en
+ * eslint.config.mjs): corre SQL generado por el compilador, que agrega él mismo el
  * filtro de organización y de sucursal (el SQL crudo no pasa por la
  * extensión RLS). Las pruebas del compilador exigen ese filtro.
  */

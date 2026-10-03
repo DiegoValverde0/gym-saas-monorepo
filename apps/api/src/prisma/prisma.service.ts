@@ -242,7 +242,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (!this._extendedClient) {
       this._extendedClient = this.$extends(withSoftDeleteAndRLS(this.cls, () => this._extendedClient));
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this._extendedClient as any;
   }
 
