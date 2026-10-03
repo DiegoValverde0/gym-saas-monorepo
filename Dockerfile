@@ -2,7 +2,7 @@
 # Imágenes de la API y la web. En producción se usan con docker-compose.prod.yml
 # (ver docs/despliegue.md); el target "dev" lo usa docker-compose.yml.
 
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 # Prisma necesita OpenSSL para elegir y usar sus motores.
 RUN apk add --no-cache openssl
 RUN npm install -g pnpm@9.0.0
@@ -37,7 +37,7 @@ CMD ["node", "dist/main.js"]
 
 # ---------------------------------------------------------------------------
 # Web: servidor mínimo de Next (output: 'standalone').
-FROM node:24-alpine AS web
+FROM node:26-alpine AS web
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /usr/src/app
 COPY --from=build --chown=node:node /usr/src/app/apps/web/.next/standalone ./
