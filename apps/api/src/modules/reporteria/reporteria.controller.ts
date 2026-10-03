@@ -14,7 +14,9 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { LIMITES } from '../../common/limites/limites';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ReporteriaService } from './reporteria.service';
@@ -47,6 +49,7 @@ export class ReporteriaController {
 
   // Vista previa del constructor: la primera página de 50 filas.
   @Post('vista-previa')
+  @Throttle({ default: LIMITES.reportes })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ accion: 'crear', modulo: 'reportes' })
   vistaPrevia(@Body() dto: EjecutarReporteDto) {
@@ -54,6 +57,7 @@ export class ReporteriaController {
   }
 
   @Post('ejecutar')
+  @Throttle({ default: LIMITES.reportes })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ accion: 'crear', modulo: 'reportes' })
   ejecutar(@Body() dto: EjecutarReporteDto) {
@@ -77,6 +81,7 @@ export class ReporteriaController {
 
   // Correr un reporte guardado: alcanza con verlo (recepción).
   @Post('reportes/:id/ejecutar')
+  @Throttle({ default: LIMITES.reportes })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ accion: 'leer', modulo: 'reportes' })
   ejecutarGuardado(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EjecutarGuardadoDto) {
@@ -85,6 +90,7 @@ export class ReporteriaController {
 
   // Exportar a CSV o Excel (fase 5): con ver el reporte alcanza (recepción exporta).
   @Post('reportes/:id/exportar')
+  @Throttle({ default: LIMITES.pesado })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ accion: 'leer', modulo: 'reportes' })
   async exportar(@Param('id', ParseUUIDPipe) id: string, @Query('formato') formato: string, @Body() dto: EjecutarGuardadoDto) {

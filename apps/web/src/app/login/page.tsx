@@ -11,6 +11,7 @@ import { apiGet, apiPost } from '@/lib/api-client';
 import { useTenantStore } from '@/store/use-tenant-store';
 import { nombreRol } from '@/lib/roles';
 import type { AuthUser } from '@/hooks/use-auth';
+import { CUENTAS_PRUEBA } from '@repo/database/prisma/cuentas-prueba';
 
 interface Tenant {
   organizacionId: string;
@@ -19,12 +20,8 @@ interface Tenant {
   rolNombre?: string;
 }
 
-const CUENTAS_DE_PRUEBA = [
-  { quien: 'Dueño', correo: 'dueno@gymtitan.com', clave: 'admin123' },
-  { quien: 'Recepción', correo: 'ana@gymtitan.com', clave: 'ana123' },
-  { quien: 'Cliente', correo: 'juan.titan@ejemplo.com', clave: 'juan123' },
-  { quien: 'Plataforma', correo: 'admin@gymmanager.com', clave: 'admin123' },
-];
+// Las que se muestran en la caja de desarrollo (packages/database/prisma/cuentas-prueba.ts).
+const CUENTAS_DE_PRUEBA = [CUENTAS_PRUEBA.dueno, CUENTAS_PRUEBA.recepcion, CUENTAS_PRUEBA.cliente, CUENTAS_PRUEBA.superadmin];
 
 interface LoginResponse {
   requireTenantSelection?: boolean;
@@ -134,7 +131,7 @@ export default function LoginPage() {
                     <Input
                       id="email"
                       type="email"
-                      placeholder="admin@gymtitan.com"
+                      placeholder="tu@correo.com"
                       required
                       value={correo}
                       onChange={(e) => setCorreo(e.target.value)}
@@ -215,8 +212,8 @@ export default function LoginPage() {
             </form>
           </CardContent>
 
-          {/* Solo en desarrollo: las cuentas del seed (packages/database/prisma/seed.ts).
-              En producción no existen y no se muestran. */}
+          {/* Solo en desarrollo: las cuentas del seed (packages/database/prisma/cuentas-prueba.ts).
+              En producción no existen, no se muestran y no van en el paquete de la página. */}
           {step === 1 && process.env.NODE_ENV === 'development' && (
             <CardFooter className="flex flex-col border-t border-zinc-800/50 mt-6 pt-6">
               <div className="w-full text-xs text-zinc-500 space-y-2">
@@ -224,7 +221,7 @@ export default function LoginPage() {
                 {CUENTAS_DE_PRUEBA.map((c) => (
                   <div key={c.correo} className="flex justify-between items-center gap-2 p-2.5 rounded-md bg-zinc-950/50 border border-zinc-800/50">
                     <span className="text-indigo-400 font-medium">{c.quien}</span>
-                    <code className="text-zinc-300 truncate">{c.correo} / {c.clave}</code>
+                    <code className="text-zinc-300 truncate">{c.correo} / {c.contrasena}</code>
                   </div>
                 ))}
               </div>

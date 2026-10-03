@@ -10,6 +10,17 @@ x-app-env: &app-env
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET}
   FRONTEND_URL: https://${DOMINIO}
+  # Límites de peticiones (opcionales, ver .env.produccion.example): vacíos
+  # valen los de apps/api/src/common/limites/limites.ts.
+  LIMITE_GENERAL: ${LIMITE_GENERAL:-}
+  LIMITE_LOGIN: ${LIMITE_LOGIN:-}
+  LIMITE_PESADO: ${LIMITE_PESADO:-}
+  LIMITE_REPORTES: ${LIMITE_REPORTES:-}
+  LOGIN_FALLOS_MAX: ${LOGIN_FALLOS_MAX:-}
+  LOGIN_FALLOS_VENTANA_MIN: ${LOGIN_FALLOS_VENTANA_MIN:-}
+  LOGIN_BLOQUEO_MIN: ${LOGIN_BLOQUEO_MIN:-}
+  # Cuánto dura una sesión (horas; vacío, 24).
+  SESION_HORAS: ${SESION_HORAS:-}
 
 services:
   db:
@@ -76,6 +87,8 @@ services:
       - "443:443"
     environment:
       DOMINIO: ${DOMINIO:?Falta DOMINIO}
+      # Rangos de Cloudflare si está delante (docs/despliegue.md); vacío, ninguno.
+      PROXIES_CONFIABLES: ${PROXIES_CONFIABLES:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

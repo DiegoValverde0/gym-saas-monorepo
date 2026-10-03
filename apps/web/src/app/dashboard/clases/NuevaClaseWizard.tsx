@@ -1,7 +1,7 @@
 "use client";
 
 import { Ayuda } from '@/components/ui/ayuda';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -642,7 +642,7 @@ export function NuevaClaseWizard({
     </div>
   );
 
-  const contenido: Record<number, JSX.Element> = { 1: paso1, 2: paso2, 3: paso3, 4: paso4, 5: paso5 };
+  const contenido: Record<number, ReactElement> = { 1: paso1, 2: paso2, 3: paso3, 4: paso4, 5: paso5 };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

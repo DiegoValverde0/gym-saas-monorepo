@@ -46,6 +46,38 @@ echo "alias gym='docker compose -f docker-compose.prod.yml --env-file .env.produ
 
 Con eso, los comandos de abajo quedan como `gym ps`, `gym logs -f api`, etc.
 
+## Protección contra ataques grandes (Cloudflare)
+
+El sistema ya limita los pedidos por persona y por IP, y corta lo que llega muy grande o muy lento (docs/plan-seguridad.md). Contra un ataque de denegación de servicio grande (miles de máquinas a la vez), ningún servidor solo alcanza: lo que sirve es un servicio delante que lo absorba. Cloudflare lo hace gratis.
+
+1. **Primero sin Cloudflare.** Haz la primera instalación (arriba) con el dominio apuntando directo al servidor, y espera a que `https://DOMINIO` funcione: así Caddy saca su certificado sin problemas.
+2. **Cuenta en Cloudflare** (plan gratis): agrega el dominio y cambia los servidores de nombre (NS) donde lo compraste por los que te da Cloudflare.
+3. **El registro A** del dominio, con la nube **naranja** (pasa por Cloudflare).
+4. **SSL/TLS → modo "Full (strict)"**: Cloudflare habla con Caddy por HTTPS y revisa su certificado. Deja **apagado** "Always Use HTTPS": Caddy ya redirige a HTTPS, y así puede renovar su certificado solo.
+5. **Decirle a Caddy que Cloudflare es de confianza**, para que tome la IP real de cada persona (si no, los límites contarían a todos como si fueran Cloudflare):
+
+   ```bash
+   echo "PROXIES_CONFIABLES=$( { curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; } | tr '\n' ' ')" >> .env.produccion
+   gym up -d caddy
+   ```
+
+   Cloudflare cambia sus rangos muy de vez en cuando: si un día lo anuncia, se repite este paso (borrando antes la línea vieja).
+6. **Opcional, más protección:** que el servidor acepte los puertos 80 y 443 solo desde los rangos de Cloudflare (en el firewall del proveedor del servidor). Así nadie salta a Cloudflare pegándole directo a la IP del servidor.
+7. **Si hay un ataque en curso:** en Cloudflare, "Security → Settings → I'm Under Attack".
+
+## Variables opcionales de seguridad
+
+En `.env.produccion` (sin ellas valen los valores por defecto):
+
+| Variable | Qué cambia | Por defecto |
+|---|---|---|
+| `LIMITE_GENERAL`, `LIMITE_LOGIN`, `LIMITE_PESADO`, `LIMITE_REPORTES` | Pedidos por minuto (ver `apps/api/src/common/limites/limites.ts`) | 100, 5, 10, 120 |
+| `LOGIN_FALLOS_MAX`, `LOGIN_FALLOS_VENTANA_MIN`, `LOGIN_BLOQUEO_MIN` | Bloqueo de una cuenta por contraseñas equivocadas | 10 fallos en 15 minutos = 15 minutos |
+| `SESION_HORAS` | Cuánto dura una sesión | 24 |
+| `PROXIES_CONFIABLES` | Rangos del proxy delante (Cloudflare) | ninguno |
+
+Después de cambiarlas: `gym up -d`.
+
 ## Actualizar a una versión nueva
 
 ```bash

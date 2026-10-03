@@ -1,5 +1,6 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { DemasiadosIntentosException } from '../limites/intentos';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -16,6 +17,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
+      // Cuánto esperar, como en el límite de peticiones (common/limites).
+      if (exception instanceof DemasiadosIntentosException) response.setHeader('Retry-After', String(exception.segundos));
       const responseBody = exception.getResponse() as string | { message?: string | string[], error?: string };
       
       if (typeof responseBody === 'string') {

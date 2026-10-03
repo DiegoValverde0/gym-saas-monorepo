@@ -1,0 +1,35 @@
+# Análisis de seguridad del código (CodeQL de GitHub, gratis en repositorios
+# públicos): busca inyecciones, rutas peligrosas, secretos en el código y
+# otros errores conocidos en la API y la web. Los hallazgos se ven en la
+# pestaña "Security" del repositorio (docs/plan-seguridad.md).
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Cada lunes a las 6:00 UTC: también encuentra lo que se descubre después.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Para publicar los hallazgos en la pestaña "Security".
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          # Las consultas de seguridad más las de calidad.
+          queries: security-and-quality
+
+      - uses: github/codeql-action/analyze@v4

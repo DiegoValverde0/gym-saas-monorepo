@@ -15,5 +15,5 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
-  "exclude": ["node_modules", "dist", "dist-e2e", "**/*.spec.ts", "vitest.config.mts"]
+  "exclude": ["node_modules", "dist", "dist-e2e", "**/*.spec.ts", "src/pruebas", "vitest.config.mts"]
 }

@@ -35,7 +35,7 @@ Usamos interceptores en NestJS para estandarizar la respuesta de la API. Todo JS
 ---
 
 ## 3. El Frontend Actual (Next.js)
-El frontend (`apps/web`) está construido con **Next.js 14 (App Router)**, **React 18** y estilizado con **TailwindCSS**. Actualmente es completamente funcional pero visualmente es "básico" y carece de dinamismo.
+El frontend (`apps/web`) está construido con **Next.js 15 (App Router)**, **React 19** y estilizado con **TailwindCSS**. Actualmente es completamente funcional pero visualmente es "básico" y carece de dinamismo.
 
 ### Estructura del Proyecto Web (`apps/web/src`)
 - `/app`: Define las rutas y páginas de la aplicación (Dashboard, Login, Clientes, Punto de Venta, etc.).

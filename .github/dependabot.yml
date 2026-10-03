@@ -1,0 +1,30 @@
+# Dependabot propone una actualización cuando sale una versión con un arreglo
+# de seguridad, y una vez por semana las versiones nuevas (docs/plan-seguridad.md).
+# Las menores y de parche van juntas en un solo pedido para no llenar el
+# repositorio; las mayores (que pueden romper algo) van solas.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      acciones:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

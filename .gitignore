@@ -44,3 +44,7 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Next lo genera y lo reescribe en cada compilación (con la carpeta de esa
+# compilación): no se guarda. En el CI se genera con `next typegen`.
+apps/web/next-env.d.ts

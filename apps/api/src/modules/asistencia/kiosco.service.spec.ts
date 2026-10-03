@@ -7,30 +7,12 @@ vi.mock('nestjs-cls', () => ({
 
 import { KioscoService } from './kiosco.service';
 import { hashContrasena } from '../../common/utils/contrasena.util';
-
-// Redis en memoria: contadores de intentos.
-function redisFalso() {
-  const datos = new Map<string, number>();
-  return {
-    datos,
-    get: async (k: string) => (datos.has(k) ? String(datos.get(k)) : null),
-    del: async (k: string) => { datos.delete(k); },
-    multi() {
-      const ops: (() => void)[] = [];
-      const cadena = {
-        incr: (k: string) => { ops.push(() => datos.set(k, (datos.get(k) ?? 0) + 1)); return cadena; },
-        expire: () => cadena,
-        exec: async () => ops.forEach((op) => op()),
-      };
-      return cadena;
-    },
-  };
-}
+import { redisEnMemoria } from '../../pruebas/redis-en-memoria';
 
 describe('KioscoService', () => {
   let db: Record<string, Record<string, ReturnType<typeof vi.fn>>>;
   let asistencia: { validateAccess: ReturnType<typeof vi.fn>; checkIn: ReturnType<typeof vi.fn> };
-  let redis: ReturnType<typeof redisFalso>;
+  let redis: ReturnType<typeof redisEnMemoria>;
   let kiosco: KioscoService;
   const user = { sub: 'recepcion-1', organizacionId: 'org-1' };
 
@@ -42,7 +24,7 @@ describe('KioscoService', () => {
       auditoria: { create: vi.fn() },
     };
     asistencia = { validateAccess: vi.fn(), checkIn: vi.fn().mockResolvedValue({ clasesMarcadas: [] }) };
-    redis = redisFalso();
+    redis = redisEnMemoria();
     const cls = { get: (k: string) => (k === 'organizacionId' ? 'org-1' : undefined) };
     kiosco = new KioscoService({ extendedClient: db } as never, cls as never, asistencia as never, redis as never);
   });
