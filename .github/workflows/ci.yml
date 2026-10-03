@@ -3,6 +3,8 @@
 #   (las pruebas la simulan). Alrededor de 1 minuto.
 # - e2e: las pruebas de punta a punta (apps/e2e, docs/pruebas-e2e.md) con
 #   Postgres, Redis, la API y la web reales y un navegador. Unos 3 minutos.
+# - seguridad: secretos en todo el historial (gitleaks) y vulnerabilidades
+#   nuevas en las dependencias (docs/plan-seguridad.md).
 name: CI
 
 on:
@@ -13,6 +15,10 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Lo mínimo: leer el código. Ningún trabajo necesita escribir en el repositorio.
+permissions:
+  contents: read
 
 jobs:
   verificar:
@@ -49,6 +55,30 @@ jobs:
 
       - name: Pruebas
         run: pnpm test
+
+  seguridad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Todo el historial: gitleaks revisa cada commit, no solo el último.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Secretos en el código y en el historial (gitleaks)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --redact --no-banner
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Falla con una vulnerabilidad alta o crítica nueva (las conocidas, con su
+      # motivo, están en el script).
+      - name: Vulnerabilidades en las dependencias
+        run: node scripts/revisar-dependencias.mjs
 
   e2e:
     runs-on: ubuntu-latest

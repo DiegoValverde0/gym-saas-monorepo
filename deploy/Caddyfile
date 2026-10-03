@@ -4,6 +4,12 @@
 {$DOMINIO} {
 	encode zstd gzip
 
+	# El optimizador de imágenes de Next no se usa y tuvo una vulnerabilidad
+	# grave (docs/plan-seguridad.md): no se deja llegar a la web.
+	handle /_next/image* {
+		respond 404
+	}
+
 	# /api/clientes -> API /clientes
 	handle_path /api/* {
 		reverse_proxy api:3001

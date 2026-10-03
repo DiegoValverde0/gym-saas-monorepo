@@ -7,6 +7,10 @@ const nextConfig = {
   // servidor de desarrollo (docs/plan-pruebas-e2e.md).
   distDir: process.env.NEXT_DIST_DIR || '.next',
   transpilePackages: ["@repo/database"],
+  // La app no usa next/image: el optimizador de imágenes (/_next/image) queda
+  // apagado, porque tuvo una vulnerabilidad grave en Next 14 (también se
+  // bloquea en Caddy; ver docs/plan-seguridad.md).
+  images: { unoptimized: true },
   eslint: {
     ignoreDuringBuilds: true,
   },
