@@ -44,6 +44,11 @@ jobs:
       - name: Tipos (API)
         run: pnpm --filter api exec tsc --noEmit -p tsconfig.json
 
+      # next-env.d.ts no se guarda en el repositorio (Next lo reescribe en cada
+      # compilación): se genera aquí, sin compilar todo.
+      - name: Tipos de Next (web)
+        run: pnpm --filter web exec next typegen
+
       - name: Tipos (web)
         run: pnpm --filter web exec tsc --noEmit
 

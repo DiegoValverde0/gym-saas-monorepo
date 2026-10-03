@@ -2,8 +2,8 @@
 
 ## 1. Stack & Dependencias
 - **Monorepo**: pnpm workspace + Turborepo.
-- **Backend (`apps/api`)**: NestJS, Express, JWT, class-validator/transformer, Redis.
-- **Frontend (`apps/web`)**: Next.js 14, React 18, TailwindCSS, React Query.
+- **Backend (`apps/api`)**: NestJS 11, Express 5, JWT, class-validator/transformer, Redis.
+- **Frontend (`apps/web`)**: Next.js 15, React 19, TailwindCSS, React Query.
 - **Base de Datos (`packages/database`)**: Prisma ORM, PostgreSQL (implícito vía Prisma).
 
 ## 2. Patrón de Arquitectura

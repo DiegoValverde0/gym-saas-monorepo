@@ -5,21 +5,12 @@
 // Uso: node scripts/revisar-dependencias.mjs
 import { execSync } from 'node:child_process';
 
-// Las conocidas que se arreglan cambiando de versión mayor, con el motivo y
-// la fase del plan en que desaparecen. Al hacer esa fase, se borran de aquí.
-const ACEPTADAS = {
-  // Next 14 → Next 15 (fase 6).
-  'GHSA-p293-qw3h-jr36': 'Ejecución remota en Next solo en servidores Windows: producción corre en Linux.',
-  'GHSA-2xp9-vwfh-vxw4': 'Ejecución remota en el optimizador de imágenes: apagado (images.unoptimized) y /_next/image bloqueado en Caddy.',
-  'GHSA-h25m-26qc-wcjf': 'Denegación de servicio en Next 14.',
-  'GHSA-q4gf-8mx6-v5v3': 'Denegación de servicio con Server Components en Next 14.',
-  'GHSA-8h8q-6873-q5fj': 'Denegación de servicio con Server Components en Next 14.',
-  'GHSA-c4j6-fc7j-m34r': 'SSRF en Next 14 (la app no hace pedidos a URLs que mande el usuario).',
-  'GHSA-36qx-fr4f-26g5': 'Salto del middleware en el Pages Router: la app usa el App Router.',
-  'GHSA-m99w-x7hq-7vfj': 'Denegación de servicio con Server Actions: la app no usa Server Actions.',
-  'GHSA-89xv-2m56-2m9x': 'SSRF con Server Actions: la app no usa Server Actions.',
-  'GHSA-p9j2-gv94-2wf4': 'SSRF en rewrites: la app no tiene rewrites.',
-};
+// Las conocidas que no se pueden arreglar todavía (por ejemplo, porque piden
+// cambiar de versión mayor), con el motivo y cuándo se van:
+//   'GHSA-xxxx-xxxx-xxxx': 'Por qué no aplica o cómo se mitigó (y cuándo se arregla).',
+// Vacía desde la fase 6 de docs/plan-seguridad.md: 0 vulnerabilidades.
+/** @type {Record<string, string>} */
+const ACEPTADAS = {};
 
 const GRAVES = new Set(['high', 'critical']);
 

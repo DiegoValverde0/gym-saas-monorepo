@@ -20,8 +20,8 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   transpilePackages: ["@repo/database"],
   // La app no usa next/image: el optimizador de imágenes (/_next/image) queda
-  // apagado, porque tuvo una vulnerabilidad grave en Next 14 (también se
-  // bloquea en Caddy; ver docs/plan-seguridad.md).
+  // apagado (y bloqueado en Caddy). Lo que no se usa no se deja abierto: tuvo
+  // una vulnerabilidad grave en Next 14 (docs/plan-seguridad.md).
   images: { unoptimized: true },
   eslint: {
     ignoreDuringBuilds: true,
@@ -30,10 +30,8 @@ const nextConfig = {
   // pruebas e2e usan `next start` y no lo necesitan (en Windows, además, no
   // puede crear sus enlaces sin permisos de administrador).
   output: process.env.NEXT_DIST_DIR ? undefined : 'standalone',
-  experimental: {
-    // Monorepo: incluir las dependencias que están en la raíz.
-    outputFileTracingRoot: path.join(__dirname, '../../'),
-  },
+  // Monorepo: incluir las dependencias que están en la raíz.
+  outputFileTracingRoot: path.join(__dirname, '../../'),
 };
 
 module.exports = nextConfig;

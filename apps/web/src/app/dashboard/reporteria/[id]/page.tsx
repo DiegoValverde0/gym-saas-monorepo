@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -29,7 +29,10 @@ const horaCorta = (ms: number) => new Date(ms).toLocaleString('es-ES', { day: '2
  * que no cambian lo guardado, páginas de 50 filas, exportar a CSV o Excel
  * (todas las filas, hasta 50.000) e imprimir (hasta 2.000).
  */
-export default function VerReportePage({ params }: { params: { id: string } }) {
+export default function VerReportePage() {
+  // En una página de cliente, el id sale de useParams (desde Next 15 la prop
+  // `params` es una promesa).
+  const params = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
   const { hasPermission } = usePermissions();

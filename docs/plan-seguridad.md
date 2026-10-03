@@ -163,9 +163,22 @@ Rama: `seguridad`.
   - Sin cambios de código: tipos, lint, 118 pruebas de la API y 42 e2e pasan igual. `nest build` (el que usa la imagen Docker) arma la misma estructura (`main.js` en la raíz de la salida).
   - `pnpm audit --prod`: de 26 a 23, todos de Next 14. Se quitaron dos versiones forzadas de la fase 1 que ya no hacían nada: `body-parser@1` (Express 5 usa la 2) y `multer` (Nest 11 trae 2.4.0, ya arreglada). `qs` se queda: Express 5 acepta desde la 6.14, que tiene el aviso.
 
-### Fase 6: Next 15
+### Fase 6: Next 15 (HECHA)
 - Subir Next y React 19; ajustar lo que cambie (parámetros asíncronos, etc.).
 - **Listo cuando:** todas las pruebas pasan, el recorrido en el navegador está bien y `pnpm audit --prod` no tiene avisos altos ni críticos.
+- Hecho así:
+  - Next 15.5.27, React y React DOM 19.3, `@types/react` 19 y `@types/node` 24. **Next 16 ya existe** (16.3.8); se quedó en 15 como se aprobó: Next sigue sacando arreglos para la 15.5 (salió el mismo día que la 16.3.8) y la 16 es un cambio mucho más grande. Las 12 librerías de la web (Base UI, dnd-kit, React Query, cmdk, lucide, next-themes, react-hook-form, recharts, zustand...) ya aceptaban React 19.
+  - Cambios de código, pocos: las 2 páginas de un reporte (`reporteria/[id]` y `[id]/editar`) toman el id con `useParams()` (en Next 15 la prop `params` es una promesa); un `JSX.Element` pasó a `ReactElement` (React 19 ya no tiene el `JSX` global); `outputFileTracingRoot` salió de `experimental`.
+  - **`pnpm audit --prod`: 0 vulnerabilidades** (eran 76 al empezar el plan). `scripts/revisar-dependencias.mjs` lo detectó solo ("ya no aparece... bórrala") y su lista de aceptadas quedó vacía. De las versiones forzadas quedan dos: `postcss` (Next 15 todavía trae la 8.4.31) y `uuid@8` (por exceljs); las demás ya se resuelven solas.
+  - Revisado de más, porque React 19 a veces avisa solo en la consola: un recorrido por las 26 pantallas del menú, el kiosco, un reporte y el login, en la web compilada y en `next dev`: ningún error ni aviso en la consola.
+  - La imagen Docker de la web (modo standalone, que en Windows no se arma) se construyó y arrancó: responde con las cabeceras de producción y 404 en `/_next/image`.
+  - `next-env.d.ts` ya no se guarda en el repositorio (como recomienda Next): Next 15.5 lo reescribe en cada compilación con la carpeta de esa compilación. El CI lo genera con `next typegen` antes de revisar los tipos.
+  - El optimizador de imágenes sigue apagado y bloqueado en Caddy: la vulnerabilidad se arregló, pero lo que no se usa no se deja abierto.
+  - Pruebas: web 27, e2e 42.
+
+---
+
+**Plan completo (2026-10-03).** Lo que queda está en "Para más adelante", más Nest 12 y Next 16 cuando tengan más tiempo en la calle.
 
 ---
 

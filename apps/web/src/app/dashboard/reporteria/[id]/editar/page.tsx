@@ -1,12 +1,16 @@
 "use client";
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
 import { useCatalogo, useReporte } from '../../datos';
 import { Constructor } from '../../constructor';
 
 /** Editar un reporte guardado en el constructor. */
-export default function EditarReportePage({ params }: { params: { id: string } }) {
+export default function EditarReportePage() {
+  // En una página de cliente, el id sale de useParams (desde Next 15 la prop
+  // `params` es una promesa).
+  const params = useParams<{ id: string }>();
   const { data: catalogo } = useCatalogo();
   const { data: reporte, error } = useReporte(params.id);
 
