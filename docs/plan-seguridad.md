@@ -178,6 +178,8 @@ Rama: `seguridad`.
 
 ---
 
+**Después del plan (2026-10-03):** se aceptaron las 17 actualizaciones menores de Dependabot (revisado a mano que `@nestjs/throttler` 6.7 no cambia lo que usan los límites) y, con esa versión, el límite por IP agrupa las IPv6 por red (/64) con `normalizeIp`: quien tiene una red IPv6 tiene millones de direcciones y podría usar una distinta en cada pedido. Una IPv4 escrita como IPv6 (`::ffff:1.2.3.4`) cuenta como la IPv4. Probado en `limites.spec.ts` contra el `getTracker` del guard (falla si se quita).
+
 **Plan completo (2026-10-03).** Lo que queda está en "Para más adelante", más Nest 12 y Next 16 cuando tengan más tiempo en la calle.
 
 ---

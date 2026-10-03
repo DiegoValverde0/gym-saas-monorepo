@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { leerLimites } from './limites';
 import { enteroDeEntorno } from '../utils/entorno.util';
-import { aQuienSeCuenta } from './limite.guard';
+import { aQuienSeCuenta, LimiteGuard } from './limite.guard';
 import { cuentaDeCorreo } from '../../modules/auth/auth.service';
 
 describe('límites de peticiones', () => {
@@ -33,6 +33,18 @@ describe('límites de peticiones', () => {
     expect(await aQuienSeCuenta('inventado', verificar, '1.2.3.4')).toBe('ip:1.2.3.4');
     expect(await aQuienSeCuenta(undefined, verificar, '1.2.3.4')).toBe('ip:1.2.3.4');
     expect(await aQuienSeCuenta('sin-usuario', async () => ({}), '1.2.3.4')).toBe('ip:1.2.3.4');
+  });
+
+  it('sin sesión, una IPv6 cuenta por su red (/64): cambiar de dirección dentro de la red no da más pedidos', async () => {
+    // getTracker del guard de verdad, con un pedido falso y sin sesión.
+    const guard = { jwt: { verifyAsync: async () => ({}) }, ipv6SubnetPrefix: 64 };
+    const getTracker = (LimiteGuard.prototype as unknown as { getTracker: (req: object) => Promise<string> }).getTracker;
+    const contar = (ip: string) => getTracker.call(guard, { ip, headers: {}, cookies: {} });
+    expect(await contar('2001:db8:1:2:aaaa::1')).toBe(await contar('2001:db8:1:2:bbbb::2'));
+    expect(await contar('2001:db8:1:2::1')).not.toBe(await contar('2001:db8:1:3::1'));
+    // Una IPv4 escrita como IPv6 es la misma IPv4 (y cada IPv4 cuenta aparte).
+    expect(await contar('::ffff:1.2.3.4')).toBe('ip:1.2.3.4');
+    expect(await contar('1.2.3.4')).not.toBe(await contar('5.6.7.8'));
   });
 
   it('el bloqueo por cuenta no distingue mayúsculas ni espacios', () => {
