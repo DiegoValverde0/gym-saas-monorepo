@@ -153,9 +153,15 @@ Rama: `seguridad`.
   - **Contraseñas:** la API usa solo `contrasena.util.ts` (se borró la copia de `organizacion.service.ts`). La carga inicial y el seed guardan con `base.ts`, en otro paquete: importar TypeScript de `@repo/database` cambiaría la raíz de compilación de la API. `contrasena.util.spec.ts` las ata: la API tiene que reconocer las que guarda `base.ts`.
   - `packages/database` tiene pruebas (Vitest): las del freno del seed. API 118 pruebas, base de datos 3, web 27, e2e 42.
 
-### Fase 5: NestJS 11
+### Fase 5: NestJS 11 (HECHA)
 - Subir NestJS (y Express 5); ajustar lo que cambie.
 - **Listo cuando:** todas las pruebas pasan y `pnpm audit` ya no muestra los avisos de NestJS.
+- Hecho así:
+  - `@nestjs/common`, `core` y `platform-express` 11.2.7 (Express 5.2.1) y `@nestjs/cli` 11. `@nestjs/jwt`, `schedule` y `mapped-types` ya estaban en versiones para Nest 11; `nestjs-cls` y `@nestjs/throttler` lo soportan. `@types/node` 24 (lo pide la CLI 11) y `engines.node` a `>=20` (lo pide Nest 11; se usa Node 24).
+  - **Nest 12 salió el 27 de agosto de 2026**; se quedó en 11 como se aprobó: cierra los avisos, sigue recibiendo arreglos (11.2.7 salió el 30 de septiembre, el mismo día que 12.1.2) y sus cambios están documentados. Pasar a 12 queda para más adelante.
+  - Lo que suele romper Express 5, revisado antes de subir: no hay rutas con `*` ni expresiones, ni métodos que Express 5 quitó, y ningún DTO de consulta usa objetos o listas (Express 5 ya no lee `?a[b]=1`). El único middleware es el de `nestjs-cls`. Al arrancar: 229 rutas y ningún aviso.
+  - Sin cambios de código: tipos, lint, 118 pruebas de la API y 42 e2e pasan igual. `nest build` (el que usa la imagen Docker) arma la misma estructura (`main.js` en la raíz de la salida).
+  - `pnpm audit --prod`: de 26 a 23, todos de Next 14. Se quitaron dos versiones forzadas de la fase 1 que ya no hacían nada: `body-parser@1` (Express 5 usa la 2) y `multer` (Nest 11 trae 2.4.0, ya arreglada). `qs` se queda: Express 5 acepta desde la 6.14, que tiene el aviso.
 
 ### Fase 6: Next 15
 - Subir Next y React 19; ajustar lo que cambie (parámetros asíncronos, etc.).
