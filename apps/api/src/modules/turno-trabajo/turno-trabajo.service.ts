@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { RedisClientType } from 'redis';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -10,6 +10,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { paginar, resolverPaginacion } from '../../common/utils/pagination.util';
 import { aHoraLocal, desdeHoraLocal } from '../../common/utils/zona-horaria.util';
 import { choqueDeSesion } from '../../common/utils/choques-clase.util';
+import { Intentos } from '../../common/limites/intentos';
 import { buscarStaffPorPin } from '../../common/utils/pin.util';
 
 const INCLUDE_TURNO = {
@@ -29,8 +30,9 @@ const MAX_DIAS_AUSENCIA = 366;
 const VENTANA_AUSENCIAS_PASADAS_DIAS = 60;
 const VENTANA_AUSENCIAS_FUTURAS_DIAS = 180;
 
-const MAX_INTENTOS_PIN = 5;
-const BLOQUEO_PIN_SEGUNDOS = 5 * 60;
+// Un PIN de 4 dígitos se puede adivinar: tras 5 incorrectos seguidos desde la
+// misma sesión de la tablet, se bloquea 5 minutos.
+const REGLA_PIN = { maximo: 5, ventanaMs: 5 * 60_000, bloqueoMs: 5 * 60_000, mensaje: 'Demasiados PIN incorrectos. Espera 5 minutos o pide ayuda en recepción.' };
 
 const NOMBRE_MOTIVO: Record<MotivoAusencia, string> = {
   VACACIONES: 'Vacaciones',
@@ -69,8 +71,12 @@ export class TurnoTrabajoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cls: ClsService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
-  ) {}
+    @Inject('REDIS_CLIENT') redis: RedisClientType,
+  ) {
+    this.pines = new Intentos(redis, 'pin-personal', REGLA_PIN);
+  }
+
+  private readonly pines: Intentos;
 
   // Las horas se guardan como Date (@db.Time) pero el DTO las maneja como
   // texto "HH:MM" -- mismo patrón ya usado en plan.service.ts. `fecha` llega
@@ -205,18 +211,15 @@ export class TurnoTrabajoService {
   async marcarConPin(pin: string, usuarioTablet: string) {
     const organizacionId = this.cls.get('organizacionId');
     if (!organizacionId) throw new ForbiddenException('Selecciona una organización.');
-    const clave = `pin:intentos:${organizacionId}:${usuarioTablet}`;
-    const intentos = Number((await this.redisClient.get(clave)) ?? 0);
-    if (intentos >= MAX_INTENTOS_PIN) {
-      throw new HttpException('Demasiados PIN incorrectos. Espera 5 minutos o pide ayuda en recepción.', HttpStatus.TOO_MANY_REQUESTS);
-    }
+    const clave = `${organizacionId}:${usuarioTablet}`;
+    await this.pines.revisar(clave);
 
     const staff = await buscarStaffPorPin(this.prisma.extendedClient, pin);
     if (!staff) {
-      await this.redisClient.multi().incr(clave).expire(clave, BLOQUEO_PIN_SEGUNDOS).exec();
+      await this.pines.fallo(clave);
       throw new BadRequestException('PIN incorrecto.');
     }
-    await this.redisClient.del(clave);
+    await this.pines.exito(clave);
 
     const turno = await this.turnoDeHoyDe(staff);
     const nombre = staff.usuario.nombreCompleto.split(' ')[0];

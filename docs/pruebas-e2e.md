@@ -39,6 +39,7 @@ Todas las pruebas fallan además si la página tiene un error de JavaScript, si 
 | `sesion.spec.ts` | Iniciar y cerrar sesión, clave equivocada, sesión guardada. |
 | `menu.spec.ts` | El menú de dueño, recepción e instructor; cada pantalla abre sin errores y con su título. |
 | `inicio.spec.ts` | El Inicio: indicadores, tarjetas del diseño sugerido y su período, "Lo que hay que saber hoy" por rol, datos de ejemplo, personalizar (quitar, mover, agregar, guardar, volver al sugerido), el celular, el modo simple con su guía, y lo que no ve el instructor. |
+| `seguridad.spec.ts` | El bloqueo por cuenta tras varias contraseñas equivocadas (429 con `Retry-After`), sin afectar a las demás cuentas. |
 | `busqueda.spec.ts` | La paleta (Ctrl+K y "Buscar…"), nombres viejos y acciones rápidas. |
 | `celular.spec.ts` | La barra de abajo, el menú en el celular y que nada quede tapado. |
 | `modo.spec.ts` | El menú en modo simple. |

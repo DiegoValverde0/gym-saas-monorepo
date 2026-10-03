@@ -36,9 +36,16 @@ export const ENTORNO: Record<string, string> = {
   JWT_SECRET: base.JWT_SECRET,
   PORT: String(PUERTO_API),
   FRONTEND_URL: URL_WEB,
-  // Cada pantalla hace varios pedidos: con el límite normal (100 por minuto)
-  // la tanda fallaría al azar (decisión E4).
-  THROTTLE_LIMIT: '100000',
+  // Cada pantalla hace varios pedidos y la tanda inicia sesión muchas veces
+  // desde la misma máquina: con los límites normales fallaría al azar
+  // (decisión E4; ver apps/api/src/common/limites). Los valores de producción
+  // los prueban las pruebas de la API (limites.spec.ts).
+  LIMITE_GENERAL: '100000',
+  LIMITE_LOGIN: '100000',
+  LIMITE_REPORTES: '100000',
+  LIMITE_PESADO: '100000',
+  // Bajo, para probar el bloqueo por cuenta sin 10 intentos (seguridad.spec.ts).
+  LOGIN_FALLOS_MAX: '3',
   NEXT_PUBLIC_API_URL: URL_API,
   NEXT_DIST_DIR: '.next-e2e',
 };

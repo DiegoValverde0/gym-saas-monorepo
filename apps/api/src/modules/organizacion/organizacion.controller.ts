@@ -5,6 +5,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CrearOrganizacionDto } from './dto/crear-organizacion.dto';
+import { Throttle } from '@nestjs/throttler';
+import { LIMITES } from '../../common/limites/limites';
 import { InicioOrganizacionDto, UpdateMiOrganizacionDto } from './dto/update-mi-organizacion.dto';
 import { sinSecretos } from '../../common/utils/configuracion.util';
 
@@ -39,6 +41,7 @@ export class OrganizacionController {
   }
 
   @Post()
+  @Throttle({ default: LIMITES.pesado })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @RequirePermissions({ accion: 'crear', modulo: 'organizaciones' })
   async registrarOrganizacion(@Req() req: RequestWithUser, @Body() body: CrearOrganizacionDto): Promise<unknown> {

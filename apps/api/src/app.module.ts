@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { DeletedInterceptor } from './common/interceptors/deleted.interceptor';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { RedisClientType } from 'redis';
+import { AlmacenLimitesRedis } from './common/limites/almacen-redis';
+import { LimiteGuard } from './common/limites/limite.guard';
+import { LIMITES } from './common/limites/limites';
 import { ClsModule } from 'nestjs-cls';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './modules/redis/redis.module';
@@ -52,11 +56,18 @@ import { ScheduleModule } from '@nestjs/schedule';
         mount: true,
       },
     }),
-    // Límite global generoso (protege toda la API de abuso); rutas
-    // sensibles como /auth/login aplican un límite más estricto vía @Throttle.
-    // THROTTLE_LIMIT solo lo sube la tanda de pruebas e2e (docs/plan-pruebas-e2e.md,
-    // E4): cada pantalla hace varios pedidos. Sin la variable, 100 por minuto.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: Number(process.env.THROTTLE_LIMIT) || 100 }]),
+    // Límite general por IP para toda la API; las rutas sensibles o pesadas
+    // ponen el suyo con @Throttle. Los valores están en common/limites/limites.ts
+    // y los contadores en Redis (docs/plan-seguridad.md, fase 2). Un solo
+    // limitador "default": así la cabecera es la estándar Retry-After.
+    ThrottlerModule.forRootAsync({
+      inject: ['REDIS_CLIENT'],
+      useFactory: (redis: RedisClientType) => ({
+        throttlers: [{ name: 'default', ...LIMITES.general }],
+        storage: new AlmacenLimitesRedis(redis),
+        errorMessage: 'Demasiados pedidos seguidos. Espera un momento y vuelve a intentarlo.',
+      }),
+    }),
     RedisModule,
     PrismaModule,
     OrganizacionModule, 
@@ -100,7 +111,7 @@ import { ScheduleModule } from '@nestjs/schedule';
   ],
   controllers: [],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: LimiteGuard },
     { provide: APP_INTERCEPTOR, useClass: DeletedInterceptor },
   ],
 })

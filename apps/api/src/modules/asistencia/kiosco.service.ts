@@ -1,4 +1,4 @@
-import { ForbiddenException, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { RedisClientType } from 'redis';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,12 +6,12 @@ import { combinarConfiguracion } from '../../common/utils/configuracion.util';
 import { hashContrasena, verificarHash } from '../../common/utils/contrasena.util';
 import { AsistenciaService, TokenPayload } from './asistencia.service';
 import { registrarAuditoria } from '../../common/utils/auditoria.util';
+import { Intentos } from '../../common/limites/intentos';
 
 // Intentos fallidos antes de bloquear 5 minutos: documentos que no existen
 // (evita recorrer documentos para ver nombres) y PIN de salida incorrectos.
-const MAX_DOCUMENTOS_DESCONOCIDOS = 10;
-const MAX_PIN_INCORRECTOS = 5;
-const BLOQUEO_SEGUNDOS = 5 * 60;
+const CINCO_MINUTOS = 5 * 60_000;
+const MENSAJE_BLOQUEO = 'Demasiados intentos. Espera 5 minutos o pide ayuda en recepción.';
 
 // Mensajes para el propio cliente, en segunda persona (los de
 // validateAccess están escritos para recepción: "El cliente...").
@@ -39,8 +39,14 @@ export class KioscoService {
     private readonly prisma: PrismaService,
     private readonly cls: ClsService,
     private readonly asistencia: AsistenciaService,
-    @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
-  ) {}
+    @Inject('REDIS_CLIENT') redis: RedisClientType,
+  ) {
+    this.documentos = new Intentos(redis, 'kiosco-documentos', { maximo: 10, ventanaMs: CINCO_MINUTOS, bloqueoMs: CINCO_MINUTOS, mensaje: MENSAJE_BLOQUEO });
+    this.pines = new Intentos(redis, 'kiosco-pin', { maximo: 5, ventanaMs: CINCO_MINUTOS, bloqueoMs: CINCO_MINUTOS, mensaje: MENSAJE_BLOQUEO });
+  }
+
+  private readonly documentos: Intentos;
+  private readonly pines: Intentos;
 
   private organizacionId(): string {
     const id = this.cls.get('organizacionId');
@@ -54,19 +60,9 @@ export class KioscoService {
     return org;
   }
 
-  private async bloqueado(clave: string, maximo: number) {
-    if (Number((await this.redis.get(clave)) ?? 0) >= maximo) {
-      throw new HttpException('Demasiados intentos. Espera 5 minutos o pide ayuda en recepción.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-  }
-
-  private async fallo(clave: string) {
-    await this.redis.multi().incr(clave).expire(clave, BLOQUEO_SEGUNDOS).exec();
-  }
-
   async ingresar(documento: string, sucursalId: string, user: TokenPayload) {
-    const clave = `kiosco:desconocidos:${this.organizacionId()}:${user.sub}`;
-    await this.bloqueado(clave, MAX_DOCUMENTOS_DESCONOCIDOS);
+    const clave = `${this.organizacionId()}:${user.sub}`;
+    await this.documentos.revisar(clave);
 
     // Documento exacto (sin búsquedas parciales): la pantalla la usa el público.
     const cliente = await this.prisma.extendedClient.cliente.findFirst({
@@ -74,10 +70,10 @@ export class KioscoService {
       select: { id: true, nombre: true },
     });
     if (!cliente) {
-      await this.fallo(clave);
+      await this.documentos.fallo(clave);
       return { resultado: 'NO_ENCONTRADO' as const, mensaje: 'No encontramos ese documento.' };
     }
-    await this.redis.del(clave);
+    await this.documentos.exito(clave);
 
     // Solo el primer nombre: la tablet está a la vista de todos.
     const nombre = cliente.nombre.trim().split(/\s+/)[0];
@@ -109,14 +105,14 @@ export class KioscoService {
 
   // Sin PIN definido se sale libremente (la pantalla lo avisa al abrir el kiosco).
   async salir(pin: string, user: TokenPayload) {
-    const clave = `kiosco:pin:${this.organizacionId()}:${user.sub}`;
-    await this.bloqueado(clave, MAX_PIN_INCORRECTOS);
+    const clave = `${this.organizacionId()}:${user.sub}`;
+    await this.pines.revisar(clave);
     const pinHash = ((await this.organizacion()).configuracion as ConfiguracionKiosco | null)?.kiosco?.pinHash;
     if (pinHash && !(await verificarHash(pin, pinHash))) {
-      await this.fallo(clave);
+      await this.pines.fallo(clave);
       throw new ForbiddenException('PIN incorrecto.');
     }
-    await this.redis.del(clave);
+    await this.pines.exito(clave);
     return { ok: true };
   }
 

@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Get, Put, Request, UseGuards, Res } from '@nestjs/common';
 import { Response, Request as ExpressRequest } from 'express';
 import { Throttle } from '@nestjs/throttler';
+import { LIMITES } from '../../common/limites/limites';
 import { AuthService } from './auth.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SucursalPreferidaDto } from './dto/sucursal-preferida.dto';
@@ -24,10 +25,9 @@ interface RequestWithUser extends ExpressRequest {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  // Límite estricto de intentos para frenar fuerza bruta de contraseñas:
-  // 5 intentos por minuto por IP (el resto de la API usa el límite global
-  // de ThrottlerModule.forRoot en app.module.ts).
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  // Límite estricto por IP para frenar fuerza bruta de contraseñas (además
+  // del bloqueo por cuenta de AuthService). Ver common/limites/limites.ts.
+  @Throttle({ default: LIMITES.login })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async signIn(@Body() signInDto: SignInDto, @Res({ passthrough: true }) res: Response) {

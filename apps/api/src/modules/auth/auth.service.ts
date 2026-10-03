@@ -1,9 +1,11 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisClientType } from 'redis';
 import { obtenerAccesoVigente } from '../../common/utils/acceso-vigente.util';
-import { promisify } from 'util';
+import { hashContrasena, verificarHash } from '../../common/utils/contrasena.util';
+import { Intentos } from '../../common/limites/intentos';
+import { LIMITES } from '../../common/limites/limites';
 import * as crypto from 'crypto';
 import { Inject } from '@nestjs/common';
 
@@ -29,15 +31,37 @@ export interface SignInTenantSelectionResult {
 
 export type SignInResult = SignInSuccessResult | SignInTenantSelectionResult;
 
+/** El correo como clave del bloqueo: "Dueno@x.com " y "dueno@x.com" son la misma cuenta. */
+export const cuentaDeCorreo = (correo: string) => correo.trim().toLowerCase();
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  // Bloqueo por cuenta (docs/plan-seguridad.md, S3): muchas contraseñas
+  // equivocadas para un mismo correo, desde cualquier IP, lo bloquean un rato.
+  private readonly intentos: Intentos;
+  // Para un correo que no existe se compara igual contra un hash cualquiera:
+  // así responde en el mismo tiempo y no deja adivinar qué correos existen.
+  private readonly hashFalso = hashContrasena(crypto.randomBytes(16).toString('hex'));
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: Record<string, unknown>
-  ) {}
+    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
+  ) {
+    const { fallos, ventanaMs, bloqueoMs } = LIMITES.cuenta;
+    this.intentos = new Intentos(redisClient, 'login', {
+      maximo: fallos,
+      ventanaMs,
+      bloqueoMs,
+      mensaje: `Demasiados intentos con esta cuenta. Espera ${Math.round(bloqueoMs / 60_000)} minutos o pide ayuda a quien administra tu gimnasio.`,
+    });
+  }
 
   async signIn(correo: string, pass: string, organizacionId?: string): Promise<SignInResult> {
+    const cuenta = cuentaDeCorreo(correo);
+    await this.intentos.revisar(cuenta);
+
     // Cliente crudo a propósito: en este punto todavía no hay ningún tenant
     // en el contexto (CLS) -- login es justamente la operación que determina
     // a qué organización(es) pertenece este usuario, así que no puede pasar
@@ -45,8 +69,20 @@ export class AuthService {
     // resuelto para leer AsignacionAcceso, un modelo tenant-scoped, incluso
     // en su forma anidada por `include`). Replicamos a mano el único filtro
     // que extendedClient aplicaría igual (soft delete).
-    const user = await this.prisma.usuario.findUnique({
-      where: { correo, deletedAt: null },
+    //
+    // Primero solo la contraseña guardada, y el resto de la cuenta recién con
+    // la contraseña buena: así, exista o no el correo, el login tarda lo mismo
+    // y no deja adivinar qué correos están registrados.
+    const credencial = await this.prisma.usuario.findUnique({ where: { correo, deletedAt: null }, select: { id: true, contrasenaHash: true } });
+    const valida = await verificarHash(pass, credencial?.contrasenaHash ?? (await this.hashFalso));
+    if (!credencial || !valida) {
+      if (await this.intentos.fallo(cuenta)) this.logger.warn(`Cuenta bloqueada por contraseñas equivocadas: ${cuenta}`);
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    await this.intentos.exito(cuenta);
+
+    const user = await this.prisma.usuario.findUniqueOrThrow({
+      where: { id: credencial.id },
       include: {
         asignacionesAcceso: {
           include: {
@@ -58,22 +94,6 @@ export class AuthService {
         perfilStaff: { select: { organizacionId: true, deletedAt: true } },
       }
     });
-
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    // Validar contraseña usando crypto nativo (mismo nivel que bcrypt)
-    const [salt, key] = user.contrasenaHash.split(':');
-    const scryptAsync = promisify(crypto.scrypt);
-    const hashedBuffer = (await scryptAsync(pass, salt, 64)) as Buffer;
-    
-    const keyBuffer = Buffer.from(key, 'hex');
-    const match = crypto.timingSafeEqual(hashedBuffer, keyBuffer);
-
-    if (!match) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
 
     // Si la persona fue dada de baja del equipo de un gimnasio, ese gimnasio
     // deja de contar (mismo criterio que obtenerAccesoVigente).
@@ -189,7 +209,7 @@ export class AuthService {
     const orgIdParaBuscar = isSuperAdmin ? null : organizacionId;
     if (!isSuperAdmin && !organizacionId) return [];
 
-    const acceso = await obtenerAccesoVigente(this.prisma, this.redisClient as unknown as RedisClientType, userId, orgIdParaBuscar ?? null);
+    const acceso = await obtenerAccesoVigente(this.prisma, this.redisClient, userId, orgIdParaBuscar ?? null);
     return acceso?.permisos ?? [];
   }
 
@@ -201,9 +221,9 @@ export class AuthService {
       const now = Math.floor(Date.now() / 1000);
       const ttl = exp - now;
       
-      if (ttl > 0 && typeof this.redisClient.setEx === 'function') {
+      if (ttl > 0) {
         // Add to Redis blacklist with TTL
-        await (this.redisClient.setEx as (...args: unknown[]) => Promise<void>)(`token:revoked:${token}`, ttl, 'true');
+        await this.redisClient.setEx(`token:revoked:${token}`, ttl, 'true');
       }
     } catch (err: unknown) {
       if (err instanceof Error) {

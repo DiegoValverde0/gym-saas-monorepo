@@ -110,12 +110,22 @@ Rama: `seguridad`.
   - CI: `permissions: contents: read` y un trabajo `seguridad` (gitleaks sobre todo el historial y la revisión de dependencias). `codeql.yml` (javascript-typescript, consultas de seguridad y calidad; también los lunes). `.github/dependabot.yml`: npm, GitHub Actions y Docker, semanal, con las menores y de parche agrupadas.
   - `SECURITY.md`: avisar por el reporte privado de GitHub (pestaña Security), sin datos personales en el repositorio. **Hay que encenderlo una vez en GitHub:** Settings → Code security → Private vulnerability reporting.
 
-### Fase 2: límites de peticiones
+### Fase 2: límites de peticiones (HECHA)
 - Contadores en Redis (S2). Todos los límites en un solo archivo de configuración, cada uno con su variable de entorno.
 - Límites por tipo: login, kiosco y PIN; exportar y correr reportes; crear organizaciones; el resto, el general.
 - Bloqueo por cuenta (S3) y tiempo de respuesta igual exista o no el correo.
 - Respuesta 429 en español y con `Retry-After`.
 - **Listo cuando:** pruebas que muestran cada límite y el bloqueo por cuenta, y que un reinicio de la API no los borra.
+- Hecho así (todo en `apps/api/src/common/limites/`):
+  - `limites.ts`: todos los valores, cada uno con su variable (`LIMITE_GENERAL` 100, `LIMITE_LOGIN` 5, `LIMITE_PESADO` 10, `LIMITE_REPORTES` 120 por minuto; `LOGIN_FALLOS_MAX` 10 en `LOGIN_FALLOS_VENTANA_MIN` 15, `LOGIN_BLOQUEO_MIN` 15). `THROTTLE_LIMIT` pasó a llamarse `LIMITE_GENERAL`. Documentados en los `.example` y pasados a la API en `docker-compose.prod.yml` (vacíos valen lo del código).
+  - `almacen-redis.ts`: los contadores en Redis con un script (contar y bloquear en un solo paso), igual que el almacén en memoria del paquete. Sin Redis, la API sigue atendiendo y lo registra. **Probado: tras reiniciar la API, el bloqueo seguía (429 con 42 s por esperar).**
+  - `limite.guard.ts`: **se cuenta por persona con una sesión válida y por IP sin ella.** Todo el personal de un gimnasio suele salir por la misma IP: contando solo por IP compartían el límite. La firma del token se verifica, así que inventar tokens no da más pedidos. Probado: el dueño y Ana desde la misma IP, 5 pedidos cada uno con un límite de 5.
+  - Límites por ruta: `/auth/login` (`LIMITE_LOGIN`), exportar y crear un gimnasio (`LIMITE_PESADO`), correr y previsualizar reportes (`LIMITE_REPORTES`: el Inicio corre unos 10 por visita).
+  - `intentos.ts`: los intentos fallidos con bloqueo en un solo lugar (antes, tres copias: kiosco, PIN del personal y ahora el login). Bloqueo por cuenta en el login, con el correo normalizado (mayúsculas y espacios). Los 429 propios llevan `Retry-After` (lo pone `GlobalExceptionFilter`).
+  - Login en el mismo tiempo exista o no el correo: primero solo la contraseña guardada (o un hash falso) y el resto de la cuenta recién con la contraseña buena. Medido con 20 intentos intercalados: 84 contra 89 ms y 95 contra 88 ms (antes, unos 40 ms más con una cuenta real).
+  - El aviso del límite general, en español ("Demasiados pedidos seguidos...").
+  - Pruebas: `limites.spec.ts` (valores, a quién se cuenta, el correo normalizado) e `intentos.spec.ts` (bloqueo, fin del bloqueo, acierto, ventana), con un Redis en memoria compartido (`src/pruebas/redis-en-memoria.ts`, fuera de la compilación); el kiosco usa el mismo. e2e `seguridad.spec.ts`: el bloqueo por cuenta contra Redis de verdad (con un correo nuevo en cada tanda: el bloqueo de la anterior dura 15 minutos). API 110 pruebas, e2e 39.
+  - Pendiente para la fase 3: con Cloudflare delante, la IP real llega en `CF-Connecting-IP`; hay que configurar Caddy y `trust proxy` para que el límite por IP no cuente a Cloudflare.
 
 ### Fase 3: cabeceras, borde y sesión
 - Caddy: HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP base (S6), límite de tamaño de lo que recibe y tiempos de espera.

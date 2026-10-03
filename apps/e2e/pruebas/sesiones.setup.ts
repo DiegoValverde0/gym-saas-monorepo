@@ -4,8 +4,8 @@ import { configurarGimnasio } from './ayudas';
 import { CUENTAS, Rol, sesion } from './base';
 
 // Una sesión por rol, iniciada por la API (sin pasar por la pantalla de
-// inicio de sesión): la API permite 5 inicios por minuto y las pruebas que
-// la necesitan ya arrancan adentro.
+// inicio de sesión): es más rápido y las pruebas que la necesitan ya arrancan
+// adentro. (En producción, además, la API permite 5 inicios por minuto.)
 for (const rol of Object.keys(CUENTAS) as Rol[]) {
   setup(`sesión de ${rol}`, async ({ request }) => {
     const { correo, contrasena } = CUENTAS[rol];
