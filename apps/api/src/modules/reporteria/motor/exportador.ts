@@ -4,7 +4,7 @@ import { Granularidad, RangoFecha } from './definicion';
 // Exportación de reportes (docs/plan-reporteria.md, fase 5): CSV y Excel a
 // partir del resultado ya calculado (mismos números que en pantalla).
 
-export interface ColumnaExportable {
+interface ColumnaExportable {
   clave: string;
   nombre: string;
   tipo: string;
@@ -34,7 +34,7 @@ export interface DatosExportacion {
  * niveles), una columna por cada valor de la columna cruzada, "Total" a la
  * derecha y abajo. En cada casilla, el total elegido o la cantidad.
  */
-export function matrizCruzada(d: DatosExportacion): { titulos: string[]; filas: (string | number | null)[][]; subtotal: boolean[] } {
+function matrizCruzada(d: DatosExportacion): { titulos: string[]; filas: (string | number | null)[][]; subtotal: boolean[] } {
   const c = d.cruzada!;
   const niveles = d.grupos.length;
   const valor = (r: { cantidad: number; totales: (number | string | null)[] }) =>
@@ -109,7 +109,7 @@ function relojLocal(instante: Date, zonaHoraria: string): Date {
 const vacio = (v: unknown) => v === null || v === undefined || v === '';
 
 /** Texto de un valor, igual que en pantalla (para CSV y celdas de texto). */
-export function textoValor(v: unknown, c: Pick<ColumnaExportable, 'tipo' | 'opciones' | 'granularidad'>, zonaHoraria: string): string {
+function textoValor(v: unknown, c: Pick<ColumnaExportable, 'tipo' | 'opciones' | 'granularidad'>, zonaHoraria: string): string {
   if (vacio(v)) return '';
   if (c.granularidad && typeof v === 'string') {
     const [a, m] = v.split('-');

@@ -15,7 +15,7 @@ import { tipoConGrupos } from './motor/avanzado';
 import { idDePlantilla, plantillasListas } from './motor/plantillas';
 
 // Tabla cruzada: más columnas que esto no se leen; se pide agrupar por algo más general.
-export const MAX_COLUMNAS_TABLA = 50;
+const MAX_COLUMNAS_TABLA = 50;
 
 // Una consulta de reporte no puede tardar más que esto (decisión R4).
 const TIEMPO_MAXIMO_MS = 15_000;
@@ -345,7 +345,7 @@ export class ReporteriaService {
 }
 
 /** Valores de la base -> JSON: números como número, fechas como "AAAA-MM-DD" o ISO. */
-export function normalizarValor(tipo: string, valor: unknown): unknown {
+function normalizarValor(tipo: string, valor: unknown): unknown {
   if (valor === null || valor === undefined) return null;
   if (tipo === 'numero' || tipo === 'moneda') {
     const n = Number(valor instanceof Prisma.Decimal ? valor.toString() : valor);

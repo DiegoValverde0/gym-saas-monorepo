@@ -6,7 +6,7 @@ import { ColumnaCatalogo, ContextoSql, TipoReporte } from '../catalogo';
 // personalizados, lógica de filtros y filtros "con / sin". Todo lo que
 // escribe el usuario (etiquetas, valores) llega al SQL como parámetro.
 
-export const MAX_GRUPOS_PERSONALIZADOS = 5;
+const MAX_GRUPOS_PERSONALIZADOS = 5;
 export const MAX_CRUZADOS = 3;
 const MAX_TRAMOS = 10;
 
@@ -124,7 +124,7 @@ export function tipoConGrupos(tipo: TipoReporte, grupos: GrupoPersonalizado[]): 
 // eval): números, Y/O/NO (o AND/OR/NOT) y paréntesis.
 // ---------------------------------------------------------------------------
 
-export type NodoLogica = { n: number } | { y: NodoLogica[] } | { o: NodoLogica[] } | { no: NodoLogica };
+type NodoLogica = { n: number } | { y: NodoLogica[] } | { o: NodoLogica[] } | { no: NodoLogica };
 
 export function analizarLogica(entrada: string, cantidadFiltros: number): { arbol: NodoLogica; normalizada: string } {
   const fuente = entrada.trim();

@@ -5,7 +5,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { IsString, IsNotEmpty } from 'class-validator';
 
-export class RestaurarDto {
+class RestaurarDto {
   @IsString()
   @IsNotEmpty()
   modelo: string;

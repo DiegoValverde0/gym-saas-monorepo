@@ -44,7 +44,7 @@ export interface ContextoMenu {
   modo: ModoUso;
 }
 
-export interface PantallaMenu {
+interface PantallaMenu {
   nombre: string;
   /** Otro nombre en algún modo (Reportería en simple: solo hay plantillas). */
   nombrePorModo?: Partial<Record<ModoUso, string>>;
@@ -62,7 +62,7 @@ export interface PantallaMenu {
   alias?: string[];
 }
 
-export interface GrupoMenu {
+interface GrupoMenu {
   titulo: string;
   icono: Icono;
   pantallas: PantallaMenu[];
@@ -175,7 +175,7 @@ export const GRUPOS_MENU: GrupoMenu[] = [
 ];
 
 /** Una pantalla que esta persona ve, con el nombre de su modo ya resuelto. */
-export type PantallaVisible = PantallaMenu;
+type PantallaVisible = PantallaMenu;
 
 export interface GrupoVisible extends Omit<GrupoMenu, 'pantallas'> {
   pantallas: PantallaVisible[];
@@ -201,7 +201,7 @@ export function menuVisible(ctx: ContextoMenu, grupos: GrupoMenu[] = GRUPOS_MENU
 
 // Barra inferior del celular (fase 4): lo de recepción a un toque. Inicio y
 // "Menú" van siempre; de estas, las que la persona puede usar.
-export const ACCESOS_CELULAR = ['/dashboard/asistencias', '/dashboard/clientes', '/dashboard/membresias'] as const;
+const ACCESOS_CELULAR = ['/dashboard/asistencias', '/dashboard/clientes', '/dashboard/membresias'] as const;
 
 /** Las pantallas de la barra inferior, en su orden, entre las que esta persona ve. */
 export function accesosCelular(grupos: GrupoVisible[]): PantallaVisible[] {

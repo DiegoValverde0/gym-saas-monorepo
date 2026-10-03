@@ -36,7 +36,7 @@ export function cuandoEsLaClase(fechaHora: Date, zonaHoraria: string, ahora = ne
   return `el ${fecha} a las ${hora}`;
 }
 
-export interface DatosAviso {
+interface DatosAviso {
   plan?: string;
   fechaFin?: Date;
   diasRestantes?: number;

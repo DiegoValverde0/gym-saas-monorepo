@@ -5,7 +5,7 @@ import { HelpCircle } from 'lucide-react';
 
 // Explicaciones de dos líneas de los conceptos del sistema (plan 12.3), con
 // los términos del glosario único (12.1). Un solo lugar para todos los textos.
-export const AYUDAS = {
+const AYUDAS = {
   horario: 'El horario de trabajo es la semana tipo de la persona (ej. lunes a viernes de 8 a 16). Con él, el sistema arma solo sus jornadas de las próximas semanas.',
   jornada: 'Una jornada es un día concreto de trabajo de una persona, sacado de su horario. Ahí se marca la entrada, la salida o una ausencia.',
   clase: 'Una clase es algo que se repite cada semana (ej. Spinning martes y jueves a las 18:00). Cada fecha en el calendario es una sesión de esa clase.',

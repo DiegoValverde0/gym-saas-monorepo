@@ -6,16 +6,16 @@ import { analizarLogica, GrupoPersonalizado, MAX_CRUZADOS, tipoConGrupos, valida
 // guarda en reportes.definicion y lo que manda el constructor. Se valida
 // contra el catálogo en cada ejecución.
 
-export const VERSION_DEFINICION = 1;
-export const MAX_AGRUPACIONES = 3;
-export const MAX_FILTROS = 20;
-export const MAX_VALORES_LISTA = 50;
-export const MAX_COLUMNAS = 40;
+const VERSION_DEFINICION = 1;
+const MAX_AGRUPACIONES = 3;
+const MAX_FILTROS = 20;
+const MAX_VALORES_LISTA = 50;
+const MAX_COLUMNAS = 40;
 
 // TABLA_CRUZADA, filtros con/sin, lógica de filtros y grupos personalizados:
 // modo experto (decisión R2).
 export const FORMATOS = ['LISTA', 'AGRUPADO', 'TABLA_CRUZADA'] as const;
-export const MAX_FILAS_TABLA_CRUZADA = 2;
+const MAX_FILAS_TABLA_CRUZADA = 2;
 export type Formato = (typeof FORMATOS)[number];
 
 export const RANGOS_FECHA = [
@@ -45,7 +45,7 @@ export type FuncionTotal = (typeof FUNCIONES_TOTAL)[number];
 
 // Gráfico del reporte (fase 7): sobre un reporte agrupado o una tabla cruzada.
 // area y barrasH: agrupado. calor (mapa de calor): tabla cruzada. Plan del Inicio, fase 2.
-export const TIPOS_GRAFICO = ['barras', 'lineas', 'torta', 'area', 'barrasH', 'calor'] as const;
+const TIPOS_GRAFICO = ['barras', 'lineas', 'torta', 'area', 'barrasH', 'calor'] as const;
 export type TipoGrafico = (typeof TIPOS_GRAFICO)[number];
 
 export type Operador =
@@ -97,7 +97,7 @@ export interface Total {
   funcion: FuncionTotal;
 }
 
-export interface Grafico {
+interface Grafico {
   tipo: TipoGrafico;
   /** "cantidad" o un total del reporte, como "suma:monto". */
   valor: string;

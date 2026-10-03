@@ -71,7 +71,7 @@ export const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const DIAS_EN_FRASE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 // Lunes primero.
 export const ORDEN_SEMANA = [1, 2, 3, 4, 5, 6, 0];
-export const ordenDia = (d: number) => (d === 0 ? 7 : d);
+const ordenDia = (d: number) => (d === 0 ? 7 : d);
 
 export const horaDe = (iso: string) => new Date(iso).toISOString().substring(11, 16);
 export const fechaDe = (iso?: string | null) => (iso ? new Date(iso).toISOString().split('T')[0] : '');
@@ -99,7 +99,7 @@ export function agruparSeries(plantillas: ClasePlantilla[]): SerieClase[] {
 }
 
 // "martes y jueves", "lunes, miércoles y viernes"
-export function listaDias(dias: number[]): string {
+function listaDias(dias: number[]): string {
   const nombres = [...dias].sort((a, b) => ordenDia(a) - ordenDia(b)).map((d) => DIAS_EN_FRASE[d]);
   if (nombres.length <= 1) return nombres.join('');
   return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;

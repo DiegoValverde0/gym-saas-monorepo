@@ -3,7 +3,7 @@
 // de adivinar. Aquí, lo que no toca la base: el texto de cada frase, cuándo se
 // dice y cuáles se muestran. Las consultas están en dashboard.service.ts.
 
-export type Tono = 'bueno' | 'atencion' | 'info';
+type Tono = 'bueno' | 'atencion' | 'info';
 
 export interface Frase {
   clave: string;
@@ -16,7 +16,7 @@ export interface Frase {
 }
 
 /** Se muestran hasta 4, de la más a la menos importante. */
-export const MAX_FRASES = 4;
+const MAX_FRASES = 4;
 
 export function elegirFrases(frases: (Frase | null)[], max = MAX_FRASES): Frase[] {
   return frases.filter((f): f is Frase => !!f).sort((a, b) => b.importancia - a.importancia).slice(0, max);

@@ -3,7 +3,7 @@ import { ArrayMaxSize, IsArray, IsInt, IsUUID, Matches, Max, Min, ValidateNested
 
 const HORA_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-export class DiaHorarioDto {
+class DiaHorarioDto {
   // 0 = domingo ... 6 = sábado (Date#getUTCDay()).
   @IsInt()
   @Min(0)

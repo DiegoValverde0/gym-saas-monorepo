@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client';
 // exigen además is_superadmin), pero dejaba a un empleado con un perfil sin
 // sentido (lectura de todo + restaurar) y sería un agujero en cuanto algún
 // endpoint confiara solo en los permisos del rol.
-export const ROL_PLATAFORMA = 'SUPERADMIN';
+const ROL_PLATAFORMA = 'SUPERADMIN';
 
 export function assertRolAsignableEnOrganizacion(rol: { nombre: string; organizacionId: string | null } | null) {
   if (!rol) throw new BadRequestException('El rol especificado no existe en tu organización.');
@@ -30,7 +30,7 @@ export const esRolCliente = (rol: { nombre: string; organizacionId: string | nul
 type AsignacionConRol = { id: string; sucursalId: string | null; rol: { nombre: string; organizacionId: string | null } };
 
 // ¿Esta asignación es la de un administrador con acceso a todas las sucursales?
-export function esAdministradorGeneral(asignacion: AsignacionConRol) {
+function esAdministradorGeneral(asignacion: AsignacionConRol) {
   return asignacion.sucursalId === null && asignacion.rol.organizacionId === null && asignacion.rol.nombre === ROL_ADMINISTRADOR;
 }
 

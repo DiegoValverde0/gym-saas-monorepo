@@ -22,7 +22,7 @@ export function rangoDe(preset: RangoPreset): { desde: string; hasta: string } {
   return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: iso(hoy) };
 }
 
-export const PRESETS: { valor: RangoPreset; nombre: string }[] = [
+const PRESETS: { valor: RangoPreset; nombre: string }[] = [
   { valor: 'mes', nombre: 'Este mes' },
   { valor: 'mes_pasado', nombre: 'Mes pasado' },
   { valor: 'tres_meses', nombre: 'Últimos 3 meses' },

@@ -10,8 +10,8 @@ export const RAIZ = path.resolve(__dirname, '../..');
 const delArchivo = config({ path: path.join(RAIZ, '.env') }).parsed ?? {};
 const base: Record<string, string | undefined> = { ...delArchivo, ...process.env };
 
-export const PUERTO_API = 3101;
-export const PUERTO_WEB = 3100;
+const PUERTO_API = 3101;
+const PUERTO_WEB = 3100;
 export const URL_API = `http://localhost:${PUERTO_API}`;
 export const URL_WEB = `http://localhost:${PUERTO_WEB}`;
 

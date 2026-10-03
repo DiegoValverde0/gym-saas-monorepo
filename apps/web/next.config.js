@@ -10,10 +10,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Servidor mínimo para la imagen Docker de producción (ver Dockerfile). Las
-  // pruebas e2e usan `next start` y no lo necesitan (en Windows, además, no
-  // puede crear sus enlaces sin permisos de administrador).
-  output: process.env.NEXT_DIST_DIR ? undefined : 'standalone',
+  // Servidor mínimo para la imagen Docker de producción (ver Dockerfile; se
+  // compila en Linux). No hace falta en las pruebas e2e (usan `next start`) ni
+  // en Windows, donde además falla: crear sus enlaces pide permisos de
+  // administrador (EPERM al correr `pnpm build`).
+  output: process.env.NEXT_DIST_DIR || process.platform === 'win32' ? undefined : 'standalone',
   experimental: {
     // Monorepo: incluir las dependencias que están en la raíz.
     outputFileTracingRoot: path.join(__dirname, '../../'),

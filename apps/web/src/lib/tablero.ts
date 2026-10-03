@@ -14,7 +14,7 @@ export interface TarjetaTablero {
   rango?: RangoFecha;
 }
 
-export interface DatosDelGimnasio {
+interface DatosDelGimnasio {
   modulos: { puntoVenta?: boolean; clasesGrupales?: boolean; controlPersonal?: boolean; controlAcceso?: boolean };
   /** Del asistente de inicio: musculacion, box, estudio, artes_marciales u otro. */
   tipoGimnasio?: string;

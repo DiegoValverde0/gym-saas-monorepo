@@ -7,7 +7,7 @@ import { promisify } from 'util';
 import * as crypto from 'crypto';
 import { Inject } from '@nestjs/common';
 
-export interface SignInSuccessResult {
+interface SignInSuccessResult {
   access_token: string;
   user: {
     id: string;
@@ -27,7 +27,7 @@ export interface SignInTenantSelectionResult {
   }[];
 }
 
-export type SignInResult = SignInSuccessResult | SignInTenantSelectionResult;
+type SignInResult = SignInSuccessResult | SignInTenantSelectionResult;
 
 @Injectable()
 export class AuthService {
