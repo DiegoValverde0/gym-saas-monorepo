@@ -75,10 +75,11 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
+      # Sin caché: aquí no se instalan dependencias (pnpm audit lee el lockfile),
+      # y una caché sin nada que guardar hace fallar el trabajo al terminar.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       # Falla con una vulnerabilidad alta o crítica nueva (las conocidas, con su
       # motivo, están en el script).
