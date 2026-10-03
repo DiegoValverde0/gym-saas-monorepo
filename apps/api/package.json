@@ -14,8 +14,8 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/mapped-types": "^12.0.0",
     "@nestjs/platform-express": "^11.2.7",
-    "@nestjs/schedule": "^12.0.1",
-    "@nestjs/throttler": "^6.5.0",
+    "@nestjs/schedule": "^12.0.2",
+    "@nestjs/throttler": "^6.7.1",
     "@prisma/client": "^5.0.0",
     "@repo/database": "workspace:*",
     "@types/express": "^5.0.6",
@@ -37,6 +37,6 @@
     "@types/node": "^24.19.1",
     "dotenv-cli": "^11.0.0",
     "typescript": "^5.1.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   }
 }
